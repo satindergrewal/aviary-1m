@@ -1,5 +1,7 @@
 <div align="center">
 
+![Ornith](assets/ornith-1m-banner.jpeg)
+
 # Ornith 1M Context
 
 **Extending [Ornith-1.0](https://huggingface.co/deepreinforce-ai/Ornith-1.0-35B) from 262K to 1,048,576-token context with YaRN. Validated needle-perfect, no fine-tuning.**
@@ -43,6 +45,10 @@ Ornith-1.0 models are Qwen3.5-family hybrids: only ~1 in 4 layers is full attent
 | `make_charts.py` | Render the heatmap + throughput charts from results |
 | `ornith9b_quants_pipeline.sh` | Full 9B quant ladder: download → bake → imatrix low-bit quants → upload |
 | `results.jsonl`, `prefill_timing.jsonl` | Raw benchmark data |
+
+## Vision
+
+Ornith kept Qwen3.5's multimodal skeleton: attach the bundled mmproj vision tower (in each HF repo, extracted by bartowski) via `llama-server --mmproj` and the models see. Smoke-tested with accurate OCR on the 9B and 35B, including on the 1M-baked GGUFs. llama.cpp only for now; Ollama's qwen35 vision path is pending upstream.
 
 ## Model repos
 
