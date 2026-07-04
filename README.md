@@ -5,7 +5,7 @@
 **Extending [Ornith-1.0](https://huggingface.co/deepreinforce-ai/Ornith-1.0-35B) from 262K to 1,048,576-token context with YaRN. Validated needle-perfect, no fine-tuning.**
 
 [![HF: 35B 1M GGUF](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Ornith--1.0--35B--1M--GGUF-ffd21e?logo=huggingface)](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF)
-[![HF: 9B 1M GGUF](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Ornith--1.0--9B--1M--GGUF%20(building)-ffd21e?logo=huggingface)](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF)
+[![HF: 9B 1M GGUF](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Ornith--1.0--9B--1M--GGUF-ffd21e?logo=huggingface)](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Context: 1M](https://img.shields.io/badge/context-1%2C048%2C576%20tokens-8A2BE2)]()
 [![NIAH: 50/50](https://img.shields.io/badge/NIAH-50%2F50%20needles-brightgreen)]()
@@ -47,7 +47,7 @@ Ornith-1.0 models are Qwen3.5-family hybrids: only ~1 in 4 layers is full attent
 ## Model repos
 
 - **35B (MoE, 3B active):** [satgeze/Ornith-1.0-35B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF) with the full quant ladder, all 1M-baked
-- **9B (dense):** [satgeze/Ornith-1.0-9B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF): same ladder, building now
+- **9B (dense):** [satgeze/Ornith-1.0-9B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF): full ladder live, 1M-baked
 
 ## Quick start
 
