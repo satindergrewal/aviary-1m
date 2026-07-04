@@ -52,8 +52,13 @@ Ornith kept Qwen3.5's multimodal skeleton: attach the bundled mmproj vision towe
 
 ## Model repos
 
-- **35B (MoE, 3B active):** [satgeze/Ornith-1.0-35B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF) with the full quant ladder, all 1M-baked
-- **9B (dense):** [satgeze/Ornith-1.0-9B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF): full ladder live, 1M-baked
+| Model | Architecture | Long-context validation | Vision | Hugging Face |
+|---|---|---|---|---|
+| **Ornith-1.0-35B** | MoE, 3B active | **50/50 needles through 1M** (needle-perfect) | measured, mmproj included | [satgeze/Ornith-1.0-35B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF) |
+| **Ornith-1.0-9B** | dense | perfect to 524K; 7/10 at 1M (mapped, isolation run in progress) | measured, mmproj included | [satgeze/Ornith-1.0-9B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF) |
+| **Ornith-1.0-397B** | MoE | ladder pending (IQ1_M coherence-verified) | graft available, untested | [satgeze/Ornith-1.0-397B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-397B-1M-GGUF) |
+
+All quants in every repo carry the YaRN 1M metadata baked in. Full verification details live on each model card.
 
 ## Quick start
 
