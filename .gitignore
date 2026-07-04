@@ -1,5 +1,2 @@
 .venv/
 *.log
-# running pipelines - added after they finish + are sanitized
-all_quants_pipeline.sh
-low_quants_pipeline.sh
