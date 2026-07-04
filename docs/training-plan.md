@@ -1,10 +1,14 @@
 # Training plan: a domain-tuned Ornith (draft v1)
 
-Goal, per the project north star: an open-weights coding model with 1M context, usable through Claude Code, at the highest intelligence reachable on owned or briefly-rented hardware, sharpened specifically for Rust systems and P2P networking work. Speed optimization (speculative drafts) is deferred; capability via training is the main event.
+Goal, per the project north star: an open-weights coding model with 1M context, usable through Claude Code, at the highest intelligence reachable on owned or briefly-rented hardware. Active training track: SFT on vetted public agent-trace datasets. Speed optimization (speculative drafts) is deferred.
 
-## Two training tracks, run in this order
+## Two training tracks
 
-### Track 1: domain corpus midtraining (the high-conviction bet)
+### Track 1 (ACTIVE, Satinder's decision): agent-trace SFT
+
+SFT on vetted permissive trace datasets from the shortlist (the Apache-2.0 25k cleaned set first; the MIT 2M set after provenance verification), plus, over time, traces from Satinder's own Claude Code sessions. Teaches tool-call discipline, terse output, Claude-Code-shaped agentic workflows. This is the training work happening now.
+
+### Track 2 (DEFERRED idea, not scheduled): domain corpus midtraining
 
 Continued pretraining (a.k.a. midtraining) on the exact domain the model will serve, followed by a light SFT to restore chat behavior.
 
@@ -22,9 +26,7 @@ Estimated corpus size: 100M to 500M tokens after dedup and cleaning. This is mid
 
 Why high conviction: the failure mode this attacks is hallucinated APIs and shallow RFC knowledge, which is precisely what hurts daily agentic coding on a specialized stack. Nothing in a generic trace set teaches quinn's connection API.
 
-### Track 2: agent-trace SFT (the behavior polish)
-
-SFT on vetted permissive trace sets (shortlist in the master plan: the Apache-2.0 25k cleaned set first; the MIT 2M set only after provenance check), plus, over time, traces from Satinder's own Claude Code sessions on the actual project. Teaches: tool-call discipline, terse output (anti-chattiness), Claude-Code-shaped workflows.
+(Deferred by decision on July 5: trace-SFT first. The corpus idea stays documented for a future phase only.)
 
 ## Method decisions (current position, revisable)
 
