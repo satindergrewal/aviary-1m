@@ -58,7 +58,7 @@ Ornith kept Qwen3.5's multimodal skeleton: attach the bundled mmproj vision towe
 | **Ornith-1.0-9B** | dense | perfect to 524K; 7/10 at 1M (mapped, isolation run in progress) | measured, mmproj included | [satgeze/Ornith-1.0-9B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF) |
 | **Ornith-1.0-397B** | MoE | ladder pending (IQ1_M coherence-verified) | graft available, untested | [satgeze/Ornith-1.0-397B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-397B-1M-GGUF) |
 
-All quants in every repo carry the YaRN 1M metadata baked in. Full verification details live on each model card.
+All quants in every repo carry the YaRN 1M metadata baked in. Full verification details live on each model card. Everything together: the [Ornith 1M Context collection](https://huggingface.co/collections/satgeze/ornith-1m-context) on Hugging Face.
 
 ## Quick start
 
