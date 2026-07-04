@@ -1,6 +1,6 @@
 <div align="center">
 
-![Ornith](assets/ornith-1m-banner.jpeg)
+<img src="assets/ornith-1m-banner.jpeg" alt="Ornith" width="720"/>
 
 # Ornith 1M Context
 
