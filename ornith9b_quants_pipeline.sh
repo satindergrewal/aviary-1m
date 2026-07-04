@@ -37,11 +37,19 @@ echo "=== 9B imatrix ==="
 [ -f ornith-9b-1m.imatrix ] || ${BIN}/llama-imatrix -m ornith-1.0-9b-1M-Q8_0.gguf \
   -f calibration_data.txt -o ornith-9b-1m.imatrix -ngl 99 --chunks 96 2>&1 | tail -2
 
-for Q in IQ1_S IQ2_M IQ3_XXS Q2_K Q3_K_M IQ4_XS; do
+for Q in IQ2_M IQ3_XXS Q2_K Q3_K_M IQ4_XS; do
   OUT="ornith-1.0-9b-1M-${Q}.gguf"
-  echo "=== 9B ${Q}: quantize/upload ==="
+  echo "=== 9B ${Q}: quantize ==="
   [ -f "${OUT}" ] || ${BIN}/llama-quantize --imatrix ornith-9b-1m.imatrix \
     ornith-1.0-9b-1M-bf16.gguf "${OUT}" "${Q}" 2>&1 | tail -1
-  hf upload ${REPO} "${OUT}" "${OUT}" --repo-type model 2>&1 | tail -1
+  echo "=== 9B ${Q}: smoke gate ==="
+  if ~/Documents/GitHub/ornith-1m/.venv/bin/python ~/Documents/GitHub/ornith-1m/smoke_gate.py "${OUT}" "${BIN}/llama-cli" >> ~/Documents/GitHub/ornith-1m/smoke_results.log 2>&1; then
+    echo "=== 9B ${Q}: PASS — uploading ==="
+    hf upload ${REPO} "${OUT}" "${OUT}" --repo-type model 2>&1 | tail -1
+  else
+    echo "=== 9B ${Q}: FAILED smoke gate — NOT uploading (kept locally for inspection) ==="
+    mv "${OUT}" "${OUT}.quarantine"
+  fi
 done
+tail -5 ~/Documents/GitHub/ornith-1m/smoke_results.log
 echo "9B LADDER COMPLETE"
