@@ -1,24 +1,28 @@
----
-license: mit
-base_model: deepreinforce-ai/Ornith-1.0-35B
-tags:
-- gguf
-- long-context
-- yarn
-- ornith
-- llama.cpp
-- ollama
----
+<div align="center">
 
-# Ornith-1.0-35B — 1M Context GGUF (YaRN)
+# Ornith 1M Context
 
-GGUF quantizations of [deepreinforce-ai/Ornith-1.0-35B](https://huggingface.co/deepreinforce-ai/Ornith-1.0-35B) with YaRN RoPE scaling **baked into the GGUF metadata** for a **1,048,576-token context window** — 4× the native 262,144. No fine-tuning: weights are bit-identical to the original release; only the rope-scaling metadata differs, so llama.cpp and Ollama apply the extension automatically with no extra flags.
+**Extending [Ornith-1.0](https://huggingface.co/deepreinforce-ai/Ornith-1.0-35B) from 262K to 1,048,576-token context with YaRN — validated needle-perfect, no fine-tuning.**
 
-## Validation: 50/50 needles, zero retrieval loss
+[![HF: 35B 1M GGUF](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Ornith--1.0--35B--1M--GGUF-ffd21e?logo=huggingface)](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF)
+[![HF: 9B 1M GGUF](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Ornith--1.0--9B--1M--GGUF%20(building)-ffd21e?logo=huggingface)](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Context: 1M](https://img.shields.io/badge/context-1%2C048%2C576%20tokens-8A2BE2)]()
+[![NIAH: 50/50](https://img.shields.io/badge/NIAH-50%2F50%20needles-brightgreen)]()
+[![llama.cpp](https://img.shields.io/badge/llama.cpp-compatible-informational)]()
+[![Ollama](https://img.shields.io/badge/Ollama-ready-informational)]()
 
-Multi-needle retrieval test: 10 unique needles per run planted at depths 5%–95% in generated filler prose, retrieved in a single pass at temperature 0. Every needle recovered at every context length, including double and quadruple the native window.
+</div>
 
-![Needle-in-a-haystack results](niah_heatmap.png)
+## What this is
+
+Ornith-1.0 models are Qwen3.5-family hybrids: only ~1 in 4 layers is full attention (the rest linear attention), so the KV cache at 1M tokens is ~20 GB (35B) / ~32 GB (9B) instead of hundreds of GB. That makes million-token context practical on consumer hardware — this repo holds the tooling and evidence; the ready-to-run GGUFs live on Hugging Face with the YaRN rope-scaling metadata baked in, so llama.cpp and Ollama apply the 4× extension automatically.
+
+## Results
+
+10 needles per run at depths 5–95%, single pass, temperature 0 — perfect retrieval at every length through 1M, replicated with independent haystacks:
+
+![NIAH heatmap](niah_heatmap.png)
 
 | Context | Needles | Cold prefill (M3 Max 128GB) |
 |---|---|---|
@@ -28,62 +32,36 @@ Multi-needle retrieval test: 10 unique needles per run planted at depths 5%–95
 | 524,288 (YaRN 2×) | 10/10 | 97 min |
 | 1,048,576 (YaRN 4×) | 10/10 | ~6.8 h |
 
-All rungs replicated 10/10 with independent haystacks and needle codes. The **Q4_K_M** file was additionally validated at 524K (10/10) loaded with **no rope flags at all** — confirming the baked metadata alone activates YaRN, which is exactly how Ollama loads it.
-
 ![Prefill throughput](prefill_speed.png)
 
-Why 1M context is practical on this model at all: Ornith-1.0-35B is a hybrid — only ~10 of 40 layers are full attention (2 KV heads × 256 head dim), the rest linear attention. KV cache is ~20 KB/token: **~20 GB at 1M tokens**, versus hundreds of GB for a dense-attention 35B. Q8_0 weights + full 1M KV run in ~55–63 GB total.
+## Contents
 
-Retrieval is necessary, not sufficient: NIAH shows the model can address the full window; it does not measure reasoning quality over long documents. Expect some quality tax from YaRN interpolation on tasks harder than retrieval.
+| File | Purpose |
+|---|---|
+| `niah_test.py` | Multi-needle haystack test against any OpenAI-compatible endpoint |
+| `bake_yarn.py` | Bake YaRN 1M metadata into any Qwen3.5-family GGUF |
+| `make_charts.py` | Render the heatmap + throughput charts from results |
+| `ornith9b_quants_pipeline.sh` | Full 9B quant ladder: download → bake → imatrix low-bit quants → upload |
+| `results.jsonl`, `prefill_timing.jsonl` | Raw benchmark data |
 
-## Files
+## Model repos
 
-| File | Size | Use |
-|---|---|---|
-| `ornith-1.0-35b-1M-Q8_0.gguf` | 35 GB | best quality; 64 GB+ unified memory |
-| `ornith-1.0-35b-1M-Q4_K_M.gguf` | 20 GB | smaller memory footprint |
+- **35B (MoE, 3B active):** [satgeze/Ornith-1.0-35B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF) — IQ1_S through BF16, all 1M-baked
+- **9B (dense):** [satgeze/Ornith-1.0-9B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF) — same ladder, building now
 
-## Run with Ollama
-
-```
-# Modelfile
-FROM ./ornith-1.0-35b-1M-Q4_K_M.gguf
-PARAMETER num_ctx 1048576
-```
+## Quick start
 
 ```bash
-ollama create ornith-1m -f Modelfile
-ollama run ornith-1m
+ollama run hf.co/satgeze/Ornith-1.0-35B-1M-GGUF:Q4_K_M
+# then: /set parameter num_ctx 1048576   (needs ~20GB free for KV)
 ```
 
-Scale `num_ctx` down to what your machine and task need — the KV cache is allocated for the context you request, not the 1M maximum.
-
-## Run with llama.cpp
+or llama.cpp, no flags needed beyond context size:
 
 ```bash
 llama-server -m ornith-1.0-35b-1M-Q8_0.gguf -c 1048576 -np 1 --jinja
 ```
 
-Note `-np 1`: parallel slots divide the context; the default would give each request only a quarter of the window.
+## Credits
 
-The same result on the **original** GGUFs, via runtime flags:
-
-```bash
-llama-server -m ornith-1.0-35b-Q8_0.gguf -c 1048576 -np 1 --jinja \
-  --rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 262144 \
-  --override-kv qwen35moe.context_length=int:1048576
-```
-
-## Reproduce the benchmark
-
-`niah_test.py` (in this repo) runs the multi-needle test against any OpenAI-compatible endpoint:
-
-```bash
-python3 niah_test.py --tokens 1048576 --url http://127.0.0.1:8000
-```
-
-It disables Ornith's thinking mode for deterministic scoring and varies haystacks by `--seed` (needed for cold timing measurements — llama-server's prompt cache makes identical reruns nearly instant). Raw results: `results.jsonl`, per-batch prefill timings: `prefill_timing.jsonl`.
-
-## Credits & license
-
-All model training credit to [DeepReinforce](https://huggingface.co/deepreinforce-ai) — this repo only changes rope-scaling metadata on their MIT-licensed release, following the YaRN factor-4 configuration recommended for the underlying Qwen3.5 architecture. MIT, same as upstream.
+All model training credit to [DeepReinforce](https://huggingface.co/deepreinforce-ai) (Ornith-1.0, MIT). This project only changes rope-scaling metadata and measures the result. MIT, same as upstream.
