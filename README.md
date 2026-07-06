@@ -36,7 +36,7 @@ No fine-tuning anywhere: every trunk is bit-identical to its source release apar
 | **Gemma4-31B Uncensored** | 31B dense | yes | 20/20 to 131K, higher rungs running | separate head, +46% | verified | [HF](https://huggingface.co/satgeze/Gemma4-31B-Uncensored-HauhauCS-1M-GGUF) · [MS](https://www.modelscope.ai/models/satgeze/Gemma4-31B-Uncensored-HauhauCS-1M-GGUF) |
 | **Ornith-1.0-397B** | 397B MoE | no | pod session pending | extraction possible (official layer exists) | TBD | [MS (full)](https://www.modelscope.ai/models/satgeze/Ornith-1.0-397B-1M-GGUF) · [HF (pointer)](https://huggingface.co/satgeze/Ornith-1.0-397B-1M-GGUF) |
 
-Collections: [Ornith 1M Context](https://huggingface.co/collections/satgeze/ornith-1m-context-6a499d6fe2ff4ace90d85201) · [Uncensored 1M Context](https://huggingface.co/collections/satgeze/uncensored-1m-context-gemma-4-qwen36-6a4b33493b132e3da13b2c29)
+Collections: [Ornith 1M Context](https://huggingface.co/collections/satgeze/ornith-1m-context-6a499d6fe2ff4ace90d85201) · [Uncensored 1M Context](https://huggingface.co/collections/satgeze/uncensored-1m-context-gemma-4-qwen36-6a4b33493b132e3da13b2c29) · [Beyond 1M Context](https://huggingface.co/collections/satgeze/beyond-1m-context-6a4bb9a0a2718d4c312515ae)
 
 Hugging Face repos carry the MTP-first picks; the complete quant ladders live permanently on the ModelScope mirrors (same repo names). Every model card ships its own heatmap, speed chart, and raw `results.jsonl`, including the imperfect runs.
 
