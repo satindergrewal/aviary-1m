@@ -56,7 +56,7 @@ ax.set_title("Needle-in-a-haystack retrieval — 50/50 needles recovered",
 ax.text(0, -1.15, "Ornith-1.0-35B Q8_0 · YaRN factor 4 · temperature 0 · 10 needles per run",
         fontsize=8.5, color=MUTED, transform=ax.transData)
 fig.tight_layout()
-fig.savefig("niah_heatmap.png", bbox_inches="tight")
+fig.savefig("assets/niah_heatmap.png", bbox_inches="tight")
 print("wrote niah_heatmap.png")
 
 # ---- Chart 2: prefill throughput vs position (stitched 1M run) ------------
@@ -101,5 +101,5 @@ ax.annotate(f"{ys[-1]:.0f} tok/s", (xs[-1], ys[-1]), textcoords="offset points",
 ax.set_title("Prefill throughput across a 1M-token prompt — M3 Max 128GB",
              fontsize=12, color=INK, pad=14, loc="left")
 fig.tight_layout()
-fig.savefig("prefill_speed.png", bbox_inches="tight")
+fig.savefig("assets/prefill_speed.png", bbox_inches="tight")
 print("wrote prefill_speed.png")

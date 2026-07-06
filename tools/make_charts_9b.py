@@ -48,7 +48,7 @@ ax.set_title("Ornith-9B needle retrieval: perfect to 524K, deep-middle loss at 1
              fontsize=11.5, color=INK, pad=44, loc="left")
 ax.text(0, -1.15, "Q4_K_M weights · q8_0 KV cache · RTX 5090 · temperature 0 · main-run of each rung",
         fontsize=8.5, color=MUTED)
-fig.tight_layout(); fig.savefig("niah_heatmap_9b.png", bbox_inches="tight")
+fig.tight_layout(); fig.savefig("assets/niah_heatmap_9b.png", bbox_inches="tight")
 print("wrote niah_heatmap_9b.png")
 
 fig, ax = plt.subplots(figsize=(7.2, 4.2), dpi=200)
@@ -67,5 +67,5 @@ for side in ("top", "right"): ax.spines[side].set_visible(False)
 ax.tick_params(length=0)
 ax.set_title("Ornith-9B wall time per NIAH run — RTX 5090 (32GB)",
              fontsize=11.5, color=INK, pad=14, loc="left")
-fig.tight_layout(); fig.savefig("prefill_time_9b.png", bbox_inches="tight")
+fig.tight_layout(); fig.savefig("assets/prefill_time_9b.png", bbox_inches="tight")
 print("wrote prefill_time_9b.png")
