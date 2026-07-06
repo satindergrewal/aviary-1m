@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/aviary-logo-transparent.png" alt="aviary-1m" width="520"/>
+<img src="assets/aviary-logo.png" alt="aviary-1m" width="520"/>
 
 **A flock of open models extended to a 1,048,576-token context with YaRN, then certified needle by needle: Ornith-1.0 (9B, 35B, 397B), the Gemma 4 uncensored trio, Qwen3.6-35B uncensored, and counting. Plus MTP speculative-decoding grafts and vision hookups. No fine-tuning. Verified everything.**
 
