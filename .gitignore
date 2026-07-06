@@ -2,3 +2,15 @@
 *.log
 .DS_Store
 **/.DS_Store
+*.log
+night_*.sh
+mirror_fix.sh
+publish_*.sh
+push_cards.sh
+canon_sync.*
+qwable_sync.*
+qwenpaw_sync.*
+NIGHT_REPORT.md
+niah_*/
+results_quartet/
+.venv/

@@ -41,7 +41,7 @@ Hugging Face repos carry the MTP-first picks; the complete quant ladders live pe
 
 ## How it works
 
-1. **1M context**: `bake_yarn.py` writes YaRN rope-scaling metadata (factor 4.0 over native 262,144) into the GGUF header. No weight changes. Works on Qwen3.5, Qwen3.6, and Gemma 4 family GGUFs.
+1. **1M context**: `tools/bake_yarn.py` writes YaRN rope-scaling metadata (factor 4.0 over native 262,144) into the GGUF header. No weight changes. Works on Qwen3.5, Qwen3.6, and Gemma 4 family GGUFs.
 2. **Certification**: `niah_test.py` plants 10 needles at depths 5 to 95 percent, temperature 0, seeded haystacks, against any OpenAI-compatible server. Certification runs use f16 KV only; quantized-KV numbers are always labeled as budget configs. Full ladders, no skipped rungs, misses published.
 3. **MTP**: Qwen3.5/3.6 ship a multi-token-prediction layer in official checkpoints that finetunes usually drop. Where a community build restored it we vetted and re-baked it; for Qwen3.6 we grafted the layer ourselves at the GGUF tensor level (see the model card). Gemma 4 heads ship as separate 250MB draft files. The trunk verifies every drafted token, so speculative decoding never changes output.
 4. **Vision**: mmproj towers attach at runtime via `--mmproj`. Each one smoke-tested on the exact published trunk (image text transcription plus object identification).
@@ -51,10 +51,10 @@ Hugging Face repos carry the MTP-first picks; the complete quant ladders live pe
 | File | Purpose |
 |---|---|
 | `niah_test.py` | Multi-needle haystack test against any OpenAI-compatible endpoint |
-| `bake_yarn.py` | Bake YaRN 1M metadata into any supported GGUF |
-| `smoke_gate.py` | Coherence gate: catches repetition-collapse before anything ships |
+| `tools/bake_yarn.py` | Bake YaRN 1M metadata into any supported GGUF |
+| `tools/smoke_gate.py` | Coherence gate: catches repetition-collapse before anything ships |
 | `make_charts*.py` | Render heatmaps and speed charts from results |
-| `*_pipeline.sh` | Quant ladder pipelines: download, bake, quantize, verify, upload |
+| `pipelines/*.sh` | Quant ladder pipelines: download, bake, quantize, verify, upload |
 | `results*.jsonl` | Raw benchmark data |
 
 ## Quick start
