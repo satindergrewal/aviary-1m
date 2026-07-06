@@ -80,6 +80,10 @@ PARAMETER num_ctx 262144
 
 Memory rule of thumb at 1M f16 KV: hybrid-attention families keep it small. Ornith-35B ~20GB KV, Ornith-9B ~32GB, Gemma 4 smaller still thanks to 5:1 sliding-window layers (the 12B certifies at 1M inside a 32GB GPU).
 
+## Studies
+
+[Beyond 1M: how far YaRN stretches before it bends](docs/beyond-1m-study.md), a factor 6 vs 8 ladder study to 2M on one RTX 5090. Found the certified frontier (1.31M clean), the factor tax, and the 2M bend.
+
 ## Credits
 
 Model training: [DeepReinforce](https://huggingface.co/deepreinforce-ai) (Ornith-1.0, MIT), [Qwen](https://huggingface.co/Qwen), [Google](https://huggingface.co/google) (Gemma 4 QAT), [agentscope-ai](https://huggingface.co/agentscope-ai) (QwenPaw). Uncensoring: [HauhauCS](https://huggingface.co/HauhauCS), [SC117](https://huggingface.co/SC117) (heretic). MTP packaging: [Unsloth](https://huggingface.co/unsloth), protoLabsAI, wang-yang, SC117. Context extension, grafts, certification, and publishing: [SatGeze](https://huggingface.co/satgeze). MIT, same as the tooling deserves.
