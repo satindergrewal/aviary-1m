@@ -2,13 +2,11 @@
 
 <img src="assets/aviary-logo.png" alt="aviary-1m" width="520"/>
 
-**A flock of open models extended to a 1,048,576-token context with YaRN, then certified needle by needle: Ornith-1.0 (9B, 35B, 397B), the Gemma 4 uncensored trio, Qwen3.6-35B uncensored, and counting. Plus MTP speculative-decoding grafts and vision hookups. No fine-tuning. Verified everything.**
+**A flock of open models extended to a 1,048,576-token context with YaRN, then certified needle by needle. Plus MTP speculative-decoding grafts, vision hookups, and the full test harness that proves every claim.**
 
-[![HF: 35B 1M GGUF](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Ornith--1.0--35B--1M--GGUF-ffd21e?logo=huggingface)](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF)
-[![HF: 9B 1M GGUF](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Ornith--1.0--9B--1M--GGUF-ffd21e?logo=huggingface)](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Context: 1M](https://img.shields.io/badge/context-1%2C048%2C576%20tokens-8A2BE2)]()
-[![NIAH: 50/50](https://img.shields.io/badge/NIAH-50%2F50%20needles-brightgreen)]()
+[![Models: 8](https://img.shields.io/badge/models-8%20across%204%20families-brightgreen)]()
 [![llama.cpp](https://img.shields.io/badge/llama.cpp-compatible-informational)]()
 [![Ollama](https://img.shields.io/badge/Ollama-ready-informational)]()
 
@@ -16,61 +14,71 @@
 
 ## What this is
 
-Ornith-1.0 models are Qwen3.5-family hybrids: only ~1 in 4 layers is full attention (the rest linear attention), so the KV cache at 1M tokens is ~20 GB (35B) / ~32 GB (9B) instead of hundreds of GB. That makes million-token context practical on consumer hardware. This repo holds the tooling and evidence; the ready-to-run GGUFs live on Hugging Face with the YaRN rope-scaling metadata baked in, so llama.cpp and Ollama apply the 4× extension automatically.
+Take a strong open model. Bake YaRN rope-scaling metadata into its GGUF so llama.cpp and Ollama run it at 1M context with no flags. Prove the extension works with a multi-needle retrieval harness at every length, no skipped rungs, and publish the raw results next to the weights. Where the model family ships a multi-token-prediction layer, graft it back for 25 to 51 percent faster decoding with identical output. Where a vision tower exists, wire it up and verify it. Ship only what passed.
 
-## Results
+No fine-tuning anywhere: every trunk is bit-identical to its source release apart from rope metadata (and, where noted, an appended MTP layer from the family's official checkpoint).
 
-10 needles per run at depths 5-95%, single pass, temperature 0: perfect retrieval at every length through 1M, replicated with independent haystacks:
+## The fleet
 
-![NIAH heatmap](niah_heatmap.png)
+<img src="assets/fleet_niah.png" width="820"/>
 
-| Context | Needles | Cold prefill (M3 Max 128GB) |
-|---|---|---|
-| 32,768 | 10/10 | 38 s |
-| 131,072 | 10/10 | 8.3 min |
-| 262,144 (native) | 10/10 | 23 min |
-| 524,288 (YaRN 2×) | 10/10 | 97 min |
-| 1,048,576 (YaRN 4×) | 10/10 | ~6.8 h |
+<img src="assets/fleet_mtp.png" width="820"/>
 
-![Prefill throughput](prefill_speed.png)
+| Model | Params | Uncensored | 1M needle status | MTP | Vision | Get it |
+|---|---|---|---|---|---|---|
+| **Qwen3.6-35B Uncensored** | 35B MoE (3B active) | yes | **70/70, certified to 1M** | baked in, +34% | verified | [HF](https://huggingface.co/satgeze/Qwen3.6-35B-Uncensored-HauhauCS-1M-GGUF) · [MS](https://www.modelscope.ai/models/satgeze/Qwen3.6-35B-Uncensored-HauhauCS-1M-GGUF) |
+| **Ornith-1.0-35B** | 35B MoE (3B active) | no | **50/50, certified to 1M** | baked in, +43% (Q6_K) / +14% (APEX 17GB) | verified | [HF](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF) · [MS](https://www.modelscope.ai/models/satgeze/Ornith-1.0-35B-1M-GGUF) |
+| **Gemma4-12B Uncensored** | 12B dense | yes | **10/10 every rung to 1M, on a 32GB card** | separate head, +51% | verified | [HF](https://huggingface.co/satgeze/Gemma4-12B-Uncensored-HauhauCS-1M-GGUF) · [MS](https://www.modelscope.ai/models/satgeze/Gemma4-12B-Uncensored-HauhauCS-1M-GGUF) |
+| **Ornith-1.0-9B** | 9B dense | no | 10/10 at 1M (Q8+f16 KV); budget config mapped | baked in, up to +38% | verified | [HF](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF) · [MS](https://www.modelscope.ai/models/satgeze/Ornith-1.0-9B-1M-GGUF) |
+| **QwenPaw-Flash-9B heretic** | 9B dense | yes | 50/50 to 524K, 1M rungs running | baked in, +25% | verified | publishing after final rungs |
+| **Gemma4-26B-A4B Uncensored** | 26B MoE (4B active) | yes | ~91% recall, honestly documented | separate head, +48% | verified | [HF](https://huggingface.co/satgeze/Gemma4-26B-A4B-Uncensored-HauhauCS-1M-GGUF) · [MS](https://www.modelscope.ai/models/satgeze/Gemma4-26B-A4B-Uncensored-HauhauCS-1M-GGUF) |
+| **Gemma4-31B Uncensored** | 31B dense | yes | 20/20 to 131K, higher rungs running | separate head, +46% | verified | [HF](https://huggingface.co/satgeze/Gemma4-31B-Uncensored-HauhauCS-1M-GGUF) · [MS](https://www.modelscope.ai/models/satgeze/Gemma4-31B-Uncensored-HauhauCS-1M-GGUF) |
+| **Ornith-1.0-397B** | 397B MoE | no | pod session pending | extraction possible (official layer exists) | TBD | [MS (full)](https://www.modelscope.ai/models/satgeze/Ornith-1.0-397B-1M-GGUF) · [HF (pointer)](https://huggingface.co/satgeze/Ornith-1.0-397B-1M-GGUF) |
+
+Collections: [Ornith 1M Context](https://huggingface.co/collections/satgeze/ornith-1m-context-6a499d6fe2ff4ace90d85201) · [Uncensored 1M Context](https://huggingface.co/collections/satgeze/uncensored-1m-context-gemma-4-qwen36-6a4b33493b132e3da13b2c29)
+
+Hugging Face repos carry the MTP-first picks; the complete quant ladders live permanently on the ModelScope mirrors (same repo names). Every model card ships its own heatmap, speed chart, and raw `results.jsonl`, including the imperfect runs.
+
+## How it works
+
+1. **1M context**: `bake_yarn.py` writes YaRN rope-scaling metadata (factor 4.0 over native 262,144) into the GGUF header. No weight changes. Works on Qwen3.5, Qwen3.6, and Gemma 4 family GGUFs.
+2. **Certification**: `niah_test.py` plants 10 needles at depths 5 to 95 percent, temperature 0, seeded haystacks, against any OpenAI-compatible server. Certification runs use f16 KV only; quantized-KV numbers are always labeled as budget configs. Full ladders, no skipped rungs, misses published.
+3. **MTP**: Qwen3.5/3.6 ship a multi-token-prediction layer in official checkpoints that finetunes usually drop. Where a community build restored it we vetted and re-baked it; for Qwen3.6 we grafted the layer ourselves at the GGUF tensor level (see the model card). Gemma 4 heads ship as separate 250MB draft files. The trunk verifies every drafted token, so speculative decoding never changes output.
+4. **Vision**: mmproj towers attach at runtime via `--mmproj`. Each one smoke-tested on the exact published trunk (image text transcription plus object identification).
 
 ## Contents
 
 | File | Purpose |
 |---|---|
 | `niah_test.py` | Multi-needle haystack test against any OpenAI-compatible endpoint |
-| `bake_yarn.py` | Bake YaRN 1M metadata into any Qwen3.5-family GGUF |
-| `make_charts.py` | Render the heatmap + throughput charts from results |
-| `ornith9b_quants_pipeline.sh` | Full 9B quant ladder: download → bake → imatrix low-bit quants → upload |
-| `results.jsonl`, `prefill_timing.jsonl` | Raw benchmark data |
-
-## Vision
-
-Ornith kept Qwen3.5's multimodal skeleton: attach the bundled mmproj vision tower (in each HF repo, extracted by bartowski) via `llama-server --mmproj` and the models see. Smoke-tested with accurate OCR on the 9B and 35B, including on the 1M-baked GGUFs. llama.cpp only for now; Ollama's qwen35 vision path is pending upstream.
-
-## Model repos
-
-| Model | Architecture | Long-context validation | Vision | Hugging Face |
-|---|---|---|---|---|
-| **Ornith-1.0-35B** | MoE, 3B active | **50/50 needles through 1M** (needle-perfect) | measured, mmproj included | [satgeze/Ornith-1.0-35B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF) |
-| **Ornith-1.0-9B** | dense | perfect to 524K; 7/10 at 1M (mapped, isolation run in progress) | measured, mmproj included | [satgeze/Ornith-1.0-9B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF) |
-| **Ornith-1.0-397B** | MoE | ladder pending (IQ1_M coherence-verified) | graft available, untested | [satgeze/Ornith-1.0-397B-1M-GGUF](https://huggingface.co/satgeze/Ornith-1.0-397B-1M-GGUF) |
-
-Every repo is mirrored on ModelScope ([35B](https://www.modelscope.ai/models/satgeze/Ornith-1.0-35B-1M-GGUF) | [9B](https://www.modelscope.ai/models/satgeze/Ornith-1.0-9B-1M-GGUF) | [397B](https://www.modelscope.ai/models/satgeze/Ornith-1.0-397B-1M-GGUF)); the complete quant ladders live there permanently. All quants in every repo carry the YaRN 1M metadata baked in. Full verification details live on each model card. Everything together: the [Ornith 1M Context collection](https://huggingface.co/collections/satgeze/ornith-1m-context) on Hugging Face.
+| `bake_yarn.py` | Bake YaRN 1M metadata into any supported GGUF |
+| `smoke_gate.py` | Coherence gate: catches repetition-collapse before anything ships |
+| `make_charts*.py` | Render heatmaps and speed charts from results |
+| `*_pipeline.sh` | Quant ladder pipelines: download, bake, quantize, verify, upload |
+| `results*.jsonl` | Raw benchmark data |
 
 ## Quick start
 
-```bash
-ollama run hf.co/satgeze/Ornith-1.0-35B-1M-GGUF:Q4_K_M
-# then: /set parameter num_ctx 1048576   (needs ~20GB free for KV)
-```
-
-or llama.cpp, no flags needed beyond context size:
+The flagship, everything on (llama.cpp):
 
 ```bash
-llama-server -m ornith-1.0-35b-1M-Q8_0.gguf -c 1048576 -np 1 --jinja
+llama-server -m qwen3.6-35b-uncensored-1M-MTP-Q4_K_M.gguf \
+  -c 1048576 -np 1 --jinja \
+  --spec-type draft-mtp --spec-draft-n-max 3 \
+  --mmproj mmproj-qwen36-hauhau-f16.gguf
 ```
+
+Ollama (1M and vision work; MTP speedup needs llama.cpp until Ollama ships speculative decoding):
+
+```
+FROM ./qwen3.6-35b-uncensored-1M-MTP-Q4_K_M.gguf
+RENDERER qwen3.5
+PARSER qwen3.5
+PARAMETER num_ctx 262144
+```
+
+Memory rule of thumb at 1M f16 KV: hybrid-attention families keep it small. Ornith-35B ~20GB KV, Ornith-9B ~32GB, Gemma 4 smaller still thanks to 5:1 sliding-window layers (the 12B certifies at 1M inside a 32GB GPU).
 
 ## Credits
 
-All model training credit to [DeepReinforce](https://huggingface.co/deepreinforce-ai) (Ornith-1.0, MIT). This project only changes rope-scaling metadata and measures the result. MIT, same as upstream.
+Model training: [DeepReinforce](https://huggingface.co/deepreinforce-ai) (Ornith-1.0, MIT), [Qwen](https://huggingface.co/Qwen), [Google](https://huggingface.co/google) (Gemma 4 QAT), [agentscope-ai](https://huggingface.co/agentscope-ai) (QwenPaw). Uncensoring: [HauhauCS](https://huggingface.co/HauhauCS), [SC117](https://huggingface.co/SC117) (heretic). MTP packaging: [Unsloth](https://huggingface.co/unsloth), protoLabsAI, wang-yang, SC117. Context extension, grafts, certification, and publishing: [SatGeze](https://huggingface.co/satgeze). MIT, same as the tooling deserves.
