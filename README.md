@@ -1,10 +1,8 @@
 <div align="center">
 
-<img src="assets/ornith-1m-banner.jpeg" alt="Ornith" width="720"/>
+<img src="assets/aviary-logo.png" alt="aviary-1m" width="520"/>
 
-# Ornith 1M Context
-
-**Extending [Ornith-1.0](https://huggingface.co/deepreinforce-ai/Ornith-1.0-35B) from 262K to 1,048,576-token context with YaRN. Validated needle-perfect, no fine-tuning.**
+**A flock of open models extended to a 1,048,576-token context with YaRN, then certified needle by needle: Ornith-1.0 (9B, 35B, 397B), the Gemma 4 uncensored trio, Qwen3.6-35B uncensored, and counting. Plus MTP speculative-decoding grafts and vision hookups. No fine-tuning. Verified everything.**
 
 [![HF: 35B 1M GGUF](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Ornith--1.0--35B--1M--GGUF-ffd21e?logo=huggingface)](https://huggingface.co/satgeze/Ornith-1.0-35B-1M-GGUF)
 [![HF: 9B 1M GGUF](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Ornith--1.0--9B--1M--GGUF-ffd21e?logo=huggingface)](https://huggingface.co/satgeze/Ornith-1.0-9B-1M-GGUF)
