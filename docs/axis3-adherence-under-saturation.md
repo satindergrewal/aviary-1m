@@ -59,3 +59,7 @@ Calibration to test rather than assume: external memory (retrieving and reinject
 2. Decide overlap policy: run SEQUOR as-is on the fleet first if runnable locally; build ours only for the gaps (saturation depth, branch matrices, memory A/B).
 3. Harness skeleton: driver + verifiable scorer + seeded trigger schedule.
 4. Pilot on Gemma4-12B-1M and the qwen36 hybrid at 3 fill levels, then decide sample sizes.
+## Field datapoints (production users, recorded as they arrive)
+
+- **CoronelOc (Reaper Labs Discord, July 8, 2026):** reinjects tool-use system instructions every 1500 tokens during tool-call phases on Gemma4; reports zero percent wrong tool-call format after adopting this ("reassert the instructions within the sliding attention window"). Residual failures are semantic (wrong command flags), which matches the prediction that reinjection fixes format adherence but not reasoning correctness. This is the strongest external evidence yet for the memory-reinjection arm of the A/B design; the 1500-token cadence (aligned to Gemma SWA window) is a concrete reinjection policy worth testing as variant (b).
+- Same user maintains Gemma4 tool-calling tutorials documenting native tool syntax and template filtering of tool responses ("model blindness" loops): github.com/nnnarvaez/Exploring-Gemma4-and-Gemini. Trigger-detection vs obedience separation in our design should also separate "never saw the tool result" failures (harness bug) from true adherence failures.
