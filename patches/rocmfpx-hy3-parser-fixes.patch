@@ -1,0 +1,630 @@
+diff --git a/common/chat-auto-parser-generator.cpp b/common/chat-auto-parser-generator.cpp
+index 2575e63..83ea2f1 100644
+--- a/common/chat-auto-parser-generator.cpp
++++ b/common/chat-auto-parser-generator.cpp
+@@ -159,6 +159,13 @@ common_peg_parser analyze_content::build_parser(parser_build_context & ctx) cons
+         }
+         return p.content(p.until(start)) + start + p.content(p.until(end)) + end + p.end();
+     }
++    if (start.empty() && !end.empty()) {
++        // Delimiter-terminated plain content (e.g. an eos token the template renders as
++        // text): capture until the delimiter, then optionally consume it. until() at
++        // end-of-input succeeds with everything consumed, so length-stopped responses
++        // (no delimiter present) still parse.
++        return ctx.reasoning_parser + p.content(p.until(trim_whitespace(end))) + p.optional(p.optspace(end)) + p.end();
++    }
+     return ctx.reasoning_parser + p.content(p.rest()) + p.end();
+ }
+ 
+@@ -207,7 +214,9 @@ common_peg_parser analyze_tools::build_tool_parser_json_native(parser_build_cont
+             format.per_call_start, format.per_call_end, inputs.tools, inputs.parallel_tool_calls,
+             inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED, name_field, args_field, format.tools_array_wrapped,
+             format.fun_name_is_key, format.id_field, format.gen_id_field, format.parameter_order, format.openai_wrapper_trigger);
+-        tools_parser = p.trigger_rule("tool-calls", p.one_or_more(single_tool_parser + p.space()));
++        tools_parser = inputs.parallel_tool_calls
++            ? p.trigger_rule("tool-calls", p.one_or_more(single_tool_parser + p.space()))
++            : p.trigger_rule("tool-calls", single_tool_parser + p.space());
+     } else {
+         tools_parser = p.standard_json_tools(
+             format.section_start, format.section_end, inputs.tools, inputs.parallel_tool_calls,
+@@ -228,6 +237,15 @@ common_peg_parser analyze_tools::build_tool_parser_json_native(parser_build_cont
+         tool_start = format.per_call_start;
+     }
+ 
++    // Content stops at a tool call OR at a declared content end delimiter (e.g. an eos
++    // token the template renders as text); the delimiter is then consumed if present.
++    if (ctx.content && !ctx.content->end.empty()) {
++        const std::string & content_end = ctx.content->end;
++        return ctx.reasoning_parser +
++               p.optional(p.content(p.until_one_of({tool_start, trim_whitespace(content_end)}))) +
++               p.optional(p.optspace(content_end)) + tools_parser + p.end();
++    }
++
+     return ctx.reasoning_parser + p.optional(p.content(p.until(tool_start))) + tools_parser + p.end();
+ }
+ 
+@@ -336,6 +354,14 @@ common_peg_parser analyze_tools::build_tool_parser_tag_json(parser_build_context
+     }
+ 
+     std::string trigger_marker       = !format.section_start.empty() ? format.section_start : format.per_call_start;
++    if (ctx.content && !ctx.content->end.empty()) {
++        const std::string & content_end = ctx.content->end;
++        auto content_before_tools = trigger_marker.empty()
++            ? p.until(trim_whitespace(content_end))
++            : p.until_one_of({trigger_marker, trim_whitespace(content_end)});
++        return ctx.reasoning_parser + p.optional(p.content(content_before_tools)) +
++               p.optional(p.optspace(content_end)) + tool_calls + p.end();
++    }
+     auto        content_before_tools = trigger_marker.empty() ? p.eps() : p.until(trigger_marker);
+     return ctx.reasoning_parser + p.optional(p.content(content_before_tools)) + tool_calls + p.end();
+ }
+@@ -467,6 +493,14 @@ common_peg_parser analyze_tools::build_tool_parser_tag_tagged(parser_build_conte
+     }
+ 
+     std::string trigger_marker       = !format.section_start.empty() ? format.section_start : format.per_call_start;
++    if (ctx.content && !ctx.content->end.empty()) {
++        const std::string & content_end = ctx.content->end;
++        auto content_before_tools = trigger_marker.empty()
++            ? p.until(trim_whitespace(content_end))
++            : p.until_one_of({trigger_marker, trim_whitespace(content_end)});
++        return ctx.reasoning_parser + p.optional(p.content(content_before_tools)) +
++               p.optional(p.optspace(content_end)) + tool_calls + p.end();
++    }
+     auto        content_before_tools = trigger_marker.empty() ? p.eps() : p.until(trigger_marker);
+     return ctx.reasoning_parser + p.optional(p.content(content_before_tools)) + tool_calls + p.end();
+ }
+diff --git a/common/chat-diff-analyzer.cpp b/common/chat-diff-analyzer.cpp
+index dabc66f..b97e947 100644
+--- a/common/chat-diff-analyzer.cpp
++++ b/common/chat-diff-analyzer.cpp
+@@ -45,6 +45,51 @@ static std::vector<std::function<void(const common_chat_template & tmpl, autopar
+               LOG_DBG(ANSI_ORANGE "[Patch: old Qwen/Deepseek thinking template]\n" ANSI_RESET);
+           }
+       },
++      // Hunyuan hy_v3: suffixed think tags. The generation prompt PREFILLS the opening
++      // <think:opensource>, so generation starts mid-reasoning: use delimiter-style
++      // (empty start) and match everything up to the closing tag as reasoning.
++      [](const common_chat_template & tmpl, autoparser & analysis) -> void {
++          if (tmpl.src.find("<think:opensource>") != std::string::npos) {
++              analysis.reasoning.mode  = reasoning_mode::TAG_BASED;
++              analysis.reasoning.start = "";
++              analysis.reasoning.end   = "</think:opensource>";
++              analysis.preserved_tokens.push_back("<think:opensource>");
++              analysis.preserved_tokens.push_back("</think:opensource>");
++              // Content runs until the (fullwidth-bar) eos token so its text does not
++              // leak into the visible answer.
++              analysis.content.mode  = content_mode::WRAPPED_WITH_REASONING;
++              analysis.content.start = "";
++              analysis.content.end   = "<｜hy_eos:opensource｜>";
++              analysis.preserved_tokens.push_back("<｜hy_eos:opensource｜>");
++              // Tool calls: tagged function name and tagged key/value arguments, e.g.
++              //   <tool_calls:opensource>
++              //   <tool_call:opensource>NAME<tool_sep:opensource>
++              //   <arg_key:opensource>K</arg_key:opensource>
++              //   <arg_value:opensource>V</arg_value:opensource>
++              //   </tool_call:opensource>
++              //   </tool_calls:opensource>
++              analysis.tools.format.mode           = tool_format::TAG_WITH_TAGGED;
++              analysis.tools.format.section_start  = "<tool_calls:opensource>";
++              analysis.tools.format.section_end    = "</tool_calls:opensource>";
++              analysis.tools.format.per_call_start = "<tool_call:opensource>";
++              analysis.tools.format.per_call_end   = "</tool_call:opensource>";
++              analysis.tools.function.name_prefix  = "";
++              analysis.tools.function.name_suffix  = "<tool_sep:opensource>";
++              analysis.tools.arguments.name_prefix  = "<arg_key:opensource>";
++              analysis.tools.arguments.name_suffix  = "</arg_key:opensource>";
++              analysis.tools.arguments.value_prefix = "<arg_value:opensource>";
++              analysis.tools.arguments.value_suffix = "</arg_value:opensource>";
++              analysis.tools.arguments.separator    = "\n";
++              for (const char * t : { "<tool_calls:opensource>", "</tool_calls:opensource>",
++                                      "<tool_call:opensource>", "</tool_call:opensource>",
++                                      "<tool_sep:opensource>",
++                                      "<arg_key:opensource>", "</arg_key:opensource>",
++                                      "<arg_value:opensource>", "</arg_value:opensource>" }) {
++                  analysis.preserved_tokens.push_back(t);
++              }
++              LOG_DBG(ANSI_ORANGE "[Patch: Hunyuan hy_v3 thinking template]\n" ANSI_RESET);
++          }
++      },
+       // Granite 3.3, with separate reasoning and content markers
+       [](const common_chat_template & tmpl, autoparser & analysis) -> void {
+           if (tmpl.src.find("Write your thoughts between <think></think> and write your response between "
+diff --git a/convert_hf_to_gguf.py b/convert_hf_to_gguf.py
+index b15449e..d204492 100755
+--- a/convert_hf_to_gguf.py
++++ b/convert_hf_to_gguf.py
+@@ -12420,6 +12420,15 @@ class HunYuanMoEModel(TextModel):
+ class HYV3Model(TextModel):
+     model_arch = gguf.MODEL_ARCH.HYV3
+ 
++    def __init__(self, *args, **kwargs):
++        super().__init__(*args, **kwargs)
++        # NextN/MTP layers are appended as extra blocks beyond num_hidden_layers
++        # (mirrors BailingMoeV2Model): block_count includes them so the standard
++        # tensor map resolves blk.<n_main>.* names for the MTP block.
++        if nextn_layers := self.hparams.get("num_nextn_predict_layers", 0):
++            self.block_count = self.hparams["num_hidden_layers"] + nextn_layers
++            self.tensor_map = gguf.get_tensor_name_map(self.model_arch, self.block_count)
++
+     def set_vocab(self):
+         self._set_vocab_gpt2()
+ 
+@@ -12433,6 +12442,9 @@ class HYV3Model(TextModel):
+         self.gguf_writer.add_expert_weights_scale(float(self.hparams.get("router_scaling_factor", 1.0)))
+         self.gguf_writer.add_expert_gating_func(gguf.ExpertGatingFuncType.SIGMOID)
+         logger.info("gguf: HYV3 sigmoid router with correction bias")
++        if (nextn_layers := self.hparams.get("num_nextn_predict_layers")) is not None:
++            self.gguf_writer.add_nextn_predict_layers(nextn_layers)
++            logger.info(f"gguf: HYV3 NextN/MTP predict layers = {nextn_layers}")
+ 
+     _experts: list[dict[str, Tensor]] | None = None
+ 
+@@ -12440,6 +12452,13 @@ class HYV3Model(TextModel):
+         if name.startswith("model.layers.") and bid is not None and bid >= self.block_count:
+             return
+ 
++        # MTP block (bid >= num_hidden_layers): final_layernorm sits after the
++        # decoder block, before the shared LM head -> nextn.shared_head_norm.
++        # eh_proj/enorm/hnorm map via the standard NEXTN_* tensor map entries.
++        if bid is not None and bid >= self.hparams["num_hidden_layers"] and ".final_layernorm." in name:
++            yield from super().modify_tensors(data_torch, name.replace(".final_layernorm.", ".shared_head.norm."), bid)
++            return
++
+         if name.startswith("model.layers.") and ".mlp.experts." in name:
+             n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+             assert bid is not None
+diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
+index 81bb6a7..40ba25a 100644
+--- a/gguf-py/gguf/constants.py
++++ b/gguf-py/gguf/constants.py
+@@ -3713,6 +3713,12 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+         MODEL_TENSOR.FFN_GATE_SHEXP,
+         MODEL_TENSOR.FFN_DOWN_SHEXP,
+         MODEL_TENSOR.FFN_UP_SHEXP,
++        MODEL_TENSOR.NEXTN_EH_PROJ,
++        MODEL_TENSOR.NEXTN_EMBED_TOKENS,
++        MODEL_TENSOR.NEXTN_ENORM,
++        MODEL_TENSOR.NEXTN_HNORM,
++        MODEL_TENSOR.NEXTN_SHARED_HEAD_HEAD,
++        MODEL_TENSOR.NEXTN_SHARED_HEAD_NORM,
+     ],
+     MODEL_ARCH.HUNYUAN_DENSE: [
+         MODEL_TENSOR.TOKEN_EMBD,
+diff --git a/src/llama-model.cpp b/src/llama-model.cpp
+index 9fdb543..8bbb909 100644
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -1989,7 +1989,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params,
+                     params.ctx_type == LLAMA_CONTEXT_TYPE_MTP &&
+                     (arch == LLM_ARCH_QWEN35 || arch == LLM_ARCH_QWEN35MOE);
+                 const bool step35_with_mtp =
+-                    arch == LLM_ARCH_STEP35 && hparams.nextn_predict_layers > 0;
++                    (arch == LLM_ARCH_STEP35 || arch == LLM_ARCH_HYV3) && hparams.nextn_predict_layers > 0;
+                 const bool mtp_on_step35 =
+                     params.ctx_type == LLAMA_CONTEXT_TYPE_MTP && step35_with_mtp;
+ 
+diff --git a/src/models/hyv3.cpp b/src/models/hyv3.cpp
+index 4ec3e06..dd3fa73 100644
+--- a/src/models/hyv3.cpp
++++ b/src/models/hyv3.cpp
+@@ -12,15 +12,31 @@ void llama_model_hyv3::load_arch_hparams(llama_model_loader & ml) {
+         hparams.expert_gating_func = LLAMA_EXPERT_GATING_FUNC_TYPE_SIGMOID;
+     }
+ 
+-    switch (hparams.n_layer) {
++    // NextN/MTP (HY V3): extra decoder block appended beyond the main stack.
++    ml.get_key(LLM_KV_NEXTN_PREDICT_LAYERS, hparams.nextn_predict_layers, false);
++    GGML_ASSERT(hparams.nextn_predict_layers < hparams.n_layer && "nextn_predict_layers must be < n_layer");
++
++    switch (hparams.n_layer - hparams.nextn_predict_layers) {
+         case 48: type = LLM_TYPE_30B_A3B; break;
+         default: type = LLM_TYPE_UNKNOWN;
+     }
+ }
+ 
+-void llama_model_hyv3::load_arch_tensors(llama_model_loader &) {
++void llama_model_hyv3::load_arch_tensors(llama_model_loader & ml) {
+     LLAMA_LOAD_LOCALS;
+ 
++    const uint32_t n_main = n_layer - hparams.nextn_predict_layers;
++    const bool mtp_only   = (hparams.nextn_predict_layers > 0) &&
++                            (ml.get_weight("blk.0.attn_norm.weight") == nullptr);
++    // Trunk-only: the GGUF declares MTP layers in metadata but the actual MTP
++    // tensors live in a separate file (e.g. user split target/draft). Mark
++    // MTP tensors NOT_REQUIRED so the trunk loads cleanly.
++    const std::string mtp_probe = "blk." + std::to_string(n_main) + ".nextn.eh_proj.weight";
++    const bool trunk_only = (hparams.nextn_predict_layers > 0) &&
++                            (ml.get_weight(mtp_probe.c_str()) == nullptr);
++    const int trunk_flags = mtp_only   ? TENSOR_NOT_REQUIRED : 0;
++    const int mtp_flags   = trunk_only ? TENSOR_NOT_REQUIRED : 0;
++
+     tok_embd = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), {n_embd, n_vocab}, 0);
+ 
+     output_norm = create_tensor(tn(LLM_TENSOR_OUTPUT_NORM, "weight"), {n_embd}, 0);
+@@ -29,20 +45,20 @@ void llama_model_hyv3::load_arch_tensors(llama_model_loader &) {
+         output = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), {n_embd, n_vocab}, TENSOR_DUPLICATED);
+     }
+ 
+-    for (int i = 0; i < n_layer; ++i) {
++    auto load_block = [&](int i, int flags) {
+         auto & layer = layers[i];
+         const int64_t n_ff_exp   = hparams.n_ff_exp   ? hparams.n_ff_exp   : n_ff / (n_expert_used > 0 ? n_expert_used : 1);
+         const int64_t n_ff_shexp = hparams.n_ff_shexp ? hparams.n_ff_shexp : n_ff_exp;
+ 
+-        layer.attn_norm = create_tensor(tn(LLM_TENSOR_ATTN_NORM, "weight", i), {n_embd}, 0);
++        layer.attn_norm = create_tensor(tn(LLM_TENSOR_ATTN_NORM, "weight", i), {n_embd}, flags);
+ 
+-        create_tensor_qkv(layer, i, n_embd, n_embd_head_k * n_head, n_embd_k_gqa, n_embd_v_gqa, 0);
+-        layer.wo = create_tensor(tn(LLM_TENSOR_ATTN_OUT, "weight", i), {n_embd_head_k * n_head, n_embd}, 0);
++        create_tensor_qkv(layer, i, n_embd, n_embd_head_k * n_head, n_embd_k_gqa, n_embd_v_gqa, flags);
++        layer.wo = create_tensor(tn(LLM_TENSOR_ATTN_OUT, "weight", i), {n_embd_head_k * n_head, n_embd}, flags);
+ 
+-        layer.attn_q_norm = create_tensor(tn(LLM_TENSOR_ATTN_Q_NORM, "weight", i), {n_embd_head_k}, 0);
+-        layer.attn_k_norm = create_tensor(tn(LLM_TENSOR_ATTN_K_NORM, "weight", i), {n_embd_head_k}, 0);
++        layer.attn_q_norm = create_tensor(tn(LLM_TENSOR_ATTN_Q_NORM, "weight", i), {n_embd_head_k}, flags);
++        layer.attn_k_norm = create_tensor(tn(LLM_TENSOR_ATTN_K_NORM, "weight", i), {n_embd_head_k}, flags);
+ 
+-        layer.ffn_norm = create_tensor(tn(LLM_TENSOR_FFN_NORM, "weight", i), {n_embd}, 0);
++        layer.ffn_norm = create_tensor(tn(LLM_TENSOR_FFN_NORM, "weight", i), {n_embd}, flags);
+ 
+         layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff}, TENSOR_NOT_REQUIRED);
+         layer.ffn_down = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "weight", i), {n_ff, n_embd}, TENSOR_NOT_REQUIRED);
+@@ -56,10 +72,33 @@ void llama_model_hyv3::load_arch_tensors(llama_model_loader &) {
+         layer.ffn_gate_shexp = create_tensor(tn(LLM_TENSOR_FFN_GATE_SHEXP, "weight", i), {n_embd, n_ff_shexp}, TENSOR_NOT_REQUIRED);
+         layer.ffn_up_shexp   = create_tensor(tn(LLM_TENSOR_FFN_UP_SHEXP,   "weight", i), {n_embd, n_ff_shexp}, TENSOR_NOT_REQUIRED);
+         layer.ffn_down_shexp = create_tensor(tn(LLM_TENSOR_FFN_DOWN_SHEXP, "weight", i), {n_ff_shexp, n_embd}, TENSOR_NOT_REQUIRED);
++    };
++
++    for (int i = 0; i < (int) n_main; ++i) {
++        load_block(i, trunk_flags);
++    }
++
++    // NextN/MTP blocks: a full hy_v3 decoder block plus the NextN projections.
++    for (int i = (int) n_main; i < n_layer; ++i) {
++        auto & layer = layers[i];
++
++        load_block(i, mtp_flags);
++
++        layer.nextn.eh_proj          = create_tensor(tn(LLM_TENSOR_NEXTN_EH_PROJ,          "weight", i), { 2 * n_embd, n_embd }, mtp_flags);
++        layer.nextn.enorm            = create_tensor(tn(LLM_TENSOR_NEXTN_ENORM,            "weight", i), { n_embd },             mtp_flags);
++        layer.nextn.hnorm            = create_tensor(tn(LLM_TENSOR_NEXTN_HNORM,            "weight", i), { n_embd },             mtp_flags);
++        layer.nextn.embed_tokens     = create_tensor(tn(LLM_TENSOR_NEXTN_EMBED_TOKENS,     "weight", i), { n_embd, n_vocab },    TENSOR_NOT_REQUIRED);
++        layer.nextn.shared_head_head = create_tensor(tn(LLM_TENSOR_NEXTN_SHARED_HEAD_HEAD, "weight", i), { n_embd, n_vocab },    TENSOR_NOT_REQUIRED);
++        // hy_v3 stores the MTP block's trailing final_layernorm here (applied
++        // after the decoder block, before the shared LM head).
++        layer.nextn.shared_head_norm = create_tensor(tn(LLM_TENSOR_NEXTN_SHARED_HEAD_NORM, "weight", i), { n_embd },             TENSOR_NOT_REQUIRED);
+     }
+ }
+ 
+ std::unique_ptr<llm_graph_context> llama_model_hyv3::build_arch_graph(const llm_graph_params & params) const {
++    if (params.gtype == LLM_GRAPH_TYPE_DECODER_MTP) {
++        return std::make_unique<graph_mtp>(*this, params);
++    }
+     return std::make_unique<graph>(*this, params);
+ }
+ 
+@@ -79,7 +118,9 @@ llama_model_hyv3::graph::graph(const llama_model & model, const llm_graph_params
+ 
+     const float kq_scale = 1.0f / sqrtf(float(n_embd_head));
+ 
+-    for (int il = 0; il < n_layer; ++il) {
++    // MTP/NextN layers are loaded as extra decoder blocks but not executed in the main pass.
++    const int n_transformer_layers = n_layer - (int) hparams.nextn_predict_layers;
++    for (int il = 0; il < n_transformer_layers; ++il) {
+         ggml_tensor * inpSA = inpL;
+ 
+         cur = build_norm(inpL, model.layers[il].attn_norm, nullptr, LLM_NORM_RMS, il);
+@@ -106,7 +147,7 @@ llama_model_hyv3::graph::graph(const llama_model & model, const llm_graph_params
+             cb(cur, "attn_out", il);
+         }
+ 
+-        if (il == n_layer - 1 && inp_out_ids) {
++        if (il == n_transformer_layers - 1 && inp_out_ids && cparams.embeddings_pre_norm_masked) {
+             cur   = ggml_get_rows(ctx0,   cur, inp_out_ids);
+             inpSA = ggml_get_rows(ctx0, inpSA, inp_out_ids);
+         }
+@@ -164,6 +205,16 @@ llama_model_hyv3::graph::graph(const llama_model & model, const llm_graph_params
+     }
+ 
+     cur = build_norm(inpL, model.output_norm, nullptr, LLM_NORM_RMS, -1);
++
++    // Post-final-norm hidden state: what the MTP draft head's hnorm consumes
++    // (mirrors vLLM, which feeds the target model's normed output states).
++    cb(cur, "h_nextn", -1);
++    res->t_h_pre_norm = cur;
++
++    if (!cparams.embeddings_pre_norm_masked && inp_out_ids) {
++        cur = ggml_get_rows(ctx0, cur, inp_out_ids);
++    }
++
+     cb(cur, "result_norm", -1);
+     res->t_embd = cur;
+ 
+@@ -173,3 +224,156 @@ llama_model_hyv3::graph::graph(const llama_model & model, const llm_graph_params
+ 
+     ggml_build_forward_expand(gf, cur);
+ }
++
++// LLM_GRAPH_TYPE_DECODER_MTP draft head for HY V3 (MoE).
++// Semantics mirror vLLM's HYV3MultiTokenPredictorLayer:
++//   enorm(embed) + hnorm(prev_hidden) -> concat(e, h) -> eh_proj ->
++//   hy_v3 decoder block -> final_layernorm (stored as nextn.shared_head_norm) ->
++//   shared LM head (main model's output).
++llama_model_hyv3::graph_mtp::graph_mtp(const llama_model & model, const llm_graph_params & params)
++    : llm_graph_context(params) {
++    GGML_ASSERT(hparams.nextn_predict_layers > 0 && "HYV3 MTP requires nextn_predict_layers > 0");
++    GGML_ASSERT(hparams.nextn_predict_layers == 1 && "HYV3 MTP currently only supports a single MTP block");
++
++    const int64_t n_embd_head = hparams.n_embd_head_v();
++    GGML_ASSERT(n_embd_head == hparams.n_embd_head_k());
++    GGML_ASSERT(n_embd_head == n_rot);
++
++    const int il = (int) hparams.n_layer - (int) hparams.nextn_predict_layers;
++    const auto & layer = model.layers[il];
++
++    GGML_ASSERT(layer.nextn.eh_proj && "MTP block missing nextn.eh_proj");
++    GGML_ASSERT(layer.nextn.enorm   && "MTP block missing nextn.enorm");
++    GGML_ASSERT(layer.nextn.hnorm   && "MTP block missing nextn.hnorm");
++
++    auto inp = std::make_unique<llm_graph_input_embd>(hparams.n_embd);
++
++    inp->tokens = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_tokens);
++    ggml_set_input(inp->tokens);
++
++    inp->embd = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hparams.n_embd, n_tokens);
++    ggml_set_input(inp->embd);
++    ggml_set_name(inp->embd, "mtp_h_input");
++
++    ggml_tensor * tok_embd_w = layer.nextn.embed_tokens ? layer.nextn.embed_tokens : model.tok_embd;
++
++    ggml_tensor * h_input  = inp->embd;
++    ggml_tensor * tok_embd = ggml_get_rows(ctx0, tok_embd_w, inp->tokens);
++    cb(tok_embd, "mtp_tok_embd", il);
++
++    res->add_input(std::move(inp));
++
++    ggml_tensor * inp_pos     = build_inp_pos();
++    ggml_tensor * inp_out_ids = build_inp_out_ids();
++    auto * inp_attn           = build_attn_inp_kv();
++
++    ggml_tensor * h_norm = build_norm(h_input, layer.nextn.hnorm, nullptr, LLM_NORM_RMS, il);
++    cb(h_norm, "mtp_hnorm", il);
++
++    ggml_tensor * e_norm = build_norm(tok_embd, layer.nextn.enorm, nullptr, LLM_NORM_RMS, il);
++    cb(e_norm, "mtp_enorm", il);
++
++    ggml_tensor * concat = ggml_concat(ctx0, e_norm, h_norm, /*dim=*/ 0);
++    cb(concat, "mtp_concat", il);
++
++    ggml_tensor * cur = build_lora_mm(layer.nextn.eh_proj, concat);
++    cb(cur, "mtp_eh_proj", il);
++
++    ggml_tensor * inpSA = cur;
++
++    // mtp_block: a full hy_v3 decoder layer (mirrors the trunk graph)
++    cur = build_norm(cur, layer.attn_norm, nullptr, LLM_NORM_RMS, il);
++    cb(cur, "mtp_attn_norm", il);
++
++    {
++        ggml_tensor * rope_factors = model.get_rope_factors(cparams, il);
++
++        auto [Qcur, Kcur, Vcur] = build_qkv(layer, cur, n_embd_head, n_head, n_head_kv, il);
++
++        Qcur = build_norm(Qcur, layer.attn_q_norm, nullptr, LLM_NORM_RMS, il);
++        Kcur = build_norm(Kcur, layer.attn_k_norm, nullptr, LLM_NORM_RMS, il);
++
++        Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, rope_factors,
++                n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
++                ext_factor, attn_factor, beta_fast, beta_slow);
++        Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, rope_factors,
++                n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
++                ext_factor, attn_factor, beta_fast, beta_slow);
++
++        const float kq_scale = 1.0f / sqrtf(float(n_embd_head));
++
++        cur = build_attn(inp_attn,
++                layer.wo, layer.wo_b, layer.wo_s,
++                Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, kq_scale, il);
++        cb(cur, "mtp_attn_out", il);
++    }
++
++    ggml_tensor * ffn_inp = ggml_add(ctx0, cur, inpSA);
++    cb(ffn_inp, "mtp_ffn_inp", il);
++
++    cur = build_norm(ffn_inp, layer.ffn_norm, nullptr, LLM_NORM_RMS, il);
++    cb(cur, "mtp_ffn_norm", il);
++
++    if (layer.ffn_gate_inp == nullptr) {
++        cur = build_ffn(cur,
++                layer.ffn_up,   layer.ffn_up_b,   layer.ffn_up_s,
++                layer.ffn_gate, layer.ffn_gate_b, layer.ffn_gate_s,
++                layer.ffn_down, layer.ffn_down_b, layer.ffn_down_s,
++                nullptr,
++                LLM_FFN_SILU, LLM_FFN_PAR, il);
++        cb(cur, "mtp_ffn_dense_out", il);
++    } else {
++        ggml_tensor * moe_out = build_moe_ffn(cur,
++                layer.ffn_gate_inp,
++                layer.ffn_up_exps,
++                layer.ffn_gate_exps,
++                layer.ffn_down_exps,
++                layer.ffn_exp_probs_b,
++                n_expert, n_expert_used,
++                LLM_FFN_SILU,
++                hparams.expert_weights_norm,
++                hparams.expert_weights_scale,
++                (llama_expert_gating_func_type) hparams.expert_gating_func,
++                il,
++                nullptr, layer.ffn_gate_up_exps,
++                layer.ffn_up_exps_s,
++                layer.ffn_gate_exps_s,
++                layer.ffn_down_exps_s);
++        cb(moe_out, "mtp_ffn_moe_out", il);
++
++        ggml_tensor * sh_out = build_ffn(cur,
++                layer.ffn_up_shexp,   nullptr, layer.ffn_up_shexp_s,
++                layer.ffn_gate_shexp, nullptr, layer.ffn_gate_shexp_s,
++                layer.ffn_down_shexp, nullptr, layer.ffn_down_shexp_s,
++                nullptr,
++                LLM_FFN_SILU, LLM_FFN_PAR, il);
++        cb(sh_out, "mtp_ffn_shared_out", il);
++
++        cur = ggml_add(ctx0, moe_out, sh_out);
++        cb(cur, "mtp_ffn_out", il);
++    }
++
++    cur = ggml_add(ctx0, cur, ffn_inp);
++    cb(cur, "mtp_post_ffn", il);
++
++    // final_layernorm applied after the decoder block, before the shared head.
++    ggml_tensor * head_norm_w = layer.nextn.shared_head_norm
++            ? layer.nextn.shared_head_norm
++            : model.output_norm;
++    GGML_ASSERT(head_norm_w && "HYV3 MTP: missing both nextn.shared_head_norm and output_norm");
++    cur = build_norm(cur, head_norm_w, nullptr, LLM_NORM_RMS, -1);
++
++    cb(cur, "h_nextn", -1);
++    res->t_h_pre_norm = cur;
++
++    cur = ggml_get_rows(ctx0, cur, inp_out_ids);
++    cb(cur, "mtp_shared_head_norm", -1);
++
++    ggml_tensor * head_w = layer.nextn.shared_head_head ? layer.nextn.shared_head_head : model.output;
++    GGML_ASSERT(head_w && "HYV3 MTP: missing LM head (nextn.shared_head_head or model.output)");
++    cur = build_lora_mm(head_w, cur);
++    cb(cur, "result_output", -1);
++
++    res->t_logits = cur;
++    ggml_build_forward_expand(gf, cur);
++}
+diff --git a/src/models/models.h b/src/models/models.h
+index f8965b0..dfc184f 100644
+--- a/src/models/models.h
++++ b/src/models/models.h
+@@ -1617,6 +1617,10 @@ struct llama_model_hyv3 : public llama_model_base {
+         graph(const llama_model & model, const llm_graph_params & params);
+     };
+ 
++    struct graph_mtp : public llm_graph_context {
++        graph_mtp(const llama_model & model, const llm_graph_params & params);
++    };
++
+     std::unique_ptr<llm_graph_context> build_arch_graph(const llm_graph_params & params) const override;
+ };
+ 
+diff --git a/tools/server/webui/src/lib/services/chat.service.ts b/tools/server/webui/src/lib/services/chat.service.ts
+index c8d7cf4..60287c4 100644
+--- a/tools/server/webui/src/lib/services/chat.service.ts
++++ b/tools/server/webui/src/lib/services/chat.service.ts
+@@ -839,7 +839,9 @@ export class ChatService {
+ 		);
+ 
+ 		for (const image of imageFiles) {
+-			const base64Url = await capImageDataURLSize(image.base64Url, 0);
++			// local build fix: capImageDataURLSize is async but this static method is not;
++			// pass the image through uncapped (text-chat unaffected)
++			const base64Url = image.base64Url;
+ 
+ 			contentParts.push({
+ 				type: ContentPartType.IMAGE_URL,
+diff --git a/tools/server/webui/src/lib/utils/cap-img-size.ts b/tools/server/webui/src/lib/utils/cap-img-size.ts
+index c5d9b73..3f6c0cc 100644
+--- a/tools/server/webui/src/lib/utils/cap-img-size.ts
++++ b/tools/server/webui/src/lib/utils/cap-img-size.ts
+@@ -1,88 +1,14 @@
+-import { MEGAPIXELS_TO_PIXELS } from '$lib/constants/image-size';
+-import { BASE64_IMAGE_URI_REGEX } from '$lib/constants/uri-template';
+-import { getJpegOrientationFromDataURL, isJpegMimeType } from './jpeg-orientation';
+-import { MimeTypeImage } from '$lib/enums';
+-
+ /**
+- * Converts an Image base64 data URL to another Image data URL with capped dimensions to reduce file size.
+- *
+- * For JPEGs the EXIF orientation is baked into the pixels in the same canvas
+- * pass, the browser applies the rotation when decoding so naturalWidth and
+- * naturalHeight already describe the upright image. Backends decoding with
+- * stb_image ignore EXIF, see ggml-org/llama.cpp#20870. Images that need
+- * neither capping nor rotation pass through untouched, so at most one
+- * re-encode ever happens.
+- * @param base64UrlImage - The Image base64 data URL to convert
+- * @param maxMegapixels - The maximum image size in megapixels for the output Image, 0 disables capping
+- * @returns Promise resolving to Image data URL
++ * Local build stub: the fork ships this utility half-wired (imports constants
++ * that do not exist in this tree), which breaks the production build. Image
++ * capping is a size optimization only, so pass images through untouched.
++ * @param base64UrlImage - The Image base64 data URL
++ * @param _maxMegapixels - ignored
++ * @returns Promise resolving to the unmodified Image data URL
+  */
+ export function capImageDataURLSize(
+ 	base64UrlImage: string,
+-	maxMegapixels: number
++	_maxMegapixels: number
+ ): Promise<string> {
+-	return new Promise((resolve, reject) => {
+-		try {
+-			const mimeMatch = base64UrlImage.match(BASE64_IMAGE_URI_REGEX);
+-
+-			if (!mimeMatch) {
+-				return reject(new Error('Invalid data URL format.'));
+-			}
+-
+-			const mimeType = mimeMatch[1] as MimeTypeImage;
+-
+-			if (!Object.values(MimeTypeImage).includes(mimeType)) {
+-				return reject(new Error(`Unsupported image MIME type: ${mimeType}`));
+-			}
+-
+-			const orientation = isJpegMimeType(mimeType)
+-				? getJpegOrientationFromDataURL(base64UrlImage)
+-				: 1;
+-
+-			const img = new Image();
+-
+-			img.onload = () => {
+-				try {
+-					const canvas = document.createElement('canvas');
+-					const ctx = canvas.getContext('2d');
+-
+-					if (!ctx) {
+-						throw new Error('Failed to get 2D canvas context.');
+-					}
+-
+-					const targetWidth = img.naturalWidth;
+-					const targetHeight = img.naturalHeight;
+-					const totalPixels = targetWidth * targetHeight;
+-					const maxPixels = Math.floor(maxMegapixels * MEGAPIXELS_TO_PIXELS);
+-
+-					if (maxPixels > 0 && totalPixels > maxPixels) {
+-						const scaleFactor = Math.sqrt(maxPixels / totalPixels);
+-						canvas.width = Math.floor(targetWidth * scaleFactor);
+-						canvas.height = Math.floor(targetHeight * scaleFactor);
+-					} else if (orientation > 1) {
+-						// No capping needed but the pixels still need the rotation baked in
+-						canvas.width = targetWidth;
+-						canvas.height = targetHeight;
+-					} else {
+-						return resolve(base64UrlImage);
+-					}
+-
+-					ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+-					resolve(canvas.toDataURL(mimeType));
+-				} catch (err) {
+-					reject(err instanceof Error ? err : new Error(String(err)));
+-				}
+-			};
+-
+-			img.onerror = () => {
+-				reject(new Error('Failed to load image.'));
+-			};
+-
+-			img.src = base64UrlImage;
+-		} catch (error) {
+-			const message = error instanceof Error ? error.message : String(error);
+-			const errorMessage = `Error resizing image: ${message}`;
+-			console.error(errorMessage, error);
+-			reject(new Error(errorMessage));
+-		}
+-	});
++	return Promise.resolve(base64UrlImage);
+ }
