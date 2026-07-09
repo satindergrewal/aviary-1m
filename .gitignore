@@ -14,3 +14,10 @@ NIGHT_REPORT.md
 niah_*/
 results_quartet/
 .venv/
+
+# local working dirs (not for the public repo)
+_private/
+_logs/
+_scratch/
+pod-results/
+social/
