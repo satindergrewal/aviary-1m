@@ -115,10 +115,82 @@ Note this verification run used an already-quantized model, which is fine for pr
 mechanism collects. Production calibration should still be run against the full-precision
 weights.
 
+## D1: what a low-bit MTP block actually costs
+
+Collection working is not the same as the data being *useful*. Three arms, quantized from
+the same Qwen3.6-27B bf16 to the same Q4_K_M target, differing **only** in how `blk.64`
+was treated:
+
+| arm | `blk.64` | represents |
+|---|---|---|
+| 1 | `q8_0` | what publishers do today |
+| 2 | `q2_K`, imatrix data **excluded** | default behaviour without this patch |
+| 3 | `q2_K`, imatrix data **used** | what this patch enables |
+
+`q2_K` rather than `q4_K` on purpose: at `q4_K` the two low-bit arms would be
+indistinguishable and the comparison would prove nothing by construction.
+
+**Controls, all verified rather than assumed:**
+
+- Arms 2 and 3 use the *same* imatrix file, with `--exclude-weights blk.64` removing only
+  the MTP entries. The quantizer confirms it: `loaded 504 ... have 496`, i.e. exactly the
+  8 blk.64 matmuls dropped.
+- `blk.63` (an ordinary layer) is **byte-identical across all three arms** (11/11 tensors),
+  so the arms really do differ only in the MTP block.
+- Within `blk.64`, arms 2 and 3 differ in exactly the 8 quantized matmuls and match on all
+  7 norms, proving `--exclude-weights` changed the weights it was supposed to.
+- Arms 2 and 3 came out at exactly the same file size (16,686,850,624 bytes), as they must,
+  since only the values differ.
+
+**Results** (6 fixed prompts, 256 tokens, temp 0, single RTX PRO 6000):
+
+| arm | `blk.64` | size (bytes) | pooled acceptance | tok/s | output |
+|---|---|---|---|---|---|
+| baseline, no speculation | q8_0 | 16,998,720,064 | n/a | 69.6 | reference |
+| 1 | q8_0 | 16,998,720,064 | **0.6625** | 110.0 | identical to arms 2,3 |
+| 3 | q2_K + data | 16,686,850,624 | **0.5688** | 103.9 | identical to arms 1,2 |
+| 2 | q2_K, no data | 16,686,850,624 | **0.5698** | 103.6 | identical to arms 1,3 |
+
+### Three findings
+
+**1. Quantizing the MTP block does not change output at all.** All three arms produced
+byte-identical text on all six prompts, despite `blk.64` going from q8_0 to q2_K. This is
+the concrete answer to the "risk of unintended quality degradation" worry: because
+llama.cpp verifies drafts against the target, a degraded MTP block costs **throughput,
+not quality**. Speculation is a speed mechanism, and damaging it slows you down rather
+than making you wrong.
+
+A related detail worth stating precisely: spec-on output is *not* bit-identical to
+spec-off. Two of six prompts matched the no-spec baseline and four did not. That is a
+property of the speculative path itself (verification happens under different batch
+shapes, so near-tied logits can flip), and it is **identical across all three arms**,
+which is exactly why it does not confound the comparison.
+
+**2. The cost of the q8_0 → q2_K drop is real but modest:** 297 MiB saved on one MTP layer
+of a 27B, for a 14% relative fall in acceptance (0.6625 → 0.569) and 5.7% in throughput
+(110.0 → 103.7 tok/s). Speculation is still a large win over none: 103.7 vs 69.6 tok/s.
+
+**3. Negative result, stated plainly: the imatrix data made no measurable difference
+here.** Arm 3 (with data) scored 0.5688 and arm 2 (without) 0.5698. The difference is
+noise, and if anything it favours the arm with no data. So on this model, at this quant
+level, F2's data did not improve draft quality.
+
+That is worth knowing before anyone builds a pipeline assuming it will. What the patch
+definitely does is close a silent hole: those tensors previously got quantized with no
+importance data and no warning. What it does *not* do, on this evidence, is make a
+low-bit MTP block measurably better.
+
+### Limits of this measurement
+
+One model (27B dense), one quant level, six prompts, and an imatrix collected from an
+already-quantized copy rather than bf16 weights. A stronger calibration, a MoE at scale
+(where the MTP block is far larger), or a more aggressive quant could all move the third
+finding. The first two findings are about mechanism and are less likely to be
+model-specific, but they have still only been shown on one model.
+
 ## Honest scope
 
-This fixes *collection*. It does not by itself prove that a low-bit MTP layer is safe:
-that is the separate measurement (quantize the MTP block down with the new data and
-compare quality against the Q8 pin). The size argument should also be kept in
-proportion. Freeing one MTP layer from Q8 on a ~744B model is on the order of single-digit
-gigabytes. Real, and it stacks with other savings, but it is not a context-ceiling unlock.
+This fixes *collection*, and D1 above shows collection alone did not buy accuracy on this
+model. The size argument should be kept in proportion too: 297 MiB measured on a 27B, and
+extrapolation to a ~744B MoE is arithmetic, not measurement. Real, and it stacks with
+other savings, but not a context-ceiling unlock.
