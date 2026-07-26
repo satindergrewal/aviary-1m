@@ -1,0 +1,328 @@
+<title>The Quantization Usability Cliff</title>
+
+<style>
+  :root {
+    --ground:        #f7f8fa;
+    --panel:         #ffffff;
+    --ink:           #16191f;
+    --ink-soft:      #565e6b;
+    --ink-faint:     #8a929e;
+    --rule:          #dfe3e9;
+    --rule-strong:   #c3cad4;
+    --safe:          #2b6f68;
+    --safe-fill:     #2b6f6820;
+    --fail:          #a8482a;
+    --fail-fill:     #a8482a18;
+    --zone:          #a8482a0e;
+    --measure:       #3d5a8a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:      #101317;
+      --panel:       #171b21;
+      --ink:         #e8ecf1;
+      --ink-soft:    #a3acb9;
+      --ink-faint:   #6c7684;
+      --rule:        #262c35;
+      --rule-strong: #39414d;
+      --safe:        #5fb3a6;
+      --safe-fill:   #5fb3a625;
+      --fail:        #e08155;
+      --fail-fill:   #e0815520;
+      --zone:        #e0815510;
+      --measure:     #7ea3d8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#101317; --panel:#171b21; --ink:#e8ecf1; --ink-soft:#a3acb9;
+    --ink-faint:#6c7684; --rule:#262c35; --rule-strong:#39414d;
+    --safe:#5fb3a6; --safe-fill:#5fb3a625; --fail:#e08155; --fail-fill:#e0815520;
+    --zone:#e0815510; --measure:#7ea3d8;
+  }
+  :root[data-theme="light"] {
+    --ground:#f7f8fa; --panel:#ffffff; --ink:#16191f; --ink-soft:#565e6b;
+    --ink-faint:#8a929e; --rule:#dfe3e9; --rule-strong:#c3cad4;
+    --safe:#2b6f68; --safe-fill:#2b6f6820; --fail:#a8482a; --fail-fill:#a8482a18;
+    --zone:#a8482a0e; --measure:#3d5a8a;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: clamp(1.2rem, 4vw, 3.5rem) clamp(1rem, 5vw, 2rem);
+  }
+  .wrap { max-width: 61rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.5rem; }
+
+  .eyebrow {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: .72rem; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 .7rem;
+  }
+  h1 {
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-size: clamp(1.9rem, 4.6vw, 3rem); font-weight: 600; line-height: 1.12;
+    letter-spacing: -.02em; text-wrap: balance; margin: 0 0 .9rem;
+  }
+  .standfirst {
+    font-size: clamp(1rem, 2vw, 1.14rem); color: var(--ink-soft);
+    max-width: 40rem; margin: 0;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: ui-serif, Georgia, serif; font-size: 1.32rem; font-weight: 600;
+    letter-spacing: -.01em; margin: 0 0 .9rem; text-wrap: balance;
+  }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--rule);
+    border-radius: 3px; padding: clamp(1.1rem, 3vw, 1.9rem);
+  }
+
+  figure { margin: 0; }
+  .chart-scroll { overflow-x: auto; }
+  svg { display: block; width: 100%; min-width: 34rem; height: auto; }
+  figcaption {
+    font-size: .84rem; color: var(--ink-soft); margin-top: 1rem;
+    padding-top: .9rem; border-top: 1px solid var(--rule);
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1.4rem; margin-bottom: 1.2rem; }
+  .legend span {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .74rem; letter-spacing: .04em; color: var(--ink-soft);
+    display: inline-flex; align-items: center; gap: .5rem;
+  }
+  .swatch { width: 1.5rem; height: .55rem; border-radius: 1px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .table-scroll { overflow-x: auto; }
+  th {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .7rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); text-align: right; font-weight: 500;
+    padding: 0 .8rem .6rem; border-bottom: 1px solid var(--rule-strong);
+  }
+  th:first-child, td:first-child { text-align: left; }
+  td {
+    padding: .62rem .8rem; border-bottom: 1px solid var(--rule);
+    text-align: right; font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .87rem;
+  }
+  tr:last-child td { border-bottom: none; }
+  .below td { background: var(--zone); }
+  .verdict-ok   { color: var(--safe); font-weight: 600; }
+  .verdict-bad  { color: var(--fail); font-weight: 600; }
+
+  .cols { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); }
+  .cols p { margin: 0 0 .8rem; font-size: .93rem; color: var(--ink-soft); }
+  .cols p:last-child { margin-bottom: 0; }
+  .cols strong { color: var(--ink); }
+
+  .rule-box {
+    border-left: 2px solid var(--safe); padding: .1rem 0 .1rem 1.1rem;
+    display: flex; flex-direction: column; gap: .45rem;
+  }
+  .rule-box .big {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1.05rem; color: var(--ink); font-weight: 600;
+  }
+  .rule-box p { margin: 0; font-size: .9rem; color: var(--ink-soft); }
+
+  .retraction { border-left: 2px solid var(--fail); padding-left: 1.1rem; }
+  .retraction li { font-size: .9rem; color: var(--ink-soft); margin-bottom: .5rem; }
+  .retraction ul { margin: 0; padding-left: 1.1rem; }
+  .retraction s { color: var(--ink-faint); }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .84em; background: var(--fail-fill); padding: .1em .38em; border-radius: 2px;
+  }
+  footer {
+    font-size: .8rem; color: var(--ink-faint); border-top: 1px solid var(--rule);
+    padding-top: 1.1rem;
+  }
+  a { color: var(--measure); }
+  a:focus-visible, th:focus-visible { outline: 2px solid var(--measure); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Qwen3.6-27B · identical prompts · greedy decoding</p>
+    <h1>Perplexity tells you the damage. It doesn't tell you where the floor is.</h1>
+    <p class="standfirst">
+      Compressing this model from 8.50 to 2.90 bits per weight costs <strong>11% perplexity
+      and nothing else</strong>. The next step down costs 43% perplexity — and
+      <strong>half of all long generations collapse into repetition</strong>. The quality
+      curve is smooth. The usability curve is a cliff.
+    </p>
+  </header>
+
+  <figure class="panel">
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--fail)"></span>Loop rate — long generation</span>
+      <span><span class="swatch" style="background:var(--measure)"></span>Perplexity — wikitext</span>
+      <span><span class="swatch" style="background:var(--zone);border:1px solid var(--rule-strong)"></span>Below the knee</span>
+    </div>
+
+    <div class="chart-scroll">
+      <svg viewBox="0 0 800 360" role="img" aria-label="Loop rate and perplexity across five quantization levels. Loop rate is zero at 8.50, 4.80 and 2.90 bits per weight, then jumps to 50 percent at 1.75 and 62.5 percent at 1.60. Perplexity rises gradually from 5.86 to 6.52 then sharply to 9.31 and 14.32.">
+        <rect x="484" y="24" width="276" height="276" fill="var(--zone)"></rect>
+        <line x1="484" y1="24" x2="484" y2="300" stroke="var(--fail)" stroke-width="1" stroke-dasharray="3 4"></line>
+        <text x="494" y="40" fill="var(--fail)" font-family="ui-monospace, Menlo, monospace" font-size="11" letter-spacing="1">THE KNEE · between 2.90 and 1.75 bpw</text>
+
+        <g stroke="var(--rule)" stroke-width="1">
+          <line x1="70" y1="300" x2="760" y2="300"></line>
+          <line x1="70" y1="232" x2="760" y2="232"></line>
+          <line x1="70" y1="164" x2="760" y2="164"></line>
+          <line x1="70" y1="96"  x2="760" y2="96"></line>
+          <line x1="70" y1="24"  x2="760" y2="24"></line>
+        </g>
+
+        <g fill="var(--ink-faint)" font-family="ui-monospace, Menlo, monospace" font-size="11" text-anchor="end">
+          <text x="60" y="304">0%</text>
+          <text x="60" y="236">25%</text>
+          <text x="60" y="168">50%</text>
+          <text x="60" y="100">75%</text>
+          <text x="60" y="28">100%</text>
+        </g>
+        <g fill="var(--measure)" font-family="ui-monospace, Menlo, monospace" font-size="11" text-anchor="start">
+          <text x="770" y="304">0</text>
+          <text x="770" y="168">8</text>
+          <text x="770" y="28">16</text>
+        </g>
+
+        <g fill="var(--fail)">
+          <rect x="521" y="165" width="64" height="135" rx="1"></rect>
+          <rect x="659" y="131" width="64" height="169" rx="1"></rect>
+        </g>
+        <g fill="var(--safe)" opacity="0.9">
+          <rect x="107" y="296" width="64" height="4" rx="1"></rect>
+          <rect x="245" y="296" width="64" height="4" rx="1"></rect>
+          <rect x="383" y="296" width="64" height="4" rx="1"></rect>
+        </g>
+
+        <polyline points="139,201 277,199 415,190 553,143 691,58"
+                  fill="none" stroke="var(--measure)" stroke-width="2"
+                  stroke-linejoin="round" stroke-linecap="round"></polyline>
+        <g fill="var(--panel)" stroke="var(--measure)" stroke-width="2">
+          <circle cx="139" cy="201" r="4"></circle>
+          <circle cx="277" cy="199" r="4"></circle>
+          <circle cx="415" cy="190" r="4"></circle>
+          <circle cx="553" cy="143" r="4"></circle>
+          <circle cx="691" cy="58"  r="4"></circle>
+        </g>
+
+        <g font-family="ui-monospace, Menlo, monospace" font-size="11" fill="var(--measure)" text-anchor="middle">
+          <text x="139" y="192">5.86</text>
+          <text x="277" y="190">6.01</text>
+          <text x="415" y="181">6.52</text>
+          <text x="553" y="134">9.31</text>
+          <text x="691" y="49">14.32</text>
+        </g>
+        <g font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="600" fill="var(--fail)" text-anchor="middle">
+          <text x="553" y="158">50%</text>
+          <text x="691" y="124">62%</text>
+        </g>
+        <g font-family="ui-monospace, Menlo, monospace" font-size="11" fill="var(--safe)" text-anchor="middle">
+          <text x="139" y="288">0%</text>
+          <text x="277" y="288">0%</text>
+          <text x="415" y="288">0%</text>
+        </g>
+
+        <g font-family="ui-monospace, Menlo, monospace" font-size="12" fill="var(--ink)" text-anchor="middle">
+          <text x="139" y="325">8.50</text>
+          <text x="277" y="325">4.80</text>
+          <text x="415" y="325">2.90</text>
+          <text x="553" y="325">1.75</text>
+          <text x="691" y="325">1.60</text>
+        </g>
+        <g font-family="-apple-system, sans-serif" font-size="11" fill="var(--ink-faint)" text-anchor="middle">
+          <text x="139" y="342">Q8_0</text>
+          <text x="277" y="342">Q4_K_M</text>
+          <text x="415" y="342">Q2_K_imat</text>
+          <text x="553" y="342">IQ1_KT</text>
+          <text x="691" y="342">IQ1_S</text>
+        </g>
+        <text x="415" y="358" font-family="ui-monospace, Menlo, monospace" font-size="10"
+              fill="var(--ink-faint)" text-anchor="middle" letter-spacing="1">BITS PER WEIGHT →  MORE COMPRESSION</text>
+      </svg>
+    </div>
+
+    <figcaption>
+      Eight prompts demanding long exhaustive output (enumerations, essays, literature review),
+      1500 tokens each, temperature 0. Greedy decoding is deterministic, so one run per cell
+      is the complete answer — there is no sampling noise to average away. A generation counts
+      as looped when its tail contains a repeating cycle of any period from 1 to 40.
+    </figcaption>
+  </figure>
+
+  <section class="panel">
+    <h2>The measurements</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Quantization</th><th>bpw</th><th>Size</th><th>Perplexity</th><th>Loop rate</th><th>Long generation</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Q8_0</td><td>8.50</td><td>27 GB</td><td>5.86</td><td>0 / 8</td><td class="verdict-ok">clean</td></tr>
+          <tr><td>Q4_K_M</td><td>4.80</td><td>16 GB</td><td>6.01</td><td>0 / 8</td><td class="verdict-ok">clean</td></tr>
+          <tr><td>Q2_K_imat</td><td>2.90</td><td>10 GB</td><td>6.52</td><td>0 / 8</td><td class="verdict-ok">clean</td></tr>
+          <tr class="below"><td>IQ1_KT</td><td>1.75</td><td>6.6 GB</td><td>9.31</td><td>4 / 8</td><td class="verdict-bad">loops</td></tr>
+          <tr class="below"><td>IQ1_S</td><td>1.60</td><td>7.1 GB</td><td>14.32</td><td>5 / 8</td><td class="verdict-bad">loops</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div class="panel">
+      <h2>What causes it</h2>
+      <p><strong>Weight bit-width — and nothing else we tested.</strong> Holding weights fixed
+      and varying KV cache precision across f16, q8_0 and q4_0 produced an
+      <strong>identical 4/8 loop rate</strong>. KV precision changes which prompts loop,
+      never how often.</p>
+      <p>The mechanism is attention collapse: heads lock onto a narrow band of recent tokens,
+      the repetition reinforces itself, and the model cannot escape. It happens at full
+      precision too — quantization lowers the threshold for falling in.</p>
+    </div>
+    <div class="panel">
+      <h2>What fixes it</h2>
+      <div class="rule-box">
+        <span class="big">Stay at 2.90 bpw or above</span>
+        <p>For a 27B that is 10 GB and loop-free across every prompt tested.</p>
+      </div>
+      <p style="margin-top:1.1rem"><strong>If you must go lower:</strong> the DRY sampler
+      repaired both reproduced loops (diversity 0.18 → 0.57). Note that ordinary repetition
+      penalty <em>causes</em> loops rather than preventing them — it suppresses common
+      necessary words and pushes generation off its natural path.</p>
+      <p>A quantized V-cache also requires <code>-fa on</code>, or the context will not
+      initialize at all.</p>
+    </div>
+  </section>
+
+  <section class="panel retraction">
+    <h2>Corrections to earlier claims in this investigation</h2>
+    <ul>
+      <li><s>Keys tolerate 4-bit but values don't, so the fix is <code>-ctv q8_0</code>.</s>
+        The asymmetry is real for accuracy in the literature, but it does not govern looping:
+        q8 looped exactly as often as q4.</li>
+      <li><s>Quantized KV cuts output diversity at depth.</s> That matrix used one sample per
+        cell at temperature 0.7, and q4/q4 scored <em>better</em> than q8/q8 — impossible as a
+        real effect, therefore noise.</li>
+      <li><s>Perplexity does not capture looping.</s> Too strong. Perplexity does rise at the
+        cliff (6.52 → 9.31); what it fails to provide is a <em>threshold</em>. A 43% increase
+        reads as tolerable and is in fact catastrophic.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Measured on Qwen3.6-27B, RTX PRO 6000, llama.cpp. Perplexity: wikitext-2-raw, 40 chunks,
+    identical settings across all five rungs. Model ladder courtesy of the DSpark session.
+  </footer>
+
+</div>
