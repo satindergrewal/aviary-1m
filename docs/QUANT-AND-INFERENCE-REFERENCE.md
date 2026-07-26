@@ -547,3 +547,45 @@ Files touched (relevant to porting into our KT tree): `ggml/src/ggml-cuda.cu`,
 
 *Maintained during the KT-quant work. Numbers here are measured on this hardware unless
 attributed to a paper.*
+
+---
+
+## Part 9 — Session-final measured verdicts (2026-07-26)
+
+**The knee, complete ladder (27B, file-level bpw, greedy, f16 KV):**
+
+| rung | file bpw | loop rate |
+|---|---|---|
+| IQ1_KT | 1.99 | 4/8 |
+| ffn_down to IQ2 | 2.18 | 2/8 |
+| ffn_down+gate to IQ2 | 2.24 | 4/8 |
+| all-FFN to IQ2 | 2.30 | 0/8 (knee) |
+| uniform IQ2_KT | 2.48 | 0/8 |
+
+0/8 is first reached at 2.30 file-level and holds above. Sub-knee ordering is
+trajectory-chaotic (a strict-subset rung looped less), so per-rung rates below the knee
+carry roughly +/- 2-in-8 noise. `ffn_up` is load-bearing: raising only down+gate does not
+clear looping.
+
+**The validated production fix (measured on the real GLM 5.2 IQ1_KT):** the story-prompt
+holdout that survived standard DRY falls to 0 loops with `dry_allowed_length 1` (one
+parameter down from the default 2), and a full 8-prompt regression stays clean. Recommended:
+
+```
+--samplers "top_k;top_p;min_p;temperature;dry;typ_p;xtc"
+--temp 0.7 --dry-multiplier 0.8 --dry-base 1.75 --dry-allowed-length 1 -fa on
+```
+
+**Mixed KV cache types are a large-context trap.** `-ctk q4_0 -ctv q8_0` measured within
+~10% of matched types at 8K context, but at ~100K context the same config collapses
+(prefill throughput decayed to the point of a 3600s timeout) while `-ctk q4_0 -ctv q4_0`
+completed the identical 98.9K-token prefill at 1428 t/s. Never mix K and V cache types for
+long-context serving on this build; match them.
+
+**KV-cache Hadamard (attn-rot) benefit is small on KT weights:** +0.28% perplexity at
+q4/q4 KV (9.0329 on vs 9.0579 off). Real but not worth fused-kernel engineering unless the
+KV drops below q4.
+
+**Format brittleness is a low-bit-only hazard:** a one-newline prompt-separator change
+flipped a sub-2.5 bpw model between generating and immediate EOS at 32K context, but a
+Q8_0 model was identical across all separators and depths. Above the knee it vanishes.
