@@ -120,6 +120,11 @@ def generate(host, port, prompt, n_predict, sampler, timeout, temp=None):
         "top_k": 40,
         "top_p": 0.95,
         "min_p": 0.05,
+        # CRITICAL for depth testing: without this, llama.cpp reuses the previous
+        # prompt's KV, so a shared prefill ACCUMULATES across prompts and each one runs
+        # at a deeper context than its label. That produced fake EMPTY rows near the ctx
+        # ceiling and invalidated a whole depth run. Each prompt must start from its own depth.
+        "cache_prompt": False,
     }
     if sampler == "dry":
         body.update(DRY_SAMPLER)
@@ -218,6 +223,11 @@ def main():
     pct = (100.0 * looped / valid) if valid else float("nan")
     print("# LOOP RATE: %s (%.0f%%)  [prompts scored: %d of %d]"
           % (rate, pct, valid, len(PROMPTS)))
+    # Generation success is a FIRST-CLASS metric, not a footnote: a model can be 0-loops
+    # simply because it produced nothing. At depth we measured exactly that (75%->25%
+    # success under raw completion). Never publish a loop rate without this line.
+    print("# GENERATION SUCCESS: %d/%d (%.0f%%) - prompts that produced scoreable output"
+          % (valid, len(PROMPTS), 100.0 * valid / len(PROMPTS)))
 
     if args.tsv:
         with open(args.tsv, "a") as fh:
