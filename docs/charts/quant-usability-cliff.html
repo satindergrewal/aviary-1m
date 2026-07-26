@@ -254,7 +254,7 @@
     </div>
 
     <figcaption>
-      Eight prompts demanding long exhaustive output (enumerations, essays, literature review),
+      ERRATA (2026-07-26): bpw values are now FILE-LEVEL (file bytes ×8 ÷ parameters) for every row — the original table mixed nominal per-tensor bpw for IQ types with file-derived values for Q types on one axis. Ordering and conclusions are unchanged; the knee restates as: clean at ≥2.30 file-level (all-FFN IQ2_KT), looping at ≤2.24. Eight prompts demanding long exhaustive output (enumerations, essays, literature review),
       1500 tokens each, temperature 0. Greedy decoding is deterministic, so one run per cell
       is the complete answer — there is no sampling noise to average away. A generation counts
       as looped when its tail contains a repeating cycle of any period from 1 to 40.
@@ -269,11 +269,11 @@
           <tr><th>Quantization</th><th>bpw</th><th>Size</th><th>Perplexity</th><th>Loop rate</th><th>Long generation</th></tr>
         </thead>
         <tbody>
-          <tr><td>Q8_0</td><td>8.50</td><td>27 GB</td><td>5.86</td><td>0 / 8</td><td class="verdict-ok">clean</td></tr>
-          <tr><td>Q4_K_M</td><td>4.80</td><td>16 GB</td><td>6.01</td><td>0 / 8</td><td class="verdict-ok">clean</td></tr>
-          <tr><td>Q2_K_imat</td><td>2.90</td><td>10 GB</td><td>6.52</td><td>0 / 8</td><td class="verdict-ok">clean</td></tr>
-          <tr class="below"><td>IQ1_KT</td><td>1.75</td><td>6.6 GB</td><td>9.31</td><td>4 / 8</td><td class="verdict-bad">loops</td></tr>
-          <tr class="below"><td>IQ1_S</td><td>1.60</td><td>7.1 GB</td><td>14.32</td><td>5 / 8</td><td class="verdict-bad">loops</td></tr>
+          <tr><td>Q8_0</td><td>8.03</td><td>27 GB</td><td>5.86</td><td>0 / 8</td><td class="verdict-ok">clean</td></tr>
+          <tr><td>Q4_K_M</td><td>4.76</td><td>16 GB</td><td>6.01</td><td>0 / 8</td><td class="verdict-ok">clean</td></tr>
+          <tr><td>Q2_K_imat</td><td>2.97</td><td>10 GB</td><td>6.52</td><td>0 / 8</td><td class="verdict-ok">clean</td></tr>
+          <tr class="below"><td>IQ1_KT</td><td>1.99</td><td>6.6 GB</td><td>9.31</td><td>4 / 8</td><td class="verdict-bad">loops</td></tr>
+          <tr class="below"><td>IQ1_S</td><td>2.11</td><td>7.1 GB</td><td>14.32</td><td>5 / 8</td><td class="verdict-bad">loops</td></tr>
         </tbody>
       </table>
     </div>
