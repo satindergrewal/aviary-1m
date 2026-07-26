@@ -72,18 +72,19 @@ def chat(endpoint: str, messages, max_tokens: int, timeout: int = 600):
     content = msg.get("content") or ""
     return think, content
 
-def clean(think: str, content: str, keep_think: bool) -> str | None:
-    """Loop/empty filter per spec ruling: drop any sample whose think OR content loops."""
+def clean(think: str, content: str, keep_think: bool):
+    """Loop/empty filter per spec ruling. Returns (text, reason): text None when dropped,
+    reason 'loop' | 'short' | None."""
     for part in (think, content):
         if part:
             verdict, _ = detect_loop(part)
             if verdict == "LOOP":
-                return None
+                return None, "loop"
     if len(content.split()) < 30:
-        return None
+        return None, "short"
     if keep_think and think:
-        return f"<think>{think}</think>\n{content}"
-    return content
+        return f"<think>{think}</think>\n{content}", None
+    return content, None
 
 def main():
     ap = argparse.ArgumentParser()
@@ -97,7 +98,7 @@ def main():
     rng = random.Random(args.seed)
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    stats = {"zh": {"kept": 0, "dropped_loop": 0}, "chat": {"kept": 0, "dropped_loop": 0}}
+    stats = {"zh": {"kept": 0, "dropped_loop": 0, "dropped_short": 0}, "chat": {"kept": 0, "dropped_loop": 0, "dropped_short": 0}}
 
     # Chinese share: single-turn technical/general prose, content only (prose corpus)
     zh_path = out / "chinese.txt"
@@ -111,11 +112,16 @@ def main():
             except Exception as e:
                 print(f"zh request error: {e}", flush=True)
                 continue
-            text = clean(think, content, keep_think=False)
+            text, reason = clean(think, content, keep_think=False)
             if text is None:
-                stats["zh"]["dropped_loop"] += 1
+                key = "dropped_" + reason
+                stats["zh"][key] += 1
+                print(f"zh DROP {reason} #{stats['zh'][key]} (think={len(think)} content={len(content.split())}w)", flush=True)
+                with (out / "dropped_zh.txt").open("a", encoding="utf-8") as df:
+                    df.write(f"\n\n==== DROP {reason} {stats['zh'][key]} ====\nTHINK:\n{think}\nCONTENT:\n{content}\n")
                 continue
             f.write(f"\n\n==== {t} ====\n\n" + text)
+            f.flush()
             total += len(text)
             stats["zh"]["kept"] += 1
             if stats["zh"]["kept"] % 20 == 0:
@@ -137,9 +143,13 @@ def main():
                     print(f"chat request error: {e}", flush=True)
                     ok = False
                     break
-                text = clean(think, content, keep_think=True)
+                text, reason = clean(think, content, keep_think=True)
                 if text is None:
-                    stats["chat"]["dropped_loop"] += 1
+                    key = "dropped_" + reason
+                    stats["chat"][key] += 1
+                    print(f"chat DROP {reason} #{stats['chat'][key]} (think={len(think)} content={len(content.split())}w)", flush=True)
+                    with (out / "dropped_chat.txt").open("a", encoding="utf-8") as df:
+                        df.write(f"\n\n==== DROP {reason} {stats['chat'][key]} ====\nTHINK:\n{think}\nCONTENT:\n{content}\n")
                     ok = False
                     break
                 sample_parts.append(f"ASSISTANT: {text}")
@@ -151,6 +161,7 @@ def main():
                 continue
             sample = "\n\n".join(sample_parts)
             f.write("\n\n==== CHAT ====\n\n" + sample)
+            f.flush()
             total += len(sample)
             stats["chat"]["kept"] += 1
             if stats["chat"]["kept"] % 20 == 0:
