@@ -38,6 +38,32 @@ Two hazards found on the way, both worth remembering:
 
 ---
 
+## The hardware ceiling (measured 2026-07-26, 2x96GB RTX PRO 6000)
+
+Running GLM-5.2-smol-IQ1_KT (169 GB, 1.99 bpw) across both cards, the weights leave only
+about 11 GB per card, and the KV cache plus the attention compute buffer have to share it.
+Measured, end to end (a config counts as usable only when a full generation completes, not
+when the model merely loads):
+
+| context | result |
+|---|---|
+| 128K | will not allocate (compute buffer ~22.8 GB, no room) |
+| 64K, q4 KV, `-fa on` | loads, then crashes on the first inference (0.7 GB free, forward pass OOMs) |
+| 32K, q4 KV, `-fa on` | loads, small requests work, KV cache fills at ~18K tokens |
+| **~16K** | **genuinely usable** (loads and serves inference with headroom) |
+
+**So the practical serving ceiling is roughly 16K context, not 128K.** `q4_0` KV (not q8,
+and not a trellis/KT KV type, which does not exist and would be the wrong tool since trellis
+coding is path-dependent while a KV cache needs cheap random access) is the lever that makes
+even 16K comfortable. Flash attention (`-fa on`) is mandatory, both to bound the compute
+buffer and because a quantized V cache requires it.
+
+If you need more than ~16K of context on this hardware, the only real levers are a smaller
+model (the requant path in Option 2, which does not fit either) or CPU-offloading some
+experts to free VRAM for KV.
+
+---
+
 ## OPTION 1 — RECOMMENDED: keep the current model, fix the sampler
 
 **Zero requantization. Zero VRAM cost. Validated on the production GLM itself.**
