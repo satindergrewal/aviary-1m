@@ -112,10 +112,8 @@ def detect_loop(text, min_words=20, max_period=40, min_reps=3, ttr_floor=0.25):
     return ("ok", "ttr=%.2f" % ttr)
 
 
-def generate(host, port, prompt, n_predict, sampler, timeout, temp=None):
+def generate(host, port, prompt, n_predict, sampler, timeout, temp=None, chat=False):
     body = {
-        "prompt": prompt,
-        "n_predict": n_predict,
         "temperature": 0.0,          # greedy => deterministic (see --temp)
         "top_k": 40,
         "top_p": 0.95,
@@ -126,6 +124,19 @@ def generate(host, port, prompt, n_predict, sampler, timeout, temp=None):
         # ceiling and invalidated a whole depth run. Each prompt must start from its own depth.
         "cache_prompt": False,
     }
+    if chat:
+        # A reasoning model served with --jinja puts its chain of thought in a SEPARATE
+        # field. Reading only message.content then reports "generated nothing" at every
+        # depth, including depth 0, which is impossible and is a harness bug, not a model
+        # result. Both fields are concatenated below so a loop inside <think> is still seen.
+        body["messages"] = [{"role": "user", "content": prompt}]
+        body["max_tokens"] = n_predict
+        path = "/v1/chat/completions"
+    else:
+        body["prompt"] = prompt
+        body["n_predict"] = n_predict
+        path = "/completion"
+
     if sampler == "dry":
         body.update(DRY_SAMPLER)
         body["temperature"] = 0.7    # DRY needs a live distribution to reshape
@@ -133,11 +144,20 @@ def generate(host, port, prompt, n_predict, sampler, timeout, temp=None):
         body["temperature"] = temp   # explicit override wins, for matched pairs
 
     req = urllib.request.Request(
-        "http://%s:%d/completion" % (host, port),
+        "http://%s:%d%s" % (host, port, path),
         data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"},
     )
     payload = json.loads(urllib.request.urlopen(req, timeout=timeout).read())
+
+    if chat:
+        msg = (payload.get("choices") or [{}])[0].get("message", {}) or {}
+        reasoning = msg.get("reasoning_content") or msg.get("reasoning") or ""
+        visible = msg.get("content") or ""
+        # order matters only for readability; detection runs over the whole tail
+        text = (reasoning + "\n" + visible) if reasoning else visible
+        return text, payload.get("timings", {})
+
     return payload.get("content", ""), payload.get("timings", {})
 
 
@@ -161,6 +181,13 @@ def main():
                          "at 100K. Requires --prefill-file.")
     ap.add_argument("--prefill-file", default="/mnt/nvme0/llama.cpp-kt/wikitext-2-raw/wiki.train.raw",
                     help="source of prefill prose (real text, not word salad)")
+    ap.add_argument("--chat", action="store_true",
+                    help="use /v1/chat/completions instead of raw /completion, and read BOTH "
+                         "message.reasoning_content and message.content. This is the path that "
+                         "matches real --jinja usage. Required for reasoning models: reading only "
+                         "message.content reports zero generations at EVERY depth (including "
+                         "depth 0, which is impossible) because the output sits in the reasoning "
+                         "field, and it also hides loops that occur entirely inside <think>.")
     ap.add_argument("--timeout", type=int, default=5400)
     ap.add_argument("--tsv", help="append per-prompt rows to this TSV file")
     ap.add_argument("--json", dest="json_out", help="write a machine-readable summary here")
@@ -196,7 +223,7 @@ def main():
         try:
             text, timings = generate(args.host, args.port, prefix + prompt,
                                      args.n_predict, args.sampler, args.timeout,
-                                     args.temp)
+                                     args.temp, args.chat)
             verdict, evidence = detect_loop(text)
             n_pred = timings.get("predicted_n", 0)
             if verdict != "EMPTY":
