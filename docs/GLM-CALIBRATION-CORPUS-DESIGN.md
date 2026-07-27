@@ -51,7 +51,7 @@ English-only `wikitext-2-raw` TEST split**, for a **bilingual ~744B MoE**
 
 Three separate defects, worth separating because they need different fixes:
 
-**1. Wrong split — this one is a methodology error, not just thin data.**
+**1. Wrong split. This is a methodology error, not just thin data.**
 The calibration data came from the **test** split. If you then report perplexity on
 `wikitext-2-raw` test, the quantizer has been tuned on the evaluation text. The PPL
 number is optimistically biased and cannot be compared against quants calibrated on
@@ -81,11 +81,11 @@ served conditions rather than to maximise size.
 
 | share | content | why |
 |---|---|---|
-| 30% | **Code** — multiple languages, real repositories, including diffs and tests | primary use is agentic coding |
+| 30% | **Code**: multiple languages, real repositories, including diffs and tests | primary use is agentic coding |
 | 25% | **Chinese technical + general prose** | the model is bilingual; currently 0% represented |
-| 20% | **English technical prose** — documentation, specs, papers | the register he actually works in |
+| 20% | **English technical prose**: documentation, specs, papers | the register he actually works in |
 | 15% | **Multi-turn chat, chat-template formatted, with reasoning traces** | see the template note below |
-| 10% | **Long documents** — 32K+ contiguous tokens | long-context activation patterns |
+| 10% | **Long documents**: 32K+ contiguous tokens | long-context activation patterns |
 
 ### Three requirements that matter more than the exact percentages
 
@@ -100,7 +100,7 @@ template used at serve time, including the special tokens.
 
 **Reasoning traces included.** GLM 5.2 reasons by default. If production output contains
 `<think>` blocks and calibration data contains none, the activation statistics for
-reasoning mode are unrepresented — and reasoning is exactly where long generation, and
+reasoning mode are unrepresented, and reasoning is exactly where long generation, and
 therefore looping, happens.
 
 ---
@@ -124,14 +124,14 @@ the loop cliff on its own. Do not let this corpus work be sold as the loop fix.
 The corpus is only justified if it measurably beats the shipped one. Same model, same
 bit-width, only the imatrix differs:
 
-1. **Perplexity** on a held-out split, plus a **Chinese** eval set — the current
+1. **Perplexity** on a held-out split, plus a **Chinese** eval set. The current
    corpus predicts nothing about Chinese, so that is where the largest gain should
    appear if the language-mix argument is right.
-2. **Loop rate** via `tools/loop_rate.py` — expected roughly unchanged; measured so
+2. **Loop rate** via `tools/loop_rate.py`, expected roughly unchanged; measured so
    the claim is honest rather than assumed.
-3. **Draft acceptance** (DSpark lane) — this is the metric that is currently blocked,
+3. **Draft acceptance** (DSpark lane). This is the metric that is currently blocked,
    and the reason this design is on the critical path.
-4. **Retrieval at depth** — long-document share should show up here if anywhere.
+4. **Retrieval at depth**: long-document share should show up here if anywhere.
 
 A negative result is a real result: if a 50 MB properly-mixed corpus does not beat
 1.29 MB of English wikitext, that is worth knowing before anyone spends GPU hours
@@ -143,7 +143,7 @@ requantizing a 169 GB model.
 
 **1. Chinese share: 15%, not 25%.** Every prompt in this project is English, so 25%
 over-serves a use case that does not exist. It is not dropped to zero because in a MoE
-the bilingual capability is not cleanly separable — shared attention and router weights
+the bilingual capability is not cleanly separable, since shared attention and router weights
 serve both languages, and starving them of evidence damages English too. 15% buys
 insurance against that without spending a quarter of the corpus on an unused capability.
 The 10% freed goes to code.
@@ -163,14 +163,14 @@ parameters, so raising the small remainder costs little: `0.95×1.75 + 0.05×6 �
 governs loop rate.
 
 **4. Sourcing: self-generated plus permissive only.** Three sources, no licensing risk:
-- **His own repositories** for the code share — he owns them, and they are the exact
+- **His own repositories** for the code share, since he owns them, and they are the exact
   distribution he serves against.
 - **`wikitext` TRAIN split** and open specifications/documentation for English prose
-  (train split only — the shipped imatrix's use of the test split is the defect this
+  (train split only; the shipped imatrix's use of the test split is the defect this
   design exists to fix).
 - **Model-self-generated** for the chat-formatted and reasoning-trace shares: run GLM
   under production serve conditions (`--jinja`, reasoning enabled) and capture its own
-  output. This is not a convenience choice — it is the approach with the strongest
+  output. This is not a convenience choice, it is the approach with the strongest
   evidence behind it. The DSpark lane measured own-regenerated calibration lifting draft
   acceptance from **0.149 to 0.25-0.32**, and an imatrix-IQ1_S at 1.6 bpw holding
   **0.293**, matching Q8. Self-calibration beat generic calibration by a wide margin on
