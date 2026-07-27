@@ -53,16 +53,52 @@ GLM 5.2 at 744 B matches a 27 B dense model at the same bit-width *despite* its
 quantization units being 7x smaller. That is not "scale bought nothing". Scale
 bought exactly enough to offset a 7x smaller quantization unit.
 
+## Confirmed at n = 24
+
+Re-run on prompt set v2, same models, same bit-width, same build.
+
+| comparison | n = 8 | **n = 24** | Fisher exact |
+|---|---|---|---|
+| **scale**: Qwen3-4B vs Qwen3.6-27B, both 1.75 bpw | 7/7 vs 4/8 | **21/21 (100%) vs 10/22 (45%)** | **p = 6.1e-05** |
+| **knee**: 27B IQ1_KT vs IQ2_KT | 4/8 vs 0/8 | 10/22 (45%) vs 2/22 (9%) | p = 0.016 |
+
+Both were p = 0.077 at n = 8. Both are now significant, and the point estimates
+barely moved:
+
+| cell | v1 (n=8) | v2 (n=24) |
+|------|----------|-----------|
+| 4B IQ1_KT   | 7/7 = 100% | 21/21 = 100% |
+| 27B IQ1_KT  | 4/8 = 50%  | 10/22 = 45%  |
+| 27B IQ2_KT  | 0/8 = 0%   | 2/22 = 9%    |
+
+So v1 was underpowered rather than biased. **Scale buys bit-width tolerance,
+p < 0.0001.**
+
+## Second finding: looping and non-termination are separable
+
+The bounded prompts in v2 make non-termination a real measurement, and it does
+not follow the loop rate at all:
+
+| model | bpw | loop rate | non-termination (bounded) |
+|-------|-----|-----------|---------------------------|
+| Qwen3.6-27B IQ1_KT | 1.75  | 45% | 2/6 = 33% |
+| Qwen3.6-27B IQ2_KT | 2.145 | 9%  | 2/6 = 33% |
+
+Climbing a bit-width rung cuts looping fivefold (p = 0.016) and moves
+non-termination not at all. They are different defects with different remedies.
+
+That is directly relevant to the production GLM: raising bit-width will not fix
+the behaviour where the model completes and verifies its task and then runs to
+65,535 tokens anyway, and DRY did not fix it either, having been active
+throughout that run. A runtime stop-guard is the remaining lever.
+
 ## What is still not proven
 
-- **n = 8 prompts.** Fisher exact two-tailed on 7/7 vs 4/8 gives **p = 0.077**.
-  Suggestive, short of conventional significance. It replicates at two depths,
-  which helps, but one prompt set of eight is thin.
-- **Family is confounded with size.** The three models span `qwen3`, `qwen35`
-  and `glm-dsa`. Even the 4B to 27B step crosses a model generation.
-- The fix for both is a larger prompt set. At 16 prompts, 14/14 against 8/16
-  would give p = 0.006. That is the same change the non-termination metric needs
-  (see below), so it is one piece of work.
+- **Family is confounded with size.** The models span `qwen3`, `qwen35` and
+  `glm-dsa`. Even the 4B to 27B step crosses a model generation. A same-family,
+  same-generation ladder would close this; we do not have one on hand.
+- The MoE arm of the scale result is still the single GLM datapoint at 4/8.
+  Kimi-K3 would be the second, and would test the extrapolation below.
 
 ## Consequence for Kimi-K3
 
