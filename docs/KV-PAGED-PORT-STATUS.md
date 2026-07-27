@@ -76,15 +76,18 @@ Identical, down to the token IDs. Two conclusions:
    across 294 commits of upstream drift is the strongest available evidence that
    the 17 conflict resolutions were correct.
 
-Two things worth weighing when it does:
+Two things to weigh before deciding how much the failure matters:
 
 - This ran the **CPU reference** paged-attention path, which the code itself
   labels "for correctness validation only and is not optimized". The author's
-  benchmarks were CUDA, so the CPU path may simply be less exercised.
+  benchmarks were CUDA, so the CPU path may simply be less exercised. Running the
+  same test on CUDA is the next step and would separate "CPU reference is sloppy"
+  from "the paged read path is wrong".
 - The test's own comment concedes that "minor floating-point accumulation
   differences between the paged and non-paged paths can flip individual tokens
   after a handful of decode steps". Failing at token 1 is earlier than that
-  excuse comfortably covers.
+  excuse comfortably covers, so it should not be waved away as FP noise without
+  the CUDA result.
 
 ## Constraints inherited from the prototype
 
