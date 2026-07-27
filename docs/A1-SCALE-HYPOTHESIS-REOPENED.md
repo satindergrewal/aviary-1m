@@ -1,4 +1,49 @@
-# A1 reopened: scale does buy bit-width tolerance
+# A1: three revisions, ending in a controlled null
+
+> ## ⚠️⚠️ RETRACTION 2026-07-28, same night: the conclusion below is NOT supported
+>
+> This document concluded "scale buys bit-width tolerance, p = 6.1e-05". **That
+> claim is withdrawn.** It rests on comparing two models at 1.75 bpw without ever
+> measuring what either model scores at essentially-lossless precision. When that
+> control was run, the effect disappeared.
+>
+> | | Q8_0 floor (lossless) | IQ1_KT (1.75 bpw) | damage attributable to quantization |
+> |---|---|---|---|
+> | Qwen3-4B | **42%** (10/24) | 100% (21/21) | +58 points |
+> | Qwen3.6-27B | **0%** (0/20) | 45% (10/22) | +45 points |
+>
+> **Interaction test (is the small model damaged more?): difference of differences
+> 12.9 points, z = 0.88, p = 0.38. Not significant.** There is no evidence that
+> scale changes how much quantization hurts.
+>
+> What the p = 6.1e-05 actually measured was the *absolute* loop rate at 1.75 bpw.
+> That number is real, but the 27B also beats the 4B at **lossless** precision
+> (0/20 vs 10/24, p = 0.0009), so the gap is mostly the 27B being a better model,
+> not it tolerating low bit-width better.
+>
+> **Two things that survive and are worth keeping:**
+>
+> 1. **The 27B's floor is 0%.** It does not loop at all when lossless. So the
+>    entire 45% it shows at IQ1_KT *is* quantization damage, cleanly attributed.
+>    That is a useful, well-controlled number.
+> 2. **The 4B is unusable as a quantization testbed on prompt set v2.** A 42%
+>    floor means most of its signal is capability, not bit-width. Any future
+>    ladder should use models whose lossless floor is near zero, or match floors
+>    across arms.
+>
+> **The design lesson, now a rule:** run the lossless rung as *cell zero* of any
+> bpw ladder, before any comparison. Two numbers mean nothing until you know what
+> they are numbers of. This is the second time in one night the same class of
+> error survived into a published claim: first "what else differs between the
+> arms" (dense vs MoE), then "what does each arm score with no treatment".
+>
+> **Note on the original A1.** Its conclusion, that scale buys no tolerance, is
+> closer to the controlled result than this document's overturn was. It reached
+> that for the wrong reason (a dense-vs-MoE confound), but it landed nearer the
+> truth. The honest net position after three revisions is **no evidence either
+> way, from a design that could finally detect an effect if one existed.**
+
+## (superseded) A1 reopened: scale does buy bit-width tolerance
 
 Run 2026-07-28. Satinder challenged the A1 conclusion ("scale bought nothing")
 on the grounds that it rested on a single test. He was right, and re-testing
