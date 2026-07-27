@@ -1,0 +1,8 @@
+GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000	list	greedy	15038	800	LOOP	period=2 x62 "- Apatch"
+GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000	essay	greedy	15040	800	ok	ttr=0.79
+GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000	compare	greedy	15038	800	ok	ttr=0.78
+GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000	enum	greedy	15034	800	ok	ttr=0.85
+GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000	story	greedy	15032	800	ok	ttr=0.72
+GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000	faq	greedy	15027	800	ok	ttr=0.70
+GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000	doc	greedy	15032	800	ok	ttr=0.77
+GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000	review	greedy	15032	800	ok	ttr=0.70

@@ -1,0 +1,76 @@
+{
+  "label": "GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000",
+  "prompt_set_version": "v1",
+  "sampler": "greedy",
+  "n_predict": 800,
+  "looped": 1,
+  "scored": 8,
+  "total_prompts": 8,
+  "loop_rate": "1/8",
+  "rows": [
+    {
+      "label": "GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000",
+      "prompt": "list",
+      "sampler": "greedy",
+      "n_pred": "15038",
+      "verdict": "800",
+      "evidence": "LOOP"
+    },
+    {
+      "label": "GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000",
+      "prompt": "essay",
+      "sampler": "greedy",
+      "n_pred": "15040",
+      "verdict": "800",
+      "evidence": "ok"
+    },
+    {
+      "label": "GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000",
+      "prompt": "compare",
+      "sampler": "greedy",
+      "n_pred": "15038",
+      "verdict": "800",
+      "evidence": "ok"
+    },
+    {
+      "label": "GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000",
+      "prompt": "enum",
+      "sampler": "greedy",
+      "n_pred": "15034",
+      "verdict": "800",
+      "evidence": "ok"
+    },
+    {
+      "label": "GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000",
+      "prompt": "story",
+      "sampler": "greedy",
+      "n_pred": "15032",
+      "verdict": "800",
+      "evidence": "ok"
+    },
+    {
+      "label": "GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000",
+      "prompt": "faq",
+      "sampler": "greedy",
+      "n_pred": "15027",
+      "verdict": "800",
+      "evidence": "ok"
+    },
+    {
+      "label": "GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000",
+      "prompt": "doc",
+      "sampler": "greedy",
+      "n_pred": "15032",
+      "verdict": "800",
+      "evidence": "ok"
+    },
+    {
+      "label": "GLM-5.2-IQ1_KT|1.99|plain@0.7|depth12000",
+      "prompt": "review",
+      "sampler": "greedy",
+      "n_pred": "15032",
+      "verdict": "800",
+      "evidence": "ok"
+    }
+  ]
+}
