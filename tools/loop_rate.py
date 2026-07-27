@@ -80,16 +80,58 @@ import urllib.request
 
 PROMPT_SET_VERSION = "v1"
 
-PROMPTS = [
-    ("list", "List 300 distinct real-world examples of distributed systems, numbered, one per line, with a one-sentence description each.\n1."),
-    ("essay", "Write an exhaustive 5000-word technical essay on consensus algorithms. Cover Paxos, Raft, PBFT, and modern variants in depth.\n"),
-    ("compare", "Write a long detailed comparison of Raft versus Paxos versus PBFT, covering safety, liveness, throughput, and failure modes.\n"),
-    ("enum", "Enumerate and describe 200 different failure modes that can occur in a distributed database. Number each one.\n1."),
-    ("story", "Write a very long technical narrative about an engineer debugging a distributed system outage over three days. Be detailed.\n"),
-    ("faq", "Write 150 frequently asked questions and detailed answers about distributed consensus.\nQ1:"),
-    ("doc", "Write complete API documentation for a distributed lock service, with every endpoint, parameter, error code and example.\n"),
-    ("review", "Write an exhaustive literature review of consensus research from 1978 to today, discussing each major paper.\n"),
+# Each prompt is (name, text, kind).
+#   kind="exhaustive" -> the prompt DEMANDS long output. Running the token budget
+#                        out on these is CORRECT, so non-termination is not
+#                        diagnostic here.
+#   kind="bounded"    -> the prompt has a natural endpoint. A model that cannot
+#                        stop will still run the budget out, and that IS a defect.
+# The distinction exists because measuring 8/8 non-termination on a prompt set
+# consisting entirely of "list 300 things" and "write 5000 words" says nothing.
+
+_V1 = [
+    ("list", "List 300 distinct real-world examples of distributed systems, numbered, one per line, with a one-sentence description each.\n1.", "exhaustive"),
+    ("essay", "Write an exhaustive 5000-word technical essay on consensus algorithms. Cover Paxos, Raft, PBFT, and modern variants in depth.\n", "exhaustive"),
+    ("compare", "Write a long detailed comparison of Raft versus Paxos versus PBFT, covering safety, liveness, throughput, and failure modes.\n", "exhaustive"),
+    ("enum", "Enumerate and describe 200 different failure modes that can occur in a distributed database. Number each one.\n1.", "exhaustive"),
+    ("story", "Write a very long technical narrative about an engineer debugging a distributed system outage over three days. Be detailed.\n", "exhaustive"),
+    ("faq", "Write 150 frequently asked questions and detailed answers about distributed consensus.\nQ1:", "exhaustive"),
+    ("doc", "Write complete API documentation for a distributed lock service, with every endpoint, parameter, error code and example.\n", "exhaustive"),
+    ("review", "Write an exhaustive literature review of consensus research from 1978 to today, discussing each major paper.\n", "exhaustive"),
 ]
+
+# v2 adds 8 more exhaustive prompts in DIFFERENT domains, so a result is not an
+# artefact of distributed-systems text, plus 8 bounded prompts that make the
+# non-termination metric mean something. n=8 left every interesting comparison at
+# p~0.077; n=24 is what moves those to significance.
+_V2_EXTRA_EXHAUSTIVE = [
+    ("chem", "Enumerate and describe 200 named organic reactions, numbered, with mechanism and a typical substrate for each.\n1.", "exhaustive"),
+    ("hist", "Write an exhaustive chronological account of the Byzantine Empire from 330 to 1453, covering every emperor.\n", "exhaustive"),
+    ("bio", "List 250 enzymes, numbered, each with its EC number, substrate, product and the pathway it belongs to.\n1.", "exhaustive"),
+    ("legal", "Write a complete commentary on the doctrine of consideration in contract law, discussing every leading case.\n", "exhaustive"),
+    ("music", "Write an exhaustive analysis of sonata form, walking through every movement of every Beethoven piano sonata.\n", "exhaustive"),
+    ("geo", "List 300 rivers of the world, numbered, each with length, source, mouth, and the countries it passes through.\n1.", "exhaustive"),
+    ("recipe", "Write a complete professional cookbook section on emulsions, with every technique, ratio, failure mode and fix.\n", "exhaustive"),
+    ("astro", "Describe in exhaustive detail the full lifecycle of stars across every mass range, with the nucleosynthesis at each stage.\n", "exhaustive"),
+]
+
+_V2_BOUNDED = [
+    ("capital", "What is the capital of Australia? Answer in one sentence.\n", "bounded"),
+    ("define", "Define 'idempotent' as used in distributed systems. Two sentences maximum.\n", "bounded"),
+    ("arith", "What is 847 multiplied by 63? Give the number and nothing else.\n", "bounded"),
+    ("yesno", "Is TCP a connection-oriented protocol? Answer yes or no, then give one sentence of justification.\n", "bounded"),
+    ("pick", "Name the three primary additive colours. List them and stop.\n", "bounded"),
+    ("year", "In what year was the Raft consensus paper published? State the year and the authors, nothing more.\n", "bounded"),
+    ("translate", "Translate 'the server is unavailable' into French. Give only the translation.\n", "bounded"),
+    ("shortsum", "Summarise what a hash function does in exactly two sentences.\n", "bounded"),
+]
+
+PROMPT_SETS = {
+    "v1": _V1,
+    "v2": _V1 + _V2_EXTRA_EXHAUSTIVE + _V2_BOUNDED,
+}
+
+PROMPTS = PROMPT_SETS["v1"]      # rebound in main() from --prompt-set
 
 DRY_SAMPLER = {
     "dry_multiplier": 0.8,
@@ -223,11 +265,24 @@ def main():
                          "message.content reports zero generations at EVERY depth (including "
                          "depth 0, which is impossible) because the output sits in the reasoning "
                          "field, and it also hides loops that occur entirely inside <think>.")
+    ap.add_argument("--prompt-set", choices=sorted(PROMPT_SETS), default="v1",
+                    help="v1 = the original 8 exhaustive prompts, kept as the default so "
+                         "historical numbers stay comparable. v2 = those 8 plus 8 more "
+                         "exhaustive prompts in other domains (so a result is not an "
+                         "artefact of distributed-systems text) plus 8 BOUNDED prompts that "
+                         "have a natural endpoint. Use v2 for anything new: n=8 leaves every "
+                         "interesting comparison at p~0.077, and without bounded prompts the "
+                         "non-termination metric cannot tell 'correctly kept writing' from "
+                         "'could not stop'.")
     ap.add_argument("--timeout", type=int, default=5400)
     ap.add_argument("--tsv", help="append per-prompt rows to this TSV file")
     ap.add_argument("--json", dest="json_out", help="write a machine-readable summary here")
     ap.add_argument("--save-samples", metavar="DIR", help="write the tail of each looping generation here")
     args = ap.parse_args()
+
+    global PROMPTS, PROMPT_SET_VERSION
+    PROMPTS = PROMPT_SETS[args.prompt_set]
+    PROMPT_SET_VERSION = args.prompt_set
 
     prefix = ""
     if args.prefill_tokens > 0:
@@ -254,8 +309,9 @@ def main():
     print("\t".join(hdr))
 
     rows, looped, valid, errors, unterminated = [], 0, 0, 0, 0
+    b_valid = b_unterm = 0                    # bounded prompts only
     stop = {"reason": "?", "truncated": False}
-    for name, prompt in PROMPTS:
+    for name, prompt, kind in PROMPTS:
         try:
             text, timings, stop = generate(args.host, args.port, prefix + prompt,
                                            args.n_predict, args.sampler, args.timeout,
@@ -272,6 +328,10 @@ def main():
                 # what actually burns the context window, so it gets its own metric.
                 if stop.get("reason") == "limit":
                     unterminated += 1
+                if kind == "bounded":
+                    b_valid += 1
+                    if stop.get("reason") == "limit":
+                        b_unterm += 1
                 if verdict == "LOOP":
                     looped += 1
                     if args.save_samples:
@@ -313,6 +373,15 @@ def main():
     # unusable agentically because every turn runs the budget to zero.
     print("# NON-TERMINATION: %d/%d (%.0f%%) - hit the token budget without emitting a stop token"
           % (unterminated, valid, (100.0 * unterminated / valid) if valid else float("nan")))
+    # ...but on an all-exhaustive prompt set that number is meaningless, because
+    # running the budget out on "list 300 things" is the CORRECT answer. Only the
+    # bounded prompts, which have a natural endpoint, make it a defect measurement.
+    if b_valid:
+        print("# NON-TERMINATION (bounded prompts, THE diagnostic one): %d/%d (%.0f%%)"
+              % (b_unterm, b_valid, 100.0 * b_unterm / b_valid))
+    else:
+        print("# NON-TERMINATION (bounded): n/a - prompt set %s has no bounded prompts, "
+              "so the number above is not a defect measurement" % PROMPT_SET_VERSION)
 
     if args.tsv:
         with open(args.tsv, "a") as fh:
