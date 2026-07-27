@@ -6,10 +6,48 @@ follows from it.
 
 ---
 
+> ## ⚠️ CORRECTION 2026-07-28: this does NOT describe the production model
+>
+> The analysis below is about **GLM-5.2-smol-IQ1_KT**. It was then used to justify
+> replacing the imatrix for the model actually in service,
+> `GLM-5.2-ours-IQ1_S-prot.gguf`. That justification does not hold, because the two
+> were calibrated by different people with different data. Read straight from the
+> production GGUF's own provenance keys:
+>
+> ```
+> general.quantized_by           = Unsloth
+> quantize.imatrix.file          = <BOX>/bigmodels/glm52-imatrix-unsloth.gguf
+> quantize.imatrix.dataset       = unsloth_calibration_GLM-5.2.txt
+> quantize.imatrix.entries_count = 1002
+> quantize.imatrix.chunks_count  = 88
+> ```
+>
+> and from the imatrix file itself, `imatrix.chunk_size = 9216`, i.e.
+> **811,008 calibration tokens from a corpus Unsloth built specifically for
+> GLM-5.2**. Not a wikitext split, not 1.29 MB, and no evidence of test-split
+> contamination.
+>
+> The cost of not checking: a 25-hour replacement run was started against this
+> premise and would have produced **three times less** calibration than the file
+> already sitting on nvme0 (512-token chunks x 512 = 262K tokens against 811K).
+> It was stopped at 7.2 hours.
+>
+> What survives: the corpus-design reasoning below is sound wherever a thin or
+> wrong-split imatrix genuinely exists, and the measured leverage of calibration at
+> low bit-width (IQ1_KT PPL 98,935 to 95.8) is real and unaffected. What does not
+> survive is the claim that the served model needed rescuing.
+>
+> Unverified either way: whether GLM-5.2-smol-IQ1_KT's imatrix really was 1.29 MB of
+> wikitext test split. That artifact is no longer on the box and the claim was never
+> sourced from its provenance keys. Treat it as unconfirmed. Note the knock-on: A1's
+> GLM arm used that model, so if its calibration was genuinely poor, GLM's true loop
+> rate under good calibration may be *better* than the 4/8 recorded.
+
 ## The problem, precisely
 
 GLM-5.2-smol-IQ1_KT as shipped was calibrated with an imatrix of **1.29 MB of
-English-only `wikitext-2-raw` TEST split**, for a **bilingual ~744B MoE**.
+English-only `wikitext-2-raw` TEST split**, for a **bilingual ~744B MoE**
+(⚠️ unconfirmed, see correction above).
 
 Three separate defects, worth separating because they need different fixes:
 
