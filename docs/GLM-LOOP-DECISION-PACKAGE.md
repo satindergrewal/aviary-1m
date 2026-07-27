@@ -1,7 +1,7 @@
 # GLM 5.2 looping: the answer, the fix, and the options
 
 The end-to-end result of the loop investigation, written as a decision document.
-Everything below is measured — on the production GLM-5.2-smol-IQ1_KT itself where
+Everything below is measured, on the production GLM-5.2-smol-IQ1_KT itself where
 possible, on a Qwen3.6-27B ladder where scale made GLM impractical. No projections
 without being labeled as such.
 
@@ -13,7 +13,7 @@ The production GLM (169 GB, 1.99 file-level bpw) collapses into repetition loops
 long generations. Observed originally at 264K context in real agentic use; reproduced
 here on demand.
 
-## Root cause — measured, with controls
+## Root cause: measured, with controls
 
 | suspect | verdict | evidence |
 |---|---|---|
@@ -25,11 +25,11 @@ here on demand.
 
 The mechanism is attention collapse (heads locking onto the recent window). The
 threshold is sharp: on the 27B ladder, looping at ≤2.24 file-level bpw, clean at
-≥2.30. `ffn_up` is load-bearing — raising only `ffn_down`+`ffn_gate` changes nothing.
+≥2.30. `ffn_up` is load-bearing: raising only `ffn_down`+`ffn_gate` changes nothing.
 
 Two hazards found on the way, both worth remembering:
 
-- **Below-knee reasoning models can loop invisibly inside `<think>`** — the negative
+- **Below-knee reasoning models can loop invisibly inside `<think>`**: the negative
   control produced a 4-word cycle repeated 62 times entirely in the reasoning field,
   zero visible output. Any loop check that reads only visible text misses this class.
 - **Perplexity gives no threshold.** PPL degrades smoothly across the same range where
@@ -64,7 +64,7 @@ experts to free VRAM for KV.
 
 ---
 
-## OPTION 1 — RECOMMENDED: keep the current model, fix the sampler
+## OPTION 1, RECOMMENDED: keep the current model, fix the sampler
 
 **Zero requantization. Zero VRAM cost. Validated on the production GLM itself.**
 
@@ -79,7 +79,7 @@ Measured chain, matched pairs on the real model:
 | config | loop rate |
 |---|---|
 | plain sampling @ 0.7 | 3/8 |
-| DRY (allowed_length 2) | 1/8 — long-narrative holdout survives |
+| DRY (allowed_length 2) | 1/8, long-narrative holdout survives |
 | **DRY (allowed_length 1)** | **0/3 on the holdout, 8/8 clean regression** |
 
 The single-parameter change from the standard DRY config (`dry_allowed_length` 2 → 1)
@@ -87,14 +87,34 @@ beat the one prompt that survived everything else, and the full-prompt regressio
 it does not mangle legitimate output. The aggressive alternative (multiplier 1.5) also
 worked but is the sledgehammer; this is the gentlest sufficient setting.
 
-Caveats, stated honestly:
-- DRY-at-depth was validated at 32K/128K on the 2.30-bpw ladder model (0 loops in all
-  20 cells, both reasoning and visible fields). On the *production* GLM, the tuned
-  setting was validated at standard depth; a 128K confirmation run on GLM itself is
-  cheap (~30 min) whenever wanted.
+### Confirmed at depth on the production artifact (2026-07-27)
+
+The caveat above is now closed. Matched pair against a live server, same 8 prompts, same
+temperature, `--chat` so in-`<think>` loops count, at a real depth of `n_past` ~15,030:
+
+| arm | loop rate | generation success |
+|---|---|---|
+| plain @0.7 | **1/8** (the `list` prompt, a 2-token cycle repeated 62 times) | 8/8 |
+| tuned DRY @0.7 | **0/8**, including the prompt that looped | 8/8 |
+
+Artifact: `GLM-5.2-ours-IQ1_S-prot` at ~1.90 file-level bpw, which is the model actually
+served day to day. (An earlier version of this run was labelled `IQ1_KT|1.99` in the raw
+TSV header because the label was written before the serving artifact was known. The
+arm-to-arm comparison is unaffected, since both arms hit the same server.)
+
+**The cost, which is not zero.** Type-token ratio is consistently *lower* under DRY:
+0.49-0.77 against 0.70-0.85 for plain, worst case `review` at 0.49 versus the 0.25 loop
+floor. Same prompts and temperature in both arms, so that is DRY's own footprint on
+lexical diversity rather than prompt variation. It suppresses the tight cycles and the
+text stays coherent, but it is measurably less varied. Worth knowing before deploying it
+as a default.
+
+Other caveats:
+- DRY-at-depth was also validated at 32K/128K on the 2.30-bpw ladder model (0 loops in
+  all 20 cells, both reasoning and visible fields).
 - Note that plain repetition penalty is NOT a substitute and can *cause* loops.
 
-## OPTION 2 — requantize above the knee: does not fit
+## OPTION 2: requantize above the knee, does not fit
 
 The knee demands ≥2.30 file-level bpw. Applied to GLM:
 
@@ -110,14 +130,14 @@ Sub-options that could revive this path, all unmeasured:
 - **Per-expert targeting** finer than all-FFN (e.g. only `ffn_up`+`ffn_down` of experts,
   or only some layers). The 27B data says down+gate alone fails, so optimism should be
   limited, but MoE structure differs.
-- **Partial expert offload** — accept ~10-15 GB of experts on CPU. MoE activation
+- **Partial expert offload**: accept ~10-15 GB of experts on CPU. MoE activation
   sparsity makes this less painful than it sounds, but decode speed takes a hit.
 
-## OPTION 3 — hybrid: option 1 now, revisit option 2 after the calibration work
+## OPTION 3, hybrid: option 1 now, revisit option 2 after the calibration work
 
 The corpus redesign (docs/GLM-CALIBRATION-CORPUS-DESIGN.md) is happening anyway for
 quality reasons. If a future better-calibrated requant is planned, the knee experiment
-should be re-run on it — better calibration lowered other cliffs dramatically
+should be re-run on it, because better calibration lowered other cliffs dramatically
 (IQ3_KT PPL 65.7 → 14.3), and it is plausible, though unproven, that it moves the
 loop knee down too. If it moves below ~2.0, a loop-free all-VRAM GLM becomes possible.
 
