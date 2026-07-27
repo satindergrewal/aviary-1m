@@ -112,10 +112,16 @@ corpus improvement gives them importance data. That is a separate, structural ga
 (task F2, and llama.cpp PRs #23258 / #23476 / #23575). The corpus and the MTP work are
 independent and both are needed.
 
-**Looping is not primarily a calibration problem.** Measured: loop rate is driven by
-weight bit-width and is *scale-independent* (27B and 744B both loop 4/8 at 1.75 bpw).
-Better calibration should improve quality broadly, but nobody should expect it to move
-the loop cliff on its own. Do not let this corpus work be sold as the loop fix.
+**Looping is not primarily a calibration problem.** Loop rate is driven by weight
+bit-width. Better calibration should improve quality broadly, but nobody should expect
+it to move the loop cliff on its own. Do not let this corpus work be sold as the loop fix.
+
+⚠️ The original wording here claimed loop rate is *scale-independent* because "27B and
+744B both loop 4/8 at 1.75 bpw". **That is retracted** (2026-07-28). Those two arms
+differed in architecture, not just scale: the 27B is dense with 89.1 M FFN matrices, the
+744B is MoE with 12.6 M expert matrices. Re-tested at n=24, scale clearly does buy
+bit-width tolerance: a dense 4B loops 21/21 (100%) where the dense 27B loops 10/22 (45%)
+at the identical 1.75 bpw, Fisher p = 6.1e-05. See `A1-SCALE-HYPOTHESIS-REOPENED.md`.
 
 ---
 
