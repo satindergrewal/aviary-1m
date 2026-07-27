@@ -17,7 +17,7 @@ invalidated the A1 conclusion the same night.
 
 | variant | loops | rate | Fisher vs baseline |
 |---------|-------|------|--------------------|
-| baseline IQ1_KT (1.75 bpw) | 10/22 | 45% | — |
+| baseline IQ1_KT (1.75 bpw) | 10/22 | 45% | (reference) |
 | **FFN tensors to q8** | **1/22** | **5%** | **p = 0.0039** |
 | attention tensors to q8 | 4/23 | 17% | p = 0.057 |
 | knee-allffn | 6/24 | 25% | p = 0.22 |
