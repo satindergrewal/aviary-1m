@@ -30,6 +30,22 @@ METHOD (three choices that matter - do not change them casually)
     3. An empty / near-empty generation is reported as EMPTY, never as a loop.
        Scoring "produced nothing" as "looped" invalidated a whole matrix once.
 
+THREE METRICS, NOT ONE - report all of them or report none
+    LOOP RATE          did it repeat itself
+    GENERATION SUCCESS did it produce anything scoreable (a model can score 0/8
+                       loops purely by generating nothing). Harness errors are
+                       excluded from this denominator: a socket timeout is not
+                       the model failing.
+    NON-TERMINATION    did it hit the token budget without ever emitting a stop
+                       token. This is the axis the other two miss. A real
+                       agentic run of GLM 5.2 IQ1_S ran a single response to
+                       n_tokens=65535, truncated=1, AFTER completing and
+                       verifying its task; thinking-to-visible output was 416:1.
+                       Its tail was diverse enough that loop detection scored it
+                       clean, and generation success was 100%. A config can pass
+                       both and still be unusable agentically because every turn
+                       burns the whole window.
+
     Prompts demand long exhaustive output (enumerations, exhaustive essays,
     literature review) because that is what triggers attention collapse.
 
@@ -151,14 +167,33 @@ def generate(host, port, prompt, n_predict, sampler, timeout, temp=None, chat=Fa
     payload = json.loads(urllib.request.urlopen(req, timeout=timeout).read())
 
     if chat:
-        msg = (payload.get("choices") or [{}])[0].get("message", {}) or {}
+        choice = (payload.get("choices") or [{}])[0]
+        msg = choice.get("message", {}) or {}
         reasoning = msg.get("reasoning_content") or msg.get("reasoning") or ""
         visible = msg.get("content") or ""
         # order matters only for readability; detection runs over the whole tail
         text = (reasoning + "\n" + visible) if reasoning else visible
-        return text, payload.get("timings", {})
+        # OAI reports "length" when the budget ran out and "stop" when the model
+        # actually chose to end. That distinction is the non-termination metric.
+        finish = choice.get("finish_reason") or "?"
+        stop = {"reason": {"length": "limit", "stop": "eos"}.get(finish, finish),
+                "truncated": bool(payload.get("truncated", False))}
+        return text, payload.get("timings", {}), stop
 
-    return payload.get("content", ""), payload.get("timings", {})
+    # llama.cpp /completion exposes the stop cause directly. Newer builds add
+    # stop_type; older ones only set the three booleans, so read both.
+    if payload.get("stop_type"):
+        reason = payload["stop_type"]
+    elif payload.get("stopped_eos"):
+        reason = "eos"
+    elif payload.get("stopped_word"):
+        reason = "word"
+    elif payload.get("stopped_limit"):
+        reason = "limit"
+    else:
+        reason = "?"
+    stop = {"reason": reason, "truncated": bool(payload.get("truncated", False))}
+    return payload.get("content", ""), payload.get("timings", {}), stop
 
 
 def main():
@@ -213,21 +248,30 @@ def main():
     eff_temp = args.temp if args.temp is not None else (0.7 if args.sampler == "dry" else 0.0)
     print("# loop_rate.py  prompt_set=%s  sampler=%s  temp=%.2f  n_predict=%d  prefill=%d  label=%s"
           % (PROMPT_SET_VERSION, args.sampler, eff_temp, args.n_predict, args.prefill_tokens, args.label))
-    hdr = ["label", "prompt", "sampler", "n_pred", "verdict", "evidence"]
+    hdr = ["label", "prompt", "sampler", "n_pred", "stop", "verdict", "evidence"]
     if args.prefill_tokens:
         hdr.insert(3, "depth_n_past")
     print("\t".join(hdr))
 
-    rows, looped, valid = [], 0, 0
+    rows, looped, valid, errors, unterminated = [], 0, 0, 0, 0
+    stop = {"reason": "?", "truncated": False}
     for name, prompt in PROMPTS:
         try:
-            text, timings = generate(args.host, args.port, prefix + prompt,
-                                     args.n_predict, args.sampler, args.timeout,
-                                     args.temp, args.chat)
+            text, timings, stop = generate(args.host, args.port, prefix + prompt,
+                                           args.n_predict, args.sampler, args.timeout,
+                                           args.temp, args.chat)
             verdict, evidence = detect_loop(text)
             n_pred = timings.get("predicted_n", 0)
             if verdict != "EMPTY":
                 valid += 1
+                # Hitting the token budget without ever emitting a stop token is its
+                # OWN failure, distinct from looping. A real agentic run of GLM 5.2
+                # IQ1_S ran a single response to n_tokens=65535 truncated=1 AFTER it
+                # had completed and verified the task; the tail stayed diverse enough
+                # that loop detection would have scored it "ok". Non-termination is
+                # what actually burns the context window, so it gets its own metric.
+                if stop.get("reason") == "limit":
+                    unterminated += 1
                 if verdict == "LOOP":
                     looped += 1
                     if args.save_samples:
@@ -237,15 +281,23 @@ def main():
                         with open(os.path.join(args.save_samples, "%s_%s.txt" % (safe, name)), "w") as fh:
                             fh.write(text[-1500:])
         except (urllib.error.URLError, OSError, ValueError, json.JSONDecodeError) as exc:
+            # A timeout or a dead socket is a HARNESS failure, not the model failing
+            # to generate. Counting it toward generation success understates the model,
+            # and at depth with a long timeout it is a realistic occurrence.
             verdict, evidence, n_pred = "ERR", str(exc)[:60], 0
+            errors += 1
+            stop = {"reason": "err", "truncated": False}
 
-        row = [args.label, name, args.sampler, str(n_pred), verdict, evidence]
+        row = [args.label, name, args.sampler, str(n_pred),
+               stop.get("reason", "?") + ("+trunc" if stop.get("truncated") else ""),
+               verdict, evidence]
         if args.prefill_tokens:
             row.insert(3, str(timings.get("prompt_n", 0)) if isinstance(timings, dict) else "?")
         rows.append(row)
         print("\t".join(row))
         sys.stdout.flush()
 
+    attempted = len(PROMPTS) - errors      # prompts the model actually got to answer
     rate = ("%d/%d" % (looped, valid)) if valid else "n/a"
     pct = (100.0 * looped / valid) if valid else float("nan")
     print("# LOOP RATE: %s (%.0f%%)  [prompts scored: %d of %d]"
@@ -253,8 +305,14 @@ def main():
     # Generation success is a FIRST-CLASS metric, not a footnote: a model can be 0-loops
     # simply because it produced nothing. At depth we measured exactly that (75%->25%
     # success under raw completion). Never publish a loop rate without this line.
-    print("# GENERATION SUCCESS: %d/%d (%.0f%%) - prompts that produced scoreable output"
-          % (valid, len(PROMPTS), 100.0 * valid / len(PROMPTS)))
+    print("# GENERATION SUCCESS: %d/%d (%.0f%%) - prompts that produced scoreable output%s"
+          % (valid, attempted, (100.0 * valid / attempted) if attempted else float("nan"),
+             ("  [%d harness ERR excluded from the denominator]" % errors) if errors else ""))
+    # Third axis. Loops and empties are both about WHAT came out; this is about whether
+    # the model can stop at all. A config can be 0/8 loops, 8/8 success, and still be
+    # unusable agentically because every turn runs the budget to zero.
+    print("# NON-TERMINATION: %d/%d (%.0f%%) - hit the token budget without emitting a stop token"
+          % (unterminated, valid, (100.0 * unterminated / valid) if valid else float("nan")))
 
     if args.tsv:
         with open(args.tsv, "a") as fh:
@@ -269,10 +327,17 @@ def main():
                 "n_predict": args.n_predict,
                 "looped": looped,
                 "scored": valid,
+                "attempted": attempted,
+                "errors": errors,
+                "unterminated": unterminated,
                 "total_prompts": len(PROMPTS),
                 "loop_rate": rate,
-                "rows": [dict(zip(["label", "prompt", "sampler", "n_pred", "verdict", "evidence"], r))
-                         for r in rows],
+                "generation_success": "%d/%d" % (valid, attempted),
+                "non_termination": "%d/%d" % (unterminated, valid),
+                # hdr already carries depth_n_past when --prefill-tokens is set; zipping
+                # against a hardcoded key list silently shifted every field by one in
+                # exactly the depth runs the column exists for.
+                "rows": [dict(zip(hdr, r)) for r in rows],
             }, fh, indent=2)
 
 
