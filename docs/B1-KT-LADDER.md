@@ -28,6 +28,27 @@ us". Adding the success axis says IQ3_KT is materially better in exactly the
 regime that matters for long-context work. A model that never loops but answers
 one prompt in four at 32K is not usable; it is quiet.
 
+## The lossless floor, added after the fact
+
+Published without it, which was wrong. Measured 2026-07-28 on the same model,
+prompt set and harness:
+
+| Qwen3.6-27B at Q8_0 (8.5 bpw, essentially lossless) | **0/20 loops = 0%** |
+|---|---|
+
+That floor is what makes the table above interpretable: the 27B does not loop at
+all when lossless, so **every loop in the ladder is quantization damage**, cleanly
+attributed. The ladder stands as published.
+
+This matters because it does not generalise. The same check on Qwen3-4B returned a
+**42% floor**, which invalidated a separate conclusion drawn from it (see
+`A1-SCALE-HYPOTHESIS-REOPENED.md`). Run the lossless rung as cell zero of any bpw
+ladder before comparing anything.
+
+One honest wrinkle in the floor run: generation success at Q8_0 was 20/24 (83%),
+slightly *below* IQ1_KT's 22/24. At n=24 that is noise, and it is a reminder that
+the generation-success axis is noisier at shallow depth than the loop axis.
+
 ## Caveats
 
 - n = 8 per cell. IQ2_KT's 25% at 32K against IQ1_KT's 50% is p ~ 0.6, i.e.
