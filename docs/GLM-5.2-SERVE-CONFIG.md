@@ -1,5 +1,23 @@
 # GLM 5.2 (KT IQ1_S) serve config: validated 2026-07-28
 
+> ## ⚠️ CORRECTION 2026-07-28: the KV quant type below is a BAD DEFAULT
+>
+> This file pins `-ctk q4_0 -ctv q4_0`, and that is what the owner actually used for
+> the 8K to 64K window. A KV-quantization survey run the same day (24 methods,
+> `aviary-1m/docs/RESEARCH-KV-QUANT.md`) found the community evidence brutal on this
+> point: **never take the K cache below `q8_0`.** `q4/q4` costs roughly **5x KLD**.
+> V tolerates aggression far better than K does.
+>
+> The config below is otherwise correct and is what ran at 41-48 tok/s. But it was
+> validated for *fitting and speed*, not for output fidelity, and I recorded it as
+> "validated" without qualifying that. **Prefer `-ctk q8_0 -ctv q5_0`**, which is what
+> the blk.78 A/B harness uses as its L1 arm.
+>
+> Cost of the change: K at q8_0 instead of q4_0 doubles the K half of the KV cache.
+> At 64K that is single-digit GB on a 173 GB footprint, so it is affordable. At 1M it
+> is not, and that is a real trade to measure rather than assume.
+
+
 The exact configuration that ran well for hands-on and agentic use. Captured live
 from `/proc/<pid>/cmdline` before shutdown, not reconstructed from memory.
 
