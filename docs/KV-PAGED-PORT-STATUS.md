@@ -147,3 +147,50 @@ Measured on the GLM server: 4 slots each reporting the full 65,536. So the
 `-np 1` serialisation that motivated this work is already substantially improved
 on the fleet build, without paged KV. Paged KV is for vLLM-class concurrency
 (247 sequences against 26), not for the basic case.
+
+---
+
+## Multi-GPU: core landed, caller wiring specified
+
+`init_multi()` is implemented and pushed (`922e30735` on `fork/kv-paged`). It compiles
+clean and the unit suite still passes. `init()` is untouched, so the single-device path
+cannot regress.
+
+**What it does.** Takes one backend per layer, groups layers by device, allocates one
+ggml context + buffer per distinct device, and places layer `il`'s tensor on the device
+holding layer `il`. Every device allocates the same `n_gpu_blocks`, so a block id stays
+valid on all of them and the block table, scheduler and attention kernel are unchanged.
+Logs per-device layer count and buffer size so a split is visible rather than implicit.
+
+**What remains, and the exact seam.** `llama_model::dev_layer(il)` returns a
+`ggml_backend_dev_t` (a *device*), but `init_multi` needs `ggml_backend_t` (a
+*backend*). The backends are owned by `llama_context`, not by `llama_model`, so the
+model cannot resolve device to backend on its own.
+
+Three steps, in order:
+
+1. **Thread the backend list down.** `llama_model::create_memory` currently takes
+   `(backend_gpu, backend_cpu)`. It needs the context's full backend list instead, or a
+   `device -> backend` lookup. `llama_context` already holds one backend per device.
+2. **Build the per-layer vector** at the call site in `llama-model.cpp` (~line 2294):
+   ```cpp
+   std::vector<ggml_backend_t> layer_backends(n_layers);
+   for (uint32_t il = 0; il < n_layers; ++il) {
+       layer_backends[il] = backend_for_device(dev_layer(il));
+   }
+   paged_cache->init_multi(layer_backends, backend_cpu, params.type_k,
+                           n_gpu_blocks, n_cpu_blocks, watermark);
+   ```
+   Keep calling `init()` when every layer resolves to the same backend, so the
+   single-device path stays byte-identical.
+3. **Drop the rejection.** `validate_paged_kv_placement` in `llama-context.cpp` refuses
+   any model split across devices. Once (1) and (2) land it should only refuse the cases
+   that are still genuinely unsupported (partial offload), not layer-splits.
+
+**Sizing note.** `common_fit_paged_kv_blocks` in `common.cpp` sizes `n_gpu_blocks` from
+a single device's free VRAM (`ggml_backend_dev_by_type(GPU)` returns the first GPU).
+With a split it must take the **minimum** free VRAM across the devices holding layers,
+otherwise the tightest card OOMs while the other reports space.
+
+**Not yet done, so not claimed:** no multi-GPU run has happened. The above compiles and
+the single-device path is verified; the split path is unexercised until the wiring lands.
