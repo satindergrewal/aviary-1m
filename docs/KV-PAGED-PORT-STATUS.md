@@ -4,6 +4,40 @@ Branch `kv-paged` in our fork, based on current upstream mainline `0e4a03622`.
 Two commits: matiaslin's original `7e0805654`, then `627c53494` carrying the
 rebase fixes.
 
+
+> ## ⚠️ CORRECTION 2026-07-28 evening: CUDA PASSES, and my "backend-independent bug" claim is WITHDRAWN
+>
+> ```
+> test-paged-kv-e2e: top-5 argmax match: ref=2217 paged=2217
+> test-paged-kv-e2e: top-5 set overlap: 4/5 (require >= 4)
+> test-paged-kv-e2e: PASSED
+> ```
+>
+> This document argued the token-1 divergence reproduced on CPU **and Metal**, so it
+> was backend-independent and therefore a real logic bug rather than "the CPU
+> reference being sloppy" as the author implies. **That reasoning was invalid.**
+>
+> | backend | paged_attn implementation | result |
+> |---|---|---|
+> | CUDA | 3 files, the real kernel | **PASSES** |
+> | CPU reference | 3 files | fails at token 1 |
+> | Metal | **0 files** | no kernel, so ggml falls back to the CPU reference |
+> | Vulkan | 0 files | same |
+>
+> Metal was never a second implementation. It ran the same CPU reference code, so
+> "two backends agree" was one implementation counted twice. Treating a fallback as
+> corroboration is the same error class as the original A1: finding agreement where
+> there is only identity.
+>
+> **Corrected conclusion, which is better news than the claim it replaces:** the
+> author's label was accurate. The CPU path is validation-only and carries a real
+> defect at the first decode step. The CUDA kernel, the one that matters, is correct,
+> and this rebase onto current mainline is **functional on the target backend**.
+>
+> Note the `4/5` top-5 overlap on CUDA against `5/5` on the CPU reference: a different
+> kernel gives a slightly different distribution, still within tolerance, and it passes
+> the token check that the CPU path fails.
+
 ## Why this exists
 
 Satinder hit the concurrency wall running the GLM 5.2 agentic build: at `-np 1`
