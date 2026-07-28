@@ -192,7 +192,14 @@ derived from the unfused shape needs re-deriving on the fused graph.
 ### Kernel-level measurement: gather vs mask-shaped at GLM shapes (2026-07-29)
 
 Standalone benchmark (`tests/bench-fattn-dsa.cpp` on `fable-dsa-harvest-box`), single GPU,
-GLM-5.2 shapes: head dim K 576 / V 512 with V as a view into K, 64 heads, top_k 2048.
+head dim K 576 / V 512 with V as a view into K, top_k 2048.
+
+**These figures are PROVISIONAL: the sweep was run at n_head 128, but GLM-5.2 has 64**
+(`glm-dsa.attention.head_count = 64`, read from the served GGUF). That was an error in the
+benchmark brief, and it is not cosmetic. The shortfall analysis below shows the limiter is cuBLAS
+efficiency on skinny GEMMs, and `n_head` is the `n` dimension of those GEMMs, so halving it should
+make the penalty worse and the true GLM speedup lower than the numbers in this table. A re-run at
+n_head 64 is in progress; treat these as an upper bound until it lands.
 Median of 20 to 2000 iterations per cell after warmup. The mask arm includes its
 `ggml_fill` + `ggml_set_rows` + `ggml_add` construction cost, since that work disappears in the
 gather path.
@@ -219,6 +226,12 @@ prefill the gather path allocates 134,217,728 bytes at every context from 8K to 
 mask path grows from 155,189,248 to 272,629,760. The gather path decouples graph scratch from
 context length entirely; the mask path does not.
 
+Net device memory is a more mixed picture and the compute-buffer figure alone overstates it.
+Counting kernel pool scratch as well, the gather path saves roughly 20 MiB at every decode shape
+and 104 MiB at 128K prefill, but **costs about 8 MiB more at 8K prefill**, where its gathered-K
+scratch outweighs a small mask. The win is real and grows with context, but it is not a clean win
+at the short end.
+
 Correctness controls inside the benchmark: `absmean` of the two paths agrees to five or six
 significant figures at every shape (for example 0.0127705023 against 0.0127689639 at 128K decode),
 and `nonfinite` is zero everywhere.
@@ -230,3 +243,26 @@ but only a model-level run settles what that is worth. Not yet measured: the rea
 quality, NIAH, and multi-GPU behaviour. Two of the 64 result rows carry corrupt memory counters
 (negative values from harness counter wraparound); the `compute_buf` figures quoted above are
 consistent across all 64 rows.
+
+**Why the speedup falls short of the work ratio, and where the remaining headroom is.** At
+131,072 / 2,048 the work ratio is 64x but the measured speedup is 18.26x. The gap is entirely
+execution efficiency: the stock flash-attention mma kernel sustains 214 to 226 TFLOP/s (roughly
+85 to 90 percent of dense fp16 peak) while the gather path's batched cuBLAS HGEMM sustains 61 to
+73 TFLOP/s (24 to 29 percent). 64 divided by 3.52 is 18.2, against 18.26 measured, and the same
+arithmetic reproduces the decode figure. The cause is cuBLAS batch inefficiency at skinny shapes:
+the kernel chunks queries into 32 rows and issues GEMMs of m=top_k, n=n_head, k=576, which does
+not fill the machine at top_k 2048. Gather throughput climbs 7.5 to 36 to 85 TFLOP/s as top_k goes
+256 to 2048 to 8192, reaching flash-attention-class efficiency only near 8192. **Closing that gap
+is worth more than anything else in this lane**, since it is the difference between 18x and
+something approaching the 64x the work ratio allows.
+
+Related, and useful when comparing against the mask path: the mask path structurally cannot
+exploit its own sparsity. `flash_attn_mask_to_KV_max` only truncates a fully masked suffix, never
+interior blocks, and it is not launched at all unless `Q->ne[1] >= 1024 || Q->ne[3] > 1`, so at
+decode and 512-token prefill it does full work regardless of how sparse the mask is.
+
+**A latent crash, found by the benchmark sweep and queued for fix.** `dsa_attn_layout_ok()` does
+not check the softmax shared-memory requirement, so `supports_op` accepts shapes that then hard
+abort in `dsa_soft_max_f16_cuda` on `GGML_ASSERT(shmem < smpb)`. Measured bracket on this box:
+top_k 12,032 runs, top_k 12,288 aborts. GLM's 2,048 is far inside the safe range, but a model with
+a larger top_k passes the guard and crashes the server instead of falling back cleanly.
