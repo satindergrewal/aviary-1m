@@ -188,3 +188,45 @@ ceiling exists **only in the unfused branch** of `src/models/glm-dsa.cpp`. The f
 single `ggml_lightning_indexer` call. At 128K context and ubatch 512 that is roughly 8.6 GB
 against 0.27 GB, a factor of 32, and we are already on the cheap side. Any compute-buffer ceiling
 derived from the unfused shape needs re-deriving on the fused graph.
+
+### Kernel-level measurement: gather vs mask-shaped at GLM shapes (2026-07-29)
+
+Standalone benchmark (`tests/bench-fattn-dsa.cpp` on `fable-dsa-harvest-box`), single GPU,
+GLM-5.2 shapes: head dim K 576 / V 512 with V as a view into K, 64 heads, top_k 2048.
+Median of 20 to 2000 iterations per cell after warmup. The mask arm includes its
+`ggml_fill` + `ggml_set_rows` + `ggml_add` construction cost, since that work disappears in the
+gather path.
+
+**Decode, one query token:**
+
+| n_kv | gather (ms) | mask + full FA (ms) | speedup |
+|---|---|---|---|
+| 8,192 | 0.0204 | 0.0433 | 2.1x |
+| 16,384 | 0.0204 | 0.0669 | 3.3x |
+| 32,768 | 0.0204 | 0.1139 | 5.6x |
+| 65,536 | 0.0204 | 0.2078 | 10.2x |
+| 131,072 | 0.0205 | 0.4050 | 19.8x |
+
+The gather cost is flat: 0.0204 ms at 8K and 0.0205 ms at 128K, sixteen times the context for the
+same time. The mask path grows linearly. A top_k=256 control drops the gather to 0.0142 ms and is
+equally flat, confirming cost tracks top_k rather than n_kv.
+
+**Prefill, 512 query tokens:** 1.34x at 8K, 2.56x at 16K, 4.82x at 32K, 9.03x at 64K,
+and 18.26x at 128K (4.79 ms against 87.52 ms).
+
+**Compute buffer, which is the constraint that actually sets the context ceiling.** At 512-token
+prefill the gather path allocates 134,217,728 bytes at every context from 8K to 128K, while the
+mask path grows from 155,189,248 to 272,629,760. The gather path decouples graph scratch from
+context length entirely; the mask path does not.
+
+Correctness controls inside the benchmark: `absmean` of the two paths agrees to five or six
+significant figures at every shape (for example 0.0127705023 against 0.0127689639 at 128K decode),
+and `nonfinite` is zero everywhere.
+
+**What this number is not.** It is one attention call, not a token. GLM decode is dominated by
+expert weight traffic, so the end-to-end gain is bounded by the fraction of token time spent in
+attention. At 128K that is roughly 79 layers x 0.405 ms = 32 ms per token going to about 1.6 ms,
+but only a model-level run settles what that is worth. Not yet measured: the real model, output
+quality, NIAH, and multi-GPU behaviour. Two of the 64 result rows carry corrupt memory counters
+(negative values from harness counter wraparound); the `compute_buf` figures quoted above are
+consistent across all 64 rows.
