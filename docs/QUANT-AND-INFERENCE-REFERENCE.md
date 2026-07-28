@@ -589,3 +589,97 @@ KV drops below q4.
 **Format brittleness is a low-bit-only hazard:** a one-newline prompt-separator change
 flipped a sub-2.5 bpw model between generating and immediate EOS at 32K context, but a
 Q8_0 model was identical across all separators and depths. Above the knee it vanishes.
+
+---
+
+## Part 6: fused ops, scratch tensors, and the context ceiling
+
+Added 2026-07-29 because these came up while chasing why GLM 5.2 could not go past
+64K, and the vocabulary was in the way.
+
+### Operation (op)
+
+One step of maths in the model's compute graph. "Multiply these two matrices",
+"add these", "apply softmax". A single token going through GLM 5.2 executes tens of
+thousands of ops. ggml (llama.cpp's engine) builds the whole graph first, then runs it.
+
+### Scratch tensor
+
+A **temporary result** that exists only partway through a calculation. Not a weight
+you downloaded, not the KV cache you keep, just working space.
+
+Cooking analogy: a weight is an ingredient in the cupboard, the KV cache is the dish
+you are building up, and a scratch tensor is the chopping board. You need it while
+working, you throw it away after, but **it still takes counter space while it exists**.
+
+llama.cpp reserves one big region for these up front, the **compute buffer**, sized for
+the worst moment in the graph. That reservation is real VRAM, unavailable for anything
+else, whether or not the peak is ever hit.
+
+### Fused vs unfused
+
+**Unfused** means each op runs separately and writes its result to memory, and the next
+op reads it back:
+
+```
+step 1: compute scores        -> write a big scratch tensor to VRAM
+step 2: read it back, softmax -> write another
+step 3: read it back, top-k   -> write another
+```
+
+**Fused** means one kernel does all of it in registers and on-chip memory, and only the
+final small answer is written:
+
+```
+one kernel: scores -> softmax -> top-k, entirely internal -> write only the top-k
+```
+
+Same maths, same answer. The difference is that the unfused version has to *materialise*
+each intermediate at full size, and the fused version never does. Flash attention is the
+famous example: it fuses the attention chain so the full score matrix is never written.
+
+### Why this is your context ceiling
+
+GLM 5.2 uses DSA sparse attention, which has an extra piece called the **lightning
+indexer** that picks which keys are worth attending to. Its score tensor is shaped
+
+```
+[n_kv, 32 heads, n_ubatch]  in F32
+```
+
+`n_kv` grows with context. So this scratch tensor grows with **context x ubatch**, and
+2-3 copies are live at once. **Flash attention does not help here**, because the indexer
+is a separate op that FA never touches. That is why raising `-ub` blew up your VRAM
+while KV itself stayed small: at 64K your KV is only 1.6-3 GB, and the scratch space was
+the thing eating the card.
+
+Mainline has a **fused** lightning indexer that never materialises that tensor, and our
+build already contains it.
+
+### The switch that may be turning it off
+
+`llama-context.cpp`, `resolve_fused_ops()`. Before using a fused op, llama.cpp checks
+that the fused node landed on the same device as the layer it belongs to:
+
+```c
+if (device_fused != device_layer) {
+    device_mismatch = true;
+    break;                                 // stops at the FIRST mismatch
+}
+...
+if (device_mismatch) { enabled = false; }  // disables it for the WHOLE model
+```
+
+Two things make this severe:
+
+1. It **breaks on the first mismatch**, so one bad layer ends the search.
+2. It then disables the fused op **globally**, for every layer, not just that one.
+
+With `--tensor-split 49,51` the model spans two cards, and there is a boundary where the
+scheduler can place the fused node on a different card than the layer. If that happens
+once, the fused indexer is off everywhere, every layer falls back to materialising the
+big scratch tensor, and the compute buffer balloons.
+
+**So the ceiling may be a switched-off optimisation we already ship, not a hard limit.**
+It logs its own verdict (`fused Lightning Indexer enabled` / `not supported, set to
+disabled`), so one model load answers it.
