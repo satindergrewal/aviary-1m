@@ -195,3 +195,46 @@ scheduled as "hours to days" of our own effort.
 - [LLM Serving Optimization: Continuous Batching, PagedAttention, Chunked Prefill](https://www.spheron.network/blog/llm-serving-optimization-continuous-batching-paged-attention/)
 - [AtomicBot-ai/atomic-llama-cpp-turboquant](https://github.com/AtomicBot-ai/atomic-llama-cpp-turboquant)
 - [AtomicChat/Kimi-K3-GGUF](https://huggingface.co/AtomicChat/Kimi-K3-GGUF)
+
+---
+
+## TurboQuant re-research (2026-07-29): read from their quantizer, not their card
+
+the owner pushed back twice on my downgrade. He was right to. From
+`ggml-turbo-quant.c` in the tree on the box:
+
+**The pipeline:** normalize, forward WHT rotation, then quantize against **fixed
+Lloyd-Max centroid tables** (16-entry for 4-bit, 8 for 3-bit, non-uniform spacing
+tight near zero: a Gaussian-optimal codebook). Post-WHT values are near-Gaussian by
+the central limit theorem, so **the codebook is fitted to the post-rotation
+distribution**. Third independent confirmation of why our B2 failed: we rotated and
+then used codebooks built for unrotated weights.
+
+**The trick I missed when I downgraded it** (line 594):
+
+```c
+/* No inverse WHT, dequant stays in the rotated domain.
+ * Q is WHT-rotated by the graph, so <Q_rot, K_rot> gives correct attention scores. */
+```
+
+WHT is orthogonal, so dot products are preserved under it. They rotate Q once per
+step (tiny) and compute attention **in the rotated domain**, meaning the K cache is
+never unrotated at decode. My "adds an inverse-WHT node per attention layer" cost
+criticism applies to the **V path only** (`turbo_cpu_fwht_inverse` exists for it);
+the K path is genuinely free.
+
+**What to adopt into our stack:**
+
+1. **The post-rotation codebook principle.** Settled; any future rotation work fits
+   the codebook after rotating, never before.
+2. **Rotated-domain K attention.** Design insight worth carrying into any KV-quant
+   work of ours, independent of TurboQuant's formats.
+3. **A real open test:** the KV survey says never take K below q8_0, but that
+   evidence is for UNROTATED K. Rotated K is more Gaussian and quantizes better, so
+   "3-bit rotated K vs q8_0 unrotated K" is a live question, not settled by the
+   survey. If rotated-3-bit holds quality, K-cache drops ~2.7x at 1M context, which
+   serves the north star directly.
+
+**Still true from the first pass:** upstream rejected the PR; the weight-format gain
+over our types is modest. The value is the KV formats and the two ideas above, not
+the weight quants.
