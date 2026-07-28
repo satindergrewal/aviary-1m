@@ -145,12 +145,16 @@ rel_L2 for that case is 0.335. `ggml_top_k` returns distinct positions and the g
 forces `n_kv >= 4*top_k` so the selection never clamps, but this is a live precondition on
 anything that ever replaces the top-k source, not a theoretical one.
 
-**Residual error is the fp16 floor, not a logic error.** Both gemms use fp16 accumulate; one fp16
-ulp is 4.9e-4 relative. Scaling confirms the mechanism: head dim 128 to 576 barely moved the
-error, but top_k 256 to 512 moved it by about sqrt(2), consistent with accumulation growth in the
-KQV reduction. Extrapolating (labelled as extrapolation) to the real top_k of 2048 gives roughly
-1.5e-3 per layer, which on a 1-bit-class quant across all layers is worth measuring rather than
-assuming. `cublasGemmStridedBatchedEx` with `CUBLAS_COMPUTE_32F` removes it.
+**Residual error was the fp16 accumulate floor, and fp32 accumulate removes it for free -
+now the default.** Measured: under fp16 accumulate the error tracked top_k (rel_L2 9.1e-4 at
+top_k 512, 1.06e-3 at 12032); under `cublasGemmStridedBatchedEx` with `CUBLAS_COMPUTE_32F` it is
+flat at 3.08-3.22e-4 regardless of top_k - the top_k dependence disappears, and the gather path
+becomes slightly *more* accurate than stock flash attention against the same fp64 reference
+(0.78-0.99x of its error). Cost: median -0.8 percent over 42 paired measurements at GLM shapes,
+i.e. free; at 128 heads the Ex API was actually 12-15 percent faster at prefill. One unproven
+attribution: the Ex-API-with-fp16-compute arm was not run, so "Ex API is faster" versus "fp32
+accumulate is faster" is not separated. The remaining 3.1e-4 is the fp16 KQ/KQV storage floor.
+`LLAMA_DSA_F32ACC=0` restores the fp16-accumulate path.
 
 **A latent aliasing bug, fixed.** `dsa_v_is_k_view()` decided that V aliases K purely from the
 pointer landing inside K's first row, without checking row stride. The reuse path then indexes
@@ -194,12 +198,25 @@ derived from the unfused shape needs re-deriving on the fused graph.
 Standalone benchmark (`tests/bench-fattn-dsa.cpp` on `fable-dsa-harvest-box`), single GPU,
 head dim K 576 / V 512 with V as a view into K, top_k 2048.
 
-**These figures are PROVISIONAL: the sweep was run at n_head 128, but GLM-5.2 has 64**
-(`glm-dsa.attention.head_count = 64`, read from the served GGUF). That was an error in the
-benchmark brief, and it is not cosmetic. The shortfall analysis below shows the limiter is cuBLAS
-efficiency on skinny GEMMs, and `n_head` is the `n` dimension of those GEMMs, so halving it should
-make the penalty worse and the true GLM speedup lower than the numbers in this table. A re-run at
-n_head 64 is in progress; treat these as an upper bound until it lands.
+**These figures were measured at n_head 128, but GLM-5.2 has 64** (`glm-dsa.attention.head_count
+= 64`, read from the served GGUF) - an error in the benchmark brief. The corrected sweep at
+n_head 64 landed and the speedups drop materially:
+
+| shape | n_head 128 (table below) | **n_head 64 (GLM-correct)** |
+|---|---|---|
+| 8K decode | 2.14x | **1.77x** |
+| 32K decode | 5.55x | **3.47x** |
+| 128K decode | 19.68x | **11.75x** |
+| 8K prefill | 1.33x | **1.02x (buys nothing)** |
+| 32K prefill | 4.81x | **3.68x** |
+| 128K prefill | 18.40x | **12.99x** |
+
+**Quote 11.8x decode / 13.0x prefill at 128K, not 19.8x/18.3x.** The mechanism was not the
+predicted one: the gather GEMMs did not get relatively worse - the mask path got much better.
+Mask cost scales near-linearly with n_head (roughly -42 to -50 percent when halved) while the
+gather path barely moves at decode (-4 to -9 percent), because gathering top_k K rows of DK
+elements has no n_head term. The denominator shrank, so the ratio collapsed. The n_kv-flatness
+of the gather path is unchanged, and the compute-buffer decoupling is unaffected.
 Median of 20 to 2000 iterations per cell after warmup. The mask arm includes its
 `ggml_fill` + `ggml_set_rows` + `ggml_add` construction cost, since that work disappears in the
 gather path.
@@ -261,8 +278,11 @@ exploit its own sparsity. `flash_attn_mask_to_KV_max` only truncates a fully mas
 interior blocks, and it is not launched at all unless `Q->ne[1] >= 1024 || Q->ne[3] > 1`, so at
 decode and 512-token prefill it does full work regardless of how sparse the mask is.
 
-**A latent crash, found by the benchmark sweep and queued for fix.** `dsa_attn_layout_ok()` does
-not check the softmax shared-memory requirement, so `supports_op` accepts shapes that then hard
-abort in `dsa_soft_max_f16_cuda` on `GGML_ASSERT(shmem < smpb)`. Measured bracket on this box:
-top_k 12,032 runs, top_k 12,288 aborts. GLM's 2,048 is far inside the safe range, but a model with
-a larger top_k passes the guard and crashes the server instead of falling back cleanly.
+**A latent crash, found by the benchmark sweep and now fixed.** `dsa_attn_layout_ok()` did not
+check the softmax shared-memory requirement, so `supports_op` accepted shapes that then hard
+aborted in `dsa_soft_max_f16_cuda` on `GGML_ASSERT(shmem < smpb)`. Measured bracket on this box:
+top_k 12,032 runs, 12,288 aborted (smpb 49,152). The fix gives the shared-memory requirement a
+single definition used by both the launcher's assert and the guard so they cannot drift; the
+previously aborting shapes (12,288 through 16,384) are now rejected cleanly at `supports_op` with
+zero aborts, and 2,048/12,032 still run correctly. Two permanent regression cases added
+(14/14 pass in both accumulate arms).
