@@ -680,6 +680,29 @@ scheduler can place the fused node on a different card than the layer. If that h
 once, the fused indexer is off everywhere, every layer falls back to materialising the
 big scratch tensor, and the compute buffer balloons.
 
-**So the ceiling may be a switched-off optimisation we already ship, not a hard limit.**
-It logs its own verdict (`fused Lightning Indexer enabled` / `not supported, set to
-disabled`), so one model load answers it.
+### REFUTED 2026-07-29, before any silicon was spent on it
+
+I proposed that the two-card split was switching this off. **It is not.** Fable-DSpark
+checked real GLM split serve logs on the box before authorising a window:
+
+```
+print_info: arch       = glm-dsa
+print_info: model type = 744B.A40B
+(layer assignment: 218 CUDA0 / 221 CUDA1  -> genuinely split)
+resolve_fused_ops: resolving fused Lightning Indexer support:
+resolve_fused_ops: Lightning Indexer enabled
+```
+
+Enabled, on a real split, and three other logs agree. Zero `is assigned to device`
+warnings anywhere on the box.
+
+**Why the mismatch cannot fire.** The scheduler places a node on the device holding its
+weights, and `indexer_score` for layer `il` is built from layer `il`'s own tensors, so
+`device_fused == dev_layer(il)` by construction. A layer-split never triggers it. The
+guard exists for genuine missing-backend-support cases, not for tensor splits.
+
+**So the fused indexer is already ON and the compute-buffer ceiling has another cause.**
+The mechanism above is still worth understanding, and the guard's break-on-first-mismatch
+plus disable-globally behaviour is still real and still a hazard for other fused ops. But
+it is not what is capping this context, and I should have looked for an existing log
+before proposing a window. The answer was on disk the whole time.
