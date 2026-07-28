@@ -238,3 +238,44 @@ the K path is genuinely free.
 **Still true from the first pass:** upstream rejected the PR; the weight-format gain
 over our types is modest. The value is the KV formats and the two ideas above, not
 the weight quants.
+
+---
+
+## StreamIndex scoping (2026-07-29): the 1M-context indexer lane, measured claims
+
+From arXiv:2605.02568 directly, not the sweep's summary.
+
+**What it is.** A chunked partition-merge top-k driver for sparse-attention
+indexers. Instead of materializing the full `[B, S, H_I, T]` score matrix, it
+streams chunks and merges top-k results. This is EXACTLY the tensor that we
+identified as GLM-DSA's compute-buffer ceiling (the indexer score tensor that FA
+never covers).
+
+**Measured claims (theirs, H200):**
+- 1,048,576 context at **6.21 GB peak HBM**, where the materialize approach OOMs
+  already at 65,536 (a 256 GB intermediate at V4-Flash dims)
+- Set-overlap recall vs materialized ground truth: bit-exact at small S,
+  **0.9980 minimum recall** across their sweeps
+- End-to-end at S=262,144 with a TileLang attention kernel: 1.97 s at 18.56 GB
+  peak, where materialize OOMs
+
+**Reference implementation:** Triton, `github.com/RightNow-AI/StreamIndex`,
+targets H200.
+
+**Their own stated limitation, keep it honest:** "Our contribution targets the
+indexer step; we make no claim of a faster attention kernel or of real-checkpoint
+end-to-end behavior." So it is an indexer-memory fix, not an attention speedup.
+
+**Port considerations for us:**
+1. Triton is Python-side; llama.cpp needs it as a CUDA (or Metal) kernel. 349 LOC
+   of Triton is a readable spec, not a drop-in.
+2. The recall caveat: 0.9980 minimum is NOT bit-exact at large S. For a top-k
+   indexer feeding sparse attention, a 0.2% index miss is probably benign but must
+   be MEASURED on GLM output, not assumed (cell zero: compare generations, not
+   just recall).
+3. Convergence with Fable-DSpark's DSA lane: their fairydreaming sparsemma arm
+   validates the sparse top-k FA path on Blackwell (2888/2888). StreamIndex would
+   feed that same path with a bounded-memory indexer. The two compose.
+4. The realistic sequencing: first re-measure our ACTUAL compute buffer on
+   GLM-5.2-ours-IQ1_S (provenance of the 22.8 GiB figure is bad), then decide
+   whether the indexer term is still the binding one before porting anything.
