@@ -95,3 +95,96 @@ Scaling the same math: 64K -> dense 5.9 GB vs 0.36 GB (16x); 512K -> 47.1 GB vs 
 Sources: [DeepSeek-V3.2 paper](https://arxiv.org/html/2512.02556v1), [V3.2-Exp repo](https://github.com/deepseek-ai/DeepSeek-V3.2-Exp), [V3.2-Exp config](https://huggingface.co/deepseek-ai/DeepSeek-V3.2-Exp/blob/main/config.json), [official announcement](https://api-docs.deepseek.com/news/news250929/), [VentureBeat](https://venturebeat.com/ai/deepseeks-new-v3-2-exp-model-cuts-api-pricing-in-half-to-less-than-3-cents), [GLM-5.2 model card](https://huggingface.co/zai-org/GLM-5.2), [GLM-5.2 config](https://huggingface.co/zai-org/GLM-5.2/blob/main/config.json), [GLM-5.2 blog](https://huggingface.co/blog/zai-org/glm-52-blog), [GLM-5 paper](https://arxiv.org/html/2602.15763v1), [transformers glm_moe_dsa](https://huggingface.co/docs/transformers/model_doc/glm_moe_dsa), [IndexCache](https://arxiv.org/abs/2603.12201), [NSA](https://arxiv.org/html/2502.11089v1), [MoBA](https://arxiv.org/html/2502.13189v1), [vLLM day-0 blog](https://blog.vllm.ai/2025/09/29/deepseek-v3-2.html), [vLLM #31473](https://github.com/vllm-project/vllm/issues/31473), [vLLM #45317](https://github.com/vllm-project/vllm/issues/45317), [LMSYS V3.2](https://www.lmsys.org/blog/2025-09-29-deepseek-V32/), [LMSYS V4](https://www.lmsys.org/blog/2026-04-25-deepseek-v4/), [SGLang GLM-5.2 cookbook](https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2), [SGLang V3.2 docs](https://docs.sglang.io/basic_usage/deepseek_v32.html), [FlashMLA](https://github.com/deepseek-ai/FlashMLA), [DeepGEMM PR #200](https://github.com/deepseek-ai/DeepGEMM/pull/200), [TileLang examples](https://github.com/tile-ai/tilelang/tree/main/examples/deepseek_v32), [TensorRT-LLM sparse attention](https://nvidia.github.io/TensorRT-LLM/latest/features/sparse-attention.html), [KTransformers SOSP'25](https://madsys.cs.tsinghua.edu.cn/publication/ktransformers-unleashing-the-full-potential-of-cpu/gpu-hybrid-inference-for-moe-models/), [glm-5.2-4090](https://github.com/renning22/glm-5.2-4090), [DeepInfra benchmarks](https://deepinfra.com/blog/deepseek-v3-2-api-benchmarks), [Raschka technical tour](https://magazine.sebastianraschka.com/p/technical-deepseek), [Raschka IndexShare note](https://sebastianraschka.com/blog/2026/glm-5-2-indexshare.html), llama.cpp: [#19460](https://github.com/ggml-org/llama.cpp/pull/19460), [#24770](https://github.com/ggml-org/llama.cpp/pull/24770), [#23346](https://github.com/ggml-org/llama.cpp/pull/23346), [#24231](https://github.com/ggml-org/llama.cpp/pull/24231), [#25407](https://github.com/ggml-org/llama.cpp/pull/25407), [#25917](https://github.com/ggml-org/llama.cpp/pull/25917), [#21458](https://github.com/ggml-org/llama.cpp/pull/21458), [#21149](https://github.com/ggml-org/llama.cpp/pull/21149), [#24162](https://github.com/ggml-org/llama.cpp/pull/24162), [discussion #21183](https://github.com/ggml-org/llama.cpp/discussions/21183), [issue #24730](https://github.com/ggml-org/llama.cpp/issues/24730), retrofit papers: [SeerAttention](https://github.com/microsoft/SeerAttention), [SpotAttention](https://arxiv.org/html/2606.22874v1), [MISA](https://arxiv.org/pdf/2605.07363), [HISA](https://arxiv.org/pdf/2603.28458), [StreamIndex](https://arxiv.org/pdf/2605.02568), [MTraining](https://arxiv.org/pdf/2510.18830), [Sparse Frontier](https://arxiv.org/pdf/2504.17768), [GVR top-k](https://arxiv.org/pdf/2604.22312), [MLX GLM-5.2 quant](https://huggingface.co/avlp12/GLM-5.2-Alis-MLX-Dynamic-2.56bpw), [Kili V3.2 analysis](https://kili-technology.com/blog/data-story-deepseek-v3-2), [vLLM DSA thread](https://x.com/vllm_project/status/1972617272901644345).
 
 One action-relevant headline beyond the brief: llama.cpp merged GLM-5.2 indexer support (#25407) on 2026-07-24, four days ago. The premise "llama.cpp runs dense MLA and ignores the indexer" is now true only for builds older than that. What merged is the correctness path (indexer + top-k masking, currently slower than dense); the speed win waits on the sparse flash-attention kernel in open PR #25917 by fairydreaming.
+---
+
+## 9. Implementation status: gathered top-k attention, ported and validated (2026-07-29)
+
+This section records what was built after the research above, and corrects two things the
+research phase got wrong.
+
+**The waste, confirmed in our own source rather than inferred.** `llm_graph_context::build_attn`
+for the DSA input (`src/llama-graph.cpp`, the `llm_graph_input_attn_k_dsa` overload) does exactly
+this: `ggml_fill(kq_mask, -INFINITY)` over the full `[n_kv, n_batch]` mask, `ggml_set_rows` to
+punch zeros at the top-k indices, `ggml_add` to combine with the causal mask, then
+`build_attn_mha` runs stock flash attention over **all** n_kv keys. The shortlist is computed and
+then thrown away. This is the mask-shaped vs gather-shaped distinction from Sec. 6, now verified
+in the tree we serve from.
+
+**What was ported.** `GGML_OP_FLASH_ATTN_EXT_DSA` with a CUDA implementation
+(`ggml/src/ggml-cuda/fattn-dsa.cu`), transplanted from ik_llama.cpp's `dsa_attn.cu`
+(MIT, Iwan Kawrakow): gather mask columns, gather K rows (and V rows unless V aliases K),
+stage Q to f16, batched `cublasHgemmStridedBatched` for KQ, f16 softmax, second batched gemm for
+KQV, copy out to f32, in chunks of at most 32 query rows. The mainline precedent for an
+FA-family op carrying a sixth source tensor is `ggml_flash_attn_ext_banded`, which is what made
+the op-registration side of this low risk.
+
+**One genuine bug found in the source kernel.** ik's `dsa_attn.cu` never calls `cublasSetStream`,
+so its gemms run on the default stream while the surrounding kernels run on the backend's stream.
+Our port sets it. ik does call it in `indexer_topk.cu`, so this reads as an oversight rather than
+intent.
+
+**Numerical validation (48/48 case-runs, 9 shapes x 4 seeds).** Against stock `ggml_flash_attn_ext`
+with a mask that unmasks the identical key set, and independently against an fp64 host reference:
+
+| comparison | rel_L2 range |
+|---|---|
+| gather vs stock FA | 6.9e-4 to 9.9e-4 |
+| gather vs fp64 reference | 5.9e-4 to 9.1e-4 |
+| stock FA vs the same fp64 reference | 3.1e-4 to 4.1e-4 |
+
+Max absolute difference 2.4e-4 on outputs of scale ~0.15. The MLA case that matters
+(d576/512 with V constructed as a view into K, at 8, 40 and 128 head configurations) is covered.
+Sensitivity control: a reference computed over a **different** random top-k set scores rel_L2
+1.3 to 3.4, three to four orders of magnitude worse, so the test is measuring something. Mask
+entries at non-selected positions were poisoned with random values in [-8, 8], indices were
+shuffled rather than sorted, and `dst` was pre-filled with NaN so a partial write cannot pass.
+
+**Where the equivalence claim is genuinely false: duplicate indices.** If the indexer emits a
+repeated key in a row, the gather double-counts it and the mask formulation cannot. Measured
+rel_L2 for that case is 0.335. `ggml_top_k` returns distinct positions and the graph-side guard
+forces `n_kv >= 4*top_k` so the selection never clamps, but this is a live precondition on
+anything that ever replaces the top-k source, not a theoretical one.
+
+**Residual error is the fp16 floor, not a logic error.** Both gemms use fp16 accumulate; one fp16
+ulp is 4.9e-4 relative. Scaling confirms the mechanism: head dim 128 to 576 barely moved the
+error, but top_k 256 to 512 moved it by about sqrt(2), consistent with accumulation growth in the
+KQV reduction. Extrapolating (labelled as extrapolation) to the real top_k of 2048 gives roughly
+1.5e-3 per layer, which on a 1-bit-class quant across all layers is worth measuring rather than
+assuming. `cublasGemmStridedBatchedEx` with `CUBLAS_COMPUTE_32F` removes it.
+
+**A latent aliasing bug, fixed.** `dsa_v_is_k_view()` decided that V aliases K purely from the
+pointer landing inside K's first row, without checking row stride. The reuse path then indexes
+the gathered K buffer with K's stride, so a V view based inside K's first row with a different
+`nb[1]` would silently gather wrong rows with no guard tripping. It now returns false on stride
+mismatch, falling back to the slower separate-V gather rather than aborting.
+
+**Wiring.** The path is selected at graph-build time, where n_kv, top_k and tensor types are all
+known, so a shape the backend would refuse never reaches it. Guards mirror the CUDA
+`supports_op` conditions one for one. Selection is gated on `LLAMA_DSA_GATHER=1` so a single
+binary runs both arms and an A/B carries no build-difference confound.
+
+**Constraint worth stating plainly: the gather path requires an F16 KV cache.** `-ctk q8_0` and
+below are refused by the type guard. This trades KV bytes for attention work, which cuts against
+the FIT-first priority, so whether it is net positive is an open measurement rather than a claim.
+
+### Correction to Sec. 6: the fused Lightning Indexer is enabled on our split, not disabled
+
+A hypothesis circulated that `resolve_fused_ops` (`src/llama-context.cpp`) disables the fused
+Lightning Indexer globally on a multi-GPU split, because it breaks on the first
+`device_fused != dev_layer(il)` mismatch and then sets `enabled = false` for the whole model.
+
+This is refuted by evidence already on disk. `server_greedy_clean.log` from the MTP PR work is a
+genuine two-card GLM-5.2 run (`arch = glm-dsa`, `model type = 744B.A40B`, layers assigned across
+both CUDA0 and CUDA1) and logs `resolve_fused_ops: Lightning Indexer enabled`. Three other server
+logs agree, and no `is assigned to device` warning appears anywhere.
+
+The mechanism explains why it cannot fire: the scheduler places a node on the device holding its
+weights, and `indexer_score` for layer `il` is built from layer `il`'s own tensors, so
+`device_fused == dev_layer(il)` by construction. A layer split never separates them. The guard
+exists for genuinely missing backend support, not for tensor splits.
+
+This matters because the `[n_kv, 32, n_ubatch]` F32 score tensor blamed for the compute-buffer
+ceiling exists **only in the unfused branch** of `src/models/glm-dsa.cpp`. The fused branch is a
+single `ggml_lightning_indexer` call. At 128K context and ubatch 512 that is roughly 8.6 GB
+against 0.27 GB, a factor of 32, and we are already on the cheap side. Any compute-buffer ceiling
+derived from the unfused shape needs re-deriving on the fused graph.
