@@ -286,3 +286,44 @@ single definition used by both the launcher's assert and the guard so they canno
 previously aborting shapes (12,288 through 16,384) are now rejected cleanly at `supports_op` with
 zero aborts, and 2,048/12,032 still run correctly. Two permanent regression cases added
 (14/14 pass in both accumulate arms).
+
+### Head-to-head: upstream PR #25917 (mma sparse) vs the cuBLAS gather (2026-07-29)
+
+fairydreaming's draft PR #25917 modifies the stock MMA flash-attention kernel to gather at
+tile-load time (`KV + top_k[i]*stride_KV`), activated by `ggml_flash_attn_ext_add_top_k` on the
+standard FA call. Architecturally attractive: per-token top-k rows (`ncols1 = 1`), graceful CPU
+fallback (the CPU backend ignores `src[5]` and computes the mask semantics), and his
+`llama-graph.cpp` wiring covers the glm-dsa overload. The branch was brought into the fork as
+`fable-sparse-mma-25917`, built, and his backend-ops suite passed 2888/2888 on the box's
+Blackwell card, including his sparse top-k cases.
+
+Measured head-to-head at GLM shapes (DK 576 / DV 512, V a view into K, 64 heads MQA, top_k 2048,
+same protocol and PRNG as the gather benchmark, zero timing overlap with other GPU work):
+
+| shape | mma sparse | cuBLAS gather | verdict |
+|---|---|---|---|
+| decode, any n_kv (both flat) | 0.0293 ms | 0.0188 ms | gather 1.56x faster |
+| prefill 32K | 4.94 ms | 3.06 ms | gather 1.62x faster |
+| prefill 128K | 7.48 ms | 3.63 ms | gather 2.06x faster |
+
+**The mma-sparse path loses at every measured GLM shape.** The reason is the cost of entering
+the sparse mode: `use_top_k` forces `ncols1 = 1` and disables cp_async and multi-stage
+pipelining, giving up roughly 7.4x per-tile efficiency. Net efficiency lands at about 13 percent
+of the theoretical n_kv/top_k work ratio, against 18 to 48 percent for the gather - the gather is
+roughly twice as close to theory. His prefill gate also fires too early on this hardware: at
+n_kv 8192 and top_k 2048 the sparse path is a 1.86x slowdown against the mask path it replaces
+(the crossover is a ratio of about 8, i.e. 32K at top_k 2048). The kernel is numerically clean
+everywhere (22/22 shapes, and a dense-fingerprint control proved the sparse path was genuinely
+active, not silently falling back). The defect is gate tuning and pipeline loss, not correctness,
+matching the TODO in his own dispatch code.
+
+Conclusion: the cuBLAS gather stays the merge candidate. The "close the GEMM efficiency gap"
+lane resolves as parked - the alternative that promised to close it measures worse end to end.
+
+**A tree-level finding with strategic weight, from the benchmark's own controls:** the sparsemma
+tree's mask path is itself 1.2 to 1.5x faster than the dsaport tree's mask at the same shapes
+(42.98 vs 66.36 ms at 128K prefill) - upstream's flash attention improved between the two bases.
+A model-level A/B run in the dsaport tree would therefore compare the gather against a stale
+mask baseline and overstate the win. Consequence: the gather commits were cherry-picked onto the
+current fleet base (`fable-dsa-fleet` = fleet-sync a91c47d49 + the 8 DSA commits, all clean), so
+the A/B binary is the merge candidate itself, with the newest mask path as the honest baseline.
