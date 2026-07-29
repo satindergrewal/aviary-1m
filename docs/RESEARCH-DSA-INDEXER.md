@@ -327,3 +327,36 @@ A model-level A/B run in the dsaport tree would therefore compare the gather aga
 mask baseline and overstate the win. Consequence: the gather commits were cherry-picked onto the
 current fleet base (`fable-dsa-fleet` = fleet-sync a91c47d49 + the 8 DSA commits, all clean), so
 the A/B binary is the merge candidate itself, with the newest mask path as the honest baseline.
+
+
+### Model-level A/B on the real GLM-5.2 744B: the gather path end to end (2026-07-29)
+
+Harness: one binary (`fable-dsa-fleet`), two env-gated arms, identical weights
+(IQ1_S + blk.78 q4_K), F16 KV both arms, greedy, six short prompts plus one deep needle leg
+per context size. Path proof per arm: kernel-execution line
+(`ggml_cuda_flash_attn_ext_dsa: EXEC (n_kv=8448, top_k=2048, f32acc=1)` - engages at the first
+256-block past the 4x2048 guard) and graph structure (6510 vs 7134 nodes; the 624 delta is
+exactly 78 DSA layers x 8 mask-construction ops).
+
+| depth of needle leg | mask decode t/s | gather decode t/s | gain | mask prefill | gather prefill |
+|---|---|---|---|---|---|
+| 24K (ctx 32K) | 43.91 | 50.84 | +15.8% | 412.9 | 438.6 |
+| 50K (ctx 64K) | 38.51 | 49.53 | +28.6% | 345.9 | 419.1 |
+| 100K (ctx 128K) | 29.30 | 49.68 | +69.6% | 243.0 | 385.9 |
+
+**The gather arm's decode is flat across the sweep - 50.8 / 49.5 / 49.7 t/s from 24K to 100K
+deep - while the mask arm degrades linearly.** Decode stops paying a context-depth penalty at
+these depths. Compute buffer at 128K: 1552/1548 MiB against 1692/1716 (the gather buffer grows
+with ubatch only). Needle found in both arms at every size; short prompts (below the guard
+threshold, mask path in both arms) byte-identical.
+
+Long-leg outputs differ between arms at every size (same length class, both correct on the
+needle): the arms are equivalent only to fp tolerance and 64 greedy tokens through 79 layers can
+flip an argmax. Quality parity therefore requires the NIAH-sweep and loop-rate gate rather than
+hash identity; that gate is a merge precondition.
+
+One instrumentation note: a one-shot graph-build INFO line for path proof never surfaced because
+llama-context mutes the logger during probe reserves and the static latched during the muted
+window. The execution-time fprintf proof replaced it. The harness grep for the exec line also
+misfired twice while the line was demonstrably in the file; the structural node-count proof is
+the load-bearing check.
