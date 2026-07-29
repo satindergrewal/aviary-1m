@@ -360,3 +360,44 @@ llama-context mutes the logger during probe reserves and the static latched duri
 window. The execution-time fprintf proof replaced it. The harness grep for the exec line also
 misfired twice while the line was demonstrably in the file; the structural node-count proof is
 the load-bearing check.
+### The context ceiling, measured (2026-07-29)
+
+Read off the 128K model-level A/B loads (`GLM-5.2-ours-IQ1_S-prot-blk78q4`, two RTX PRO 6000,
+F16 KV, ubatch 512). No dedicated measurement run; these numbers are in the serve logs.
+
+| component | measured |
+|---|---|
+| weights | 161.7 GiB (78,992 + 86,579 MiB) |
+| KV at 128K | 13.58 GiB total, i.e. **108.6 KiB per token** |
+| main KV (MLA latent, K only, V is a view into K) | 88.9 KiB/token, matches 576 x 2 x 79 exactly |
+| indexer KV | 19.8 KiB/token, matches 128 x 2 x 79 exactly |
+| compute buffer, gather path | 1,084 / 1,820 / 3,100 MiB at 32K / 64K / 128K |
+| compute buffer, mask path | 1,484 / 2,124 / 3,408 MiB at the same sizes |
+| VRAM in use at 128K | 183,894 of 194,494 MiB, leaving 10.4 GiB |
+
+**KV dominates the compute buffer by more than four to one at 128K** (13.6 GiB against 3.1).
+Any ceiling analysis that treats graph scratch as the binding constraint on this model is
+looking at the wrong term.
+
+The compute buffer scales with context as well as with ubatch: at fixed ubatch 512 it grew from
+1,084 to 3,100 MiB across a 4x context increase. A linear fit on the two widest points gives
+roughly **540 MiB + 20.0 MiB per 1K of context**.
+
+**Ceiling arithmetic.** After weights, 28.2 GiB remains for KV plus compute:
+
+| KV precision | maximum context | compute buffer there | decode behaviour |
+|---|---|---|---|
+| F16, the only precision the gather kernel accepts | **~221K** | 4.8 GiB | flat, about 50 tokens/s at any depth |
+| q8_0, mask path only | **~366K** | 7.7 GiB | degrades linearly, 29 tokens/s at 100K deep |
+
+So the gather path currently trades roughly 145K of maximum context for decode that does not
+degrade with depth. Neither column dominates the other.
+
+**The change that removes the trade.** The kernel refuses quantized KV only because the gather
+copies raw f16 rows. It already touches every selected element exactly once while gathering, so
+dequantizing in that same pass costs close to nothing. Teaching `fattn-dsa.cu` to dequantize on
+gather would give both the larger context and the flat decode rather than forcing a choice, and
+it moves the ceiling itself rather than the clock.
+
+Labelled as extrapolation rather than measurement: the fitted compute buffer at 1M context is
+about 20.9 GiB.
