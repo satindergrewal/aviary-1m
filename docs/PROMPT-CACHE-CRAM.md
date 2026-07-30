@@ -113,3 +113,80 @@ context overflow (19,277-token prompts into `-c 16384`). Fixed: the request help
 non-zero and prints the server's error body, and the arm prints
 `ARM ... HAD FAILED REQUESTS -- results are NOT valid`. Same false-pass family as the
 `grep -c` misread and `| tail -3 && echo PUSHED`.
+
+---
+
+# Addendum: the lookup is prefix-based, and its selection rule matters once `-cram` is raised
+
+Source: `tools/server/server-task.cpp:1742-1790` (`server_prompt_cache::load`).
+
+```c
+const int   lcp_cur    = it->prompt.tokens.get_common_prefix(tokens_new); // LONGEST COMMON PREFIX
+const float f_keep_cur = float(lcp_cur) / it->prompt.tokens.size();  // how much of the CACHED prompt survives
+const float sim_cur    = float(lcp_cur) / tokens_new.size();         // how much of the NEW prompt is covered
+
+if (f_keep_cur < 0.25f) { continue; }                        // "don't trash large prompts"
+if (f_keep_best < f_keep_cur && sim_best < sim_cur) { ... }  // must beat the incumbent on BOTH
+```
+
+**1. It is not exact-match — it is longest-common-prefix.** This is the important correction to
+the 3-request harness above, which only tested *exact* repeats. The real agentic pattern is a
+prompt that **grows** each turn, and that pattern *is* served: turn N+1 reuses turn N's cached
+prefix and prefills only the delta. So raising `-cram` helps the actual workload, not just an
+artificial repeat.
+
+**2. There is a 25% floor.** A cached entry is skipped unless at least a quarter of it is a
+prefix of the new prompt. Restoring a 100K state to serve a 10K prompt would waste the
+remainder, so the heuristic refuses. Consequence: a long session that gets *truncated* or
+restarted short will not reuse the long entry.
+
+**3. The selection is greedy and order-dependent — and this only becomes relevant at
+larger `-cram`.** The winner must beat the incumbent on **both** `f_keep` and `sim`
+(`&&`, not a combined score), and both bests are updated during the scan. A candidate that is
+strictly better on `sim` but marginally worse on `f_keep` is skipped, so which entry wins can
+depend on `states` iteration order. With the shipped 8 GiB cap and 64K states the pool holds
+one entry and this never matters. **The recommendation to raise `-cram` is precisely what makes
+it matter** — worth watching at `-lv 4`, where every candidate is printed with its `lcp`,
+`f_keep` and `sim`.
+
+## Restore cost is symmetric with save
+
+`llama_state_seq_set_data_ext` at `:1780` copies the state back in. Measured from the hit arm:
+**~170 ms for 2,712 MiB**, matching the 16.0 GB/s save figure. So a GLM 64K state costs ~368 ms
+each way. Still trivially better than a full re-prefill.
+
+## Where the hit-request wall time actually goes
+
+The 0.45 s hit is fully accounted for, and **prefill is the smallest part**:
+
+```
+prompt eval   26.59 ms /  1 token     <- server forces >=1 token: "n_past was set to 19276"
+eval         147.14 ms /  8 tokens    <- generating the 8 output tokens (18.4 ms/tok)
+restore      ~170 ms                  <- llama_state_seq_set_data_ext, 2712 MiB
+tokenize        5.6 ms                <- measured separately, see below
+```
+
+So the honest headline for a user is the **64× wall-clock**, not the 1,024× prefill number:
+generation and the restore copy are irreducible. Both are reported above for that reason.
+
+## Tokenization is a non-issue — measured, and it closes a board item
+
+`tokenize_mixed` (`server-common.cpp:627`) calls `common_tokenize()` on the whole string every
+request. There is **no cache, no memo, no prefix reuse** — the quarantined claim is true as a
+statement about the code. It is also irrelevant to latency:
+
+| chars | tokens | ms | tok/s |
+|---|---|---|---|
+| 1,954 | 908 | 0.5 | 1.7 M |
+| 9,770 | 4,734 | 1.7 | 2.8 M |
+| 39,080 | **19,277** | **5.6** | **3.4 M** |
+
+Linear, and 5.6 ms for a 19K-token prompt. Extrapolated to 200K that is ~58 ms. **This closes
+the "tokenizer multi-core / redundant-pass deletion, ~3× from deletion alone" board item as a
+latency lever** — 3× of 5.6 ms is a 3.7 ms saving. Measured on the `/tokenize` endpoint,
+CPU-only (`-ngl 0`), best of 3 per size, 5 reps at full size (5.6/5.6/5.7/5.7/5.8 ms).
+
+**Escape hatch worth knowing anyway:** `tokenize_mixed` accepts an *array* mixing strings and
+pre-tokenized integer token IDs (`:633-655`). A client can tokenize a stable prefix once and
+send IDs — client-side prefix reuse with no llama.cpp change. Given the 5.6 ms measurement,
+there is no reason to bother.
