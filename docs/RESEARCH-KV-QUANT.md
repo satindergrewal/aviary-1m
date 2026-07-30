@@ -297,3 +297,68 @@ for cases like `--no-kv-offload`".
 - Note also that GLM_DSA's main attention is `GGML_OP_FLASH_ATTN_EXT_DSA`, which **aborts
   loudly** on an unsupported configuration (`ggml-cuda.cu:2374-2377`) rather than falling back
   silently — a different and safer failure mode than plain FA.
+
+---
+
+## Runtime witness (2026-07-30): `-fa on` turns a loud startup failure into a running server
+
+The section above was **source-only**. Now measured. **Vehicle: Qwen3-4B Q8_0, Mac Metal,
+`llama.cpp-dspark-metal` @ b874d7414 — not CUDA, not GLM.** The probe code
+(`src/llama-context.cpp`) is backend-agnostic; the *set* of supported KV types is not.
+
+Harness `tools/prompt-cache/fa_probe_ab.sh`, six arms. Witness: presence/absence of
+`resolve_fused_ops` Flash-Attention output, plus whether the server came up.
+
+| arm | KV types | `-fa` | came up | FA resolution line |
+|---|---|---|---|---|
+| auto_f16 | f16/f16 | auto | yes | `Flash Attention enabled` |
+| on_f16 | f16/f16 | on | yes | **none — probe never ran** |
+| auto_q80kv | q8_0/q8_0 | auto | yes | `Flash Attention enabled` |
+| on_q80kv | q8_0/q8_0 | on | yes | **none** |
+| **auto_mixed_kv** | **q8_0/q4_0** | **auto** | **NO** | `Flash Attention not supported, set to disabled` |
+| **on_mixed_kv** | **q8_0/q4_0** | **on** | **yes** | **none** |
+
+### 1. The probe runs only under `auto` — confirmed
+
+Every `auto` arm logs a Flash-Attention resolution. Every `on` arm has **no Flash-Attention line
+at all**, going straight from `flash_attn = enabled` to the Gated Delta Net probes. Exactly what
+`if (cparams.auto_fa)` predicts.
+
+### 2. The CPU-offload mechanism is real, and the probe names it
+
+```
+W resolve_fused_ops: layer 0 is assigned to device MTL0 but Flash Attention is assigned
+                     to device CPU (usually due to missing support)
+W resolve_fused_ops: Flash Attention not supported, set to disabled
+```
+
+**"Flash Attention is assigned to device CPU"** — the scheduler really did place the attention
+node on the CPU backend, and the probe caught it. The reconstruction in the section above was
+correct.
+
+### 3. ★ The footgun is worse than "the guard is skipped"
+
+Under `-fa auto` with the bad combo, the probe disables FA, and then the
+`V cache quantization requires flash_attn` guard fires:
+
+```
+E llama_init_from_model: failed to initialize the context:
+      quantized V cache was requested, but this requires Flash Attention
+```
+
+**The server refuses to start. Loud and safe.**
+
+Under `-fa on` with the *same* combo, the server **comes up** — no probe, FA forced on, in a
+configuration `auto` would have rejected outright.
+
+So `-fa on` does not merely remove a warning. **It converts a startup failure into a silently
+running server.** That is the practical case for sweeping KV-quant types under `-fa auto`.
+
+### Boundary of this result
+
+- Proven: the probe is `auto`-only; the CPU-assignment detection works; `on` starts a server that
+  `auto` refuses.
+- **Not** proven: which combos **CUDA** compiled. `q8_0/q4_0` is unsupported *on Metal* here;
+  on CUDA with `GGML_CUDA_FA_ALL_QUANTS=OFF` the `K->type != V->type` rule at `fattn.cu:450`
+  predicts the same outcome, but that is an expectation, not a measurement.
+- Our live `-ctk q4_0 -ctv q4_0` (K == V, both in the compiled set) remains unaffected.
