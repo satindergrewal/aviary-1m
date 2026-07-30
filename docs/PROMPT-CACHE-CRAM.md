@@ -190,3 +190,56 @@ CPU-only (`-ngl 0`), best of 3 per size, 5 reps at full size (5.6/5.6/5.7/5.7/5.
 pre-tokenized integer token IDs (`:633-655`). A client can tokenize a stable prefix once and
 send IDs — client-side prefix reuse with no llama.cpp change. Given the 5.6 ms measurement,
 there is no reason to bother.
+
+---
+
+# Addendum 2: growing-prompt reuse MEASURED (the agentic case), and it compounds with context
+
+Addendum 1 asserted growing-prompt reuse from a **source read**. That was a gap, so it is now
+measured. Harness `tools/prompt-cache/cram_growing.sh`, raw records `req_growing.jsonl`.
+
+**Design point that makes or breaks this test:** every growing turn is preceded by a *different*
+prompt that displaces the slot. Without that displacement the slot still holds the prefix and
+ordinary slot-level `n_past` continuation would serve the request — the measurement would credit
+the prompt cache for something the slot did.
+
+| request | prefilled | total | reused | log |
+|---|---|---|---|---|
+| T1 base (cold) | 5,116 | 5,116 | — | — |
+| D1 displace | 19,610 | 19,610 | — | pushes T1 into the cache |
+| **T2 grown** | **6,237** | **11,353** | **5,116 = 45.1%** | `f_keep = 0.999, sim = 0.451` |
+| **D2 repeat** | **1** | **19,610** | **~100%** | `f_keep = 1.000, sim = 1.000` |
+| **T3 grown more** | **6,236** | **17,589** | **11,353 = 64.5%** | `f_keep = 1.000, sim = 0.645` |
+
+The logged metrics match the arithmetic exactly — `5116/11353 = 0.451`, `11353/17589 = 0.645` —
+so the mechanism is pinned, not inferred. Each growing turn prefills **only its delta**
+(~6,237 tokens both times). D2, an exact repeat, went **28.256 s → 0.305 s = 93× wall**.
+
+## ★ The property that matters for a max-context mission
+
+**Reuse rose 45.1% → 64.5% as the session grew**, because the delta is constant while the prefix
+grows. The win therefore *increases* with context length:
+
+| session | 2K turn delta | served from cache |
+|---|---|---|
+| 32K | 2K | 93.8% |
+| 64K | 2K | **96.9%** |
+| 128K | 2K | 98.4% |
+| 246K (our new ceiling) | 2K | **99.2%** |
+
+This is the opposite of a diminishing return: the longer the context we push, the more of every
+turn the prompt cache can serve. It is the cheapest lever we have on long-context TTFT, and it
+is a flag.
+
+## ★★ And this is where the two findings compound against us
+
+Growing-prompt reuse **requires the cached entry to survive displacement**. In this run the three
+states were 720 + 1,597 + 2,758 MiB = 5,075 MiB, all resident under `-cram 8192`, so nothing was
+evicted and reuse worked.
+
+At the approved GLM config a single 64K state is **6,010 MiB** and the cap is **8,192 MiB**. One
+state fits; the second save evicts the first. So the default does not merely lose the
+exact-repeat hit documented above — **it also destroys the growing-session reuse that would
+otherwise serve ~97% of every turn at 64K**, and it pays ~368 ms per save for the privilege.
+
+That is the argument for `-cram 12288`, now resting on measurement rather than on a source read.
