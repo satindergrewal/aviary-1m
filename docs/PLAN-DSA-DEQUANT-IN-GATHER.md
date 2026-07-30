@@ -158,6 +158,23 @@ does. This was the main correctness risk and it is retired by that empty grep.
 Related settled fact: `attn_rot_k = 1` on both DSA caches because `576 % 64 == 0`
 ([[fa-on-disables-the-guard]] records the retraction of my earlier "q4_0 is unrotated" error).
 
+## AS IMPLEMENTED — where `42942e19b` differs from Steps 1-3 above
+
+Steps 1-3 are the design sketch. The committed code differs in two deliberate ways; **follow the
+branch, not the sketch**:
+
+1. **`ne = 4`, not 2.** Matches `lightning-indexer.cu:92`, which dequantizes K the same way.
+   With `nk = 576` that is 144 groups of 4 across a 256-thread block — exact coverage, no tail
+   branch, since `nk % 32 == 0` implies `nk % 4 == 0`.
+2. **`dsa_kv_type_supported()` allows only F16 / Q8_0 / Q4_0**, not the full seven-type list.
+   The predicate is deliberately kept in lockstep with `dsa_launch_prepare_kv`'s `switch`, so the
+   gate can never admit a type the dispatcher would `GGML_ABORT` on. Adding Q4_1/Q5_0/Q5_1/BF16
+   means adding both together — and BF16 needs `:657` read first, since `get_dequantize_V` routes
+   it through `dequantize_V_bf16<float, ne>` with a hard-coded `float`.
+
+Also as implemented: the helper is named `k_dsa_prepare_one_batch_kv_q` and takes `type_KV` (it
+serves both K and V launch sites, since for non-MLA models V is a separate tensor).
+
 ## Falsifiable acceptance test
 
 1. **Correctness first.** `-ctk q8_0 -ctv q8_0` under **`-fa auto`** (not `-fa on` — see
