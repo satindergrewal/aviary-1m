@@ -214,3 +214,86 @@ Yes, moderately - the evidence is consistent:
 5. **For the MLA fleet (GLM/DeepSeek): stay q8_0 on the latent, high-precision RoPE part, build after PR #25202** - the latent is already compressed; below 8-bit is where MLA-specific degradation starts, and the absolute VRAM win is small anyway. (Structural conversions - TransMLA/MHA2MLA/X-EcoMLA - and DMS are the strongest *training-required* options if a finetune budget ever appears; MHA2MLA's 0.3-0.6% tokens is the cheapest of those.)
 
 Sources: key URLs are inline per entry. Primary community threads: [llama.cpp #23470](https://github.com/ggml-org/llama.cpp/discussions/23470), [#20969](https://github.com/ggml-org/llama.cpp/discussions/20969), [#21385](https://github.com/ggml-org/llama.cpp/issues/21385), [PR #7412](https://github.com/ggml-org/llama.cpp/pull/7412), [PR #25202](https://github.com/ggml-org/llama.cpp/pull/25202); engine practice: [vLLM FP8 KV blog](https://vllm-project.github.io/2026/04/22/fp8-kvcache.html), [NVIDIA NVFP4 KV blog](https://developer.nvidia.com/blog/optimizing-inference-for-long-context-and-large-batch-sizes-with-nvfp4-kv-cache/), [SqueezeBits vLLM-vs-TRT-LLM KV quant](https://blog.squeezebits.com/vllm-vs-tensorrtllm-8-kv-cache-quantization-35079), [q4_0 cliff benchmark](https://inventivehq.com/blog/kv-cache-quantization-quality-benchmark); papers: [KIVI](https://arxiv.org/abs/2402.02750), [KVQuant](https://arxiv.org/abs/2401.18079), [QAQ](https://arxiv.org/abs/2403.04643), [ZipCache](https://arxiv.org/abs/2405.14256), [GEAR](https://arxiv.org/abs/2403.05527), [CQ](https://arxiv.org/abs/2405.03917), [RotateKV](https://arxiv.org/abs/2501.16383), [CommVQ](https://arxiv.org/abs/2506.18879), [XQuant](https://arxiv.org/abs/2508.10395), [KVSink](https://arxiv.org/abs/2508.04257), [Kitty](https://arxiv.org/pdf/2511.18643), [KVTuner](https://arxiv.org/abs/2502.04420), [More-for-Keys](https://arxiv.org/abs/2502.15075), [PM-KVQ](https://arxiv.org/pdf/2505.18610), [quant-dominates-rank](https://arxiv.org/abs/2604.11501), [Palu](https://arxiv.org/abs/2407.21118), [xKV](https://arxiv.org/abs/2503.18893), [MiniCache](https://arxiv.org/abs/2405.14366), [EigenAttention](https://arxiv.org/abs/2408.05646), [CLA](https://arxiv.org/abs/2405.12981), [MLKV](https://arxiv.org/abs/2406.09297), [YOCO](https://arxiv.org/abs/2405.05254), [GQA](https://arxiv.org/abs/2305.13245), [TransMLA](https://arxiv.org/abs/2502.07864), [MHA2MLA](https://arxiv.org/abs/2502.14837), [X-EcoMLA](https://arxiv.org/abs/2503.11132), [DMC](https://arxiv.org/abs/2403.09636), [DMS](https://arxiv.org/abs/2506.05345), [SnapMLA](https://arxiv.org/abs/2602.10718), [Mooncake](https://arxiv.org/abs/2407.00079), [reasoning-quant study](https://arxiv.org/abs/2504.04823), [DeepSeek quant drop](https://arxiv.org/pdf/2505.02390); offload: [LMCache](https://github.com/LMCache/LMCache), [Dynamo KVBM](https://docs.nvidia.com/dynamo/design-docs/component-design/kvbm-design), [vLLM offloading connector](https://vllm-project.github.io/2026/01/08/kv-offloading-connector.html).
+---
+
+# Addendum (2026-07-30): the FA/KV-quant support guard, and why `-fa on` disables it
+
+Source-verified in `llama.cpp-idxfilter` (= `fleet`). Resolves the quarantined claim
+"`GGML_CUDA_FA_ALL_QUANTS` off → 25× CPU fallback": **refuted for the default path**, real but
+narrow for ours.
+
+## What our build actually compiles
+
+`build/CMakeCache.txt:656` → `GGML_CUDA_FA_ALL_QUANTS:BOOL=OFF` (upstream default,
+`ggml/CMakeLists.txt:208`). With it off, `ggml_cuda_fattn_kv_type_supported()`
+(`ggml/src/ggml-cuda/fattn.cu:338`) accepts only:
+
+| accepted | rejected when OFF |
+|---|---|
+| F32, F16, BF16, **Q4_0**, **Q8_0** | **Q4_1, Q5_0, Q5_1** |
+
+Plus a second restriction at `fattn.cu:450` — **`K->type` must equal `V->type`**:
+
+```c
+#ifndef GGML_CUDA_FA_ALL_QUANTS
+    if (K->type != V->type) { return BEST_FATTN_KERNEL_NONE; }
+#endif
+```
+
+Watch the switch fallthrough at `:344-352`: Q4_1/Q5_0/Q5_1 `return false` only because of the
+`#ifndef`; with FA_ALL_QUANTS **on** they fall through to `return true`. Easy to misread.
+
+## Why unsupported would be catastrophic — and why it normally isn't
+
+`BEST_FATTN_KERNEL_NONE` → `ggml_cuda_flash_attn_ext_supported()` (`fattn.cu:596`) →
+`ggml_backend_cuda_supports_op()` (`ggml-cuda.cu:5227`) returns **false**. The scheduler then
+has to place that attention node somewhere else, i.e. **CPU**. That is the cliff the claim
+describes.
+
+It normally does not happen, because `resolve_fused_ops()`
+(`src/llama-context.cpp:604-657`) pre-empts it. The probe is **sound**: it calls
+`graph_reserve()` to build the *real* graph with the *real* KV cache types, then for every
+fused FA node compares the device the scheduler actually assigned
+(`ggml_backend_sched_get_tensor_backend`) against the device that layer's weights live on
+(`model.dev_layer(node.il)`). On mismatch it logs
+
+```
+layer N is assigned to device X but Flash Attention is assigned to device Y
+        (usually due to missing support)
+```
+
+and sets FA **disabled** — degrading to non-FA GPU attention, not to CPU.
+
+## The catch: the guard only runs under `-fa auto`
+
+```c
+if (cparams.auto_fa) { resolve(llm_fused_op_flash_attn_probe, cparams.flash_attn); ... }
+```
+
+`cparams.auto_fa` is true only for `LLAMA_FLASH_ATTN_TYPE_AUTO` (`llama-context.cpp:282`).
+**`-fa on` sets ENABLED, so the probe never runs and the guard is gone.** Counter-intuitive:
+explicitly enabling FA *removes* a safety net that `auto` provides. `--split-mode tensor`
+also forces AUTO→ENABLED (`:3651-3654`), skipping the probe the same way.
+
+The guards at `:3661-3686` do **not** cover this — they check block-size divisibility
+(`n_embd_head_k % blck_size`) and "V quantization requires flash_attn", never kernel
+availability.
+
+Upstream flags its own blind spot in a `TODO` at `:3631`: `model.dev_layer()` is "still wrong
+for cases like `--no-kv-offload`".
+
+## Where this leaves our config
+
+`tools/serve_glm52.sh` uses **`-fa on`** with **`-ctk q4_0 -ctv q4_0`**.
+
+- **No current problem.** Q4_0 is in the compiled set and K type == V type, so both
+  restrictions pass. Nothing is falling back to CPU today.
+- **But the net is off.** Any future KV-type experiment under `-fa on` — `q5_0`, or a mixed
+  `-ctk q8_0 -ctv q4_0` — gets no probe and no warning. Under `-fa auto` the same mistake
+  produces a loud warning and clean degradation.
+- Practical rule for KV-quant work: **experiment under `-fa auto`**, pin `-fa on` only once a
+  combination is known-good. Cheap insurance for exactly the context-ceiling sweeps this doc
+  is about.
+- Note also that GLM_DSA's main attention is `GGML_OP_FLASH_ATTN_EXT_DSA`, which **aborts
+  loudly** on an unsupported configuration (`ggml-cuda.cu:2374-2377`) rather than falling back
+  silently — a different and safer failure mode than plain FA.
