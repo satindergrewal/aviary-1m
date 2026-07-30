@@ -246,81 +246,67 @@ That is the argument for `-cram 12288`, now resting on measurement rather than o
 
 ---
 
-# Addendum 3: an UNCHANGED idle slot is re-copied on every task launch (79% waste, fixable)
+# Addendum 3: RETRACTED — llama.cpp already dedups this. My measurement was wrong.
 
 **Vehicle for every measurement in this document: Qwen3-4B Q8_0, Mac Metal, `llama-server` from
 `llama.cpp-dspark-metal` @ b874d7414.** All GLM figures are arithmetic on our measured
 93.9 KiB/token, never a GLM serve log.
 
-`server-context.cpp:2393` loops over every slot on each task launch and calls `prompt_save()` on
-each non-processing one, with **no dirty-check**. Predicted waste; measured it.
+## What I claimed, and why it was wrong
 
-**First attempt was wrong and is recorded as such.** At `-np 2` I predicted N copies for N
-launches and got **2** — with two slots the parked slot is reallocated almost immediately. The
-magnitude claim needed `-np 4` so a slot can actually stay idle.
+I claimed an unchanged idle slot's state is re-copied on every task launch, that 79% of all
+prompt-cache copying was redundant, and I designed a `contains_exact()` fix. **All of that is
+withdrawn.** The fix already exists, one call deeper, and it works.
 
-`tools/prompt-cache/cram_redundant4.sh`, `-np 4`, six short unrelated requests:
-
-```
-14 saves across 6 requests, 3 distinct states:
-  302.510 MiB x 4  =  1210.0 MiB   (3 redundant)
-  336.122 MiB x 4  =  1344.5 MiB   (3 redundant)
-  336.403 MiB x 6  =  2018.4 MiB   (5 redundant)  <- same unchanged state, SIX copies
-  total copied 4572.9 MiB | useful 975.0 MiB | REDUNDANT 3597.9 MiB = 79%
-```
-
-No tokens were processed on those slots between launches, so the state was identical each time.
-`alloc()` erases the entry "fully contained in the current prompt" — which an *identical* entry
-satisfies — so the cache ends up holding one copy and the other copies bought nothing.
-
-Scaled arithmetically to a 64K GLM state (6,010 MiB, ~368 ms/copy at the measured 16.0 GB/s):
-
-| slot idle across | copies | wasted | pointless memcpy |
-|---|---|---|---|
-| 2 launches | 2 | 0.74 s | 11.7 GiB |
-| 4 launches | 4 | 1.47 s | 23.5 GiB |
-| 6 launches | 6 | **2.21 s** | **35.2 GiB** |
-
-On the request-launch critical path, synchronously, for data that did not change.
-
-## Proposed fix — a deletion, not an optimisation
-
-Add to `server_prompt_cache` (`server-task.h:633`, implement near `alloc` at
-`server-task.cpp:1659`):
+`server_prompt_cache::alloc()` opens with exactly the check I "designed"
+(`server-task.cpp:1660-1668`):
 
 ```cpp
-// [TAG_IDLE_SLOT_SAVE_DEDUP] an identical state is already resident; copying it again is a no-op
-bool contains_exact(const server_tokens & tokens) const {
-    for (const auto & st : states) {
-        if (st.prompt.tokens.size() == tokens.size() &&
-            st.prompt.tokens.get_common_prefix(tokens) == tokens.size()) {
-            return true;
-        }
+// first check if the current state is contained fully in the cache
+for (auto it = states.begin(); it != states.end(); ++it) {
+    const int cur_lcp_len = it->prompt.tokens.get_common_prefix(prompt.tokens);
+    if (cur_lcp_len == (int) prompt.tokens.size()) {
+        SRV_TRC(" - prompt is already in the cache, skipping\n");
+        return nullptr;                       // prompt_save() then bails BEFORE any copy
     }
-    return false;
 }
 ```
 
-then bail at the top of `prompt_save()` (`server-context.cpp:220`, after the existing
-`size() == 0` guard):
+**My error:** I counted the `"saving prompt with length ... total state size = N MiB"` lines. That
+`SRV_TRC` is emitted at `server-context.cpp:230`, **before** `alloc()` is called at `:233` and
+before `llama_state_seq_get_data_ext()` at `:238`. It announces an *intent* to save. It is not
+evidence that a copy happened.
 
-```cpp
-if (prompt_cache.contains_exact(prompt.tokens)) {
-    return false;   // caller then skips prompt_cache->update() -- nothing changed
-}
-```
+## The corrected numbers, from the same log
 
-Token comparisons instead of gigabyte memcpys. Returning `false` already skips
-`prompt_cache->update()` at the call site, so no other plumbing changes.
+| | count |
+|---|---|
+| `saving prompt with length` (announced) | 14 |
+| `alloc: prompt is already in the cache, skipping` | **9** |
+| **actual copies** | **5** |
 
-**Falsifiable prediction:** `cram_redundant4.sh` should go from **14 saves to 3**. If it does
-not, the fix is wrong.
+And the timing corroborates it: those `prompt cache update took` values are **0.00, 0.00, 0.00,
+0.01, 0.01, 0.10, 0.11 ms** — no-ops. A genuine 2,712 MiB save in the `-cram 8192` run took
+**168.31 ms**. Nothing in the 4-slot run is anywhere near a real copy.
 
-**Honest edge case not yet ruled out:** with a draft context (`ctx_dft`, MTP) the draft state
-could in principle diverge while target tokens are unchanged. It should not — the draft only
-advances when the slot processes tokens — but the dedup is keyed on *target* tokens only, so an
-MTP serve should be checked before this goes anywhere near `fleet`.
+The 5 copies that did happen were **not** redundant. The saved lengths were 2,151 / 2,390 / 2,392
+tokens — *different* prompts. `n_predict = 2` appends the generated tokens to the slot's prompt, so
+each turn's state is genuinely longer than the last. Saving the longer one and erasing the shorter
+prefix entry is correct, intended behaviour.
 
-**Scope discipline:** deliberately exact-match only. `alloc()` does not erase supersets, so a
-cached entry that merely *contains* this prompt as a prefix is a cache-policy judgement, not
-unambiguous waste. The exact case is unambiguous.
+## What this cost and what it changes
+
+Nothing in the recommendation changes: `-cram 12288` rests on Addendum 1 and 2, which are
+independent of this and were measured with `prompt_n` — an *outcome* witness, not a log line.
+There is no waste bug and no fix to write.
+
+**Method scar.** I credited a log line announcing an action as proof the action occurred. Same
+family as "launch is not an artifact", the `grep -c` misread, and `| tail -3 && echo PUSHED`. The
+tell was available and I walked past it: the 0.10 ms update times were visibly impossible for a
+300 MiB memcpy, and I had a 168.31 ms real-copy figure in my own notes from an hour earlier. The
+rule that would have caught it: **when counting an expensive operation, verify against its cost,
+not its announcement.**
+
+Harnesses retained (`cram_redundant.sh`, `cram_redundant4.sh`) because they now serve as a
+regression check that the existing dedup works — which is a genuine, if smaller, result:
+**9 of 14 candidate saves were correctly refused at zero cost.**
