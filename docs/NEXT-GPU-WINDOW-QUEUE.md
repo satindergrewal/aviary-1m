@@ -152,11 +152,27 @@ Rate is **not** constant — it moves with CPU contention from concurrent quanti
 | window | rate | note |
 |---|---|---|
 | ~13:00-15:00 Jul 30 | 257 rows/hr | |
-| 15:09-18:57 Jul 30 | **218 rows/hr** | 15% slower under a concurrent quantize + CUDA build |
+| 15:09-18:57 Jul 30 | **218 rows/hr** | 15% slower. **CAUSE UNKNOWN** — see below |
 
-At 218/hr the chain frees both cards around **05:00 Aug 1 NZST**. Recompute from two of your own
-`boxwatch` readings rather than trusting this line; quoting a stale rate is a documented failure
-mode here.
+At 218/hr the chain would free both cards around **05:00 Aug 1 NZST** — but **do not plan on that
+number**, because the slowdown may be transient and its cause is not established.
+
+**I originally attributed the 15% to a concurrent quantize + CUDA build. That was withdrawn on
+arithmetic**: the build was 6 min of a 229-min window at `-j 6` of 32 cores ≈ **0.49% of window
+CPU-time at nice 15**, which cannot produce a 15% drop, and the quantize ran in *both* windows so it
+cannot explain a *change*. Live candidates, in the order I would bet on them:
+
+1. the quantize's **bandwidth** footprint growing as it moves from small dense tensors into ~1 GiB
+   expert stacks — interference that grows while threads, load and PSI all stay flat
+2. per-row cost drifting as the dataset advances
+3. the build after all (weakest — see the arithmetic above)
+
+**Discriminator, free:** `boxwatch` already samples rows every 60 s, so any window can be computed
+retroactively. Recovery *while* the quantize still runs implicates the build; recovery only *after*
+it ends implicates bandwidth; no recovery after both end implicates row-cost drift.
+
+**Use a window of at least ~30-45 min.** At 1.9-20 s per row a few minutes yields too few units to
+resolve — quoting a rate off a too-short window is a documented failure mode here.
 
 **Priority note:** a KLD number on our own K3 outranks everything in the queue above. If the K3
 battery wants the window, it takes it — the dequant-in-gather gates are not time-sensitive.
