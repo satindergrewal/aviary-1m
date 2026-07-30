@@ -1,6 +1,7 @@
 # Queue for the next free GPU window
 
-Written 2026-07-30 while both cards were held by the GLM head chain (~32 h remaining). Ordered by
+Written 2026-07-30 while both cards were held by the GLM head chain (~34 h remaining at the
+latest measured rate; see the window forecast at the bottom). Ordered by
 value-per-minute. **Cheapest decisive item first.**
 
 Deliberately a checklist, **not** an auto-runner. `boxwatch` detects the free window and alerts
@@ -19,9 +20,27 @@ returning nothing.
 ## 1. Fused Lightning Indexer probe — ~90 seconds, answers a standing Priority-A question
 
 Is the fused DSA lightning indexer enabled on our `--tensor-split 49,51` serve, or does
-`resolve_fused_ops` disable it on a device mismatch? Memory called this "one log line settles it".
-It does — but **the line is `-lv 4`-only** (measured: 0 lines at `-lv 3`, 9 at `-lv 4`), and the
-chain runs at `verbosity = 3`, which is why grepping its log answers nothing.
+`resolve_fused_ops` disable it on a device mismatch?
+
+**★ CORRECTED 2026-07-30 — this item is now CONFIRMATION, not discovery, and it probably answers
+"enabled".** An earlier version of this file said the probe output is `-lv 4`-only. That was too
+broad, and the distinction matters:
+
+```
+mismatch -> LLAMA_LOG_WARN -> PRINTS AT DEFAULT VERBOSITY 3
+success  -> LLAMA_LOG_INFO -> needs -lv 4
+```
+(measured both ways by forcing a mismatch: `lv=3` gives WARN=2 / INFO=0; `lv=4` gives WARN=2 /
+INFO=9.)
+
+**Consequence:** the live GLM serve log — 106,045 lines at verbosity 3 — contains **zero** fused-op
+mismatch WARNs. Since WARNs *do* print at 3, **no device mismatch occurred**, so the fused
+Lightning Indexer is most likely **already enabled** on the production config. That substantially
+weakens Program A's "unfused indexer" premise, for free.
+
+**What remains genuinely unknown:** the `resolving fused Lightning Indexer support:` header is INFO,
+so we cannot confirm from that log that the probe *ran*. The state is **enabled-or-never-ran**,
+not disabled. The `-lv 4` load below distinguishes those two.
 
 Throwaway load, read, kill. **Do not run a long job at `-lv 4`** — that verbosity produces very
 large logs.
@@ -35,17 +54,9 @@ large logs.
 grep -E "resolve_fused_ops" /tmp/lid_probe.log
 ```
 
-**Enabled looks like:**
-```
-resolve_fused_ops: resolving fused Lightning Indexer support:
-resolve_fused_ops: Lightning Indexer enabled
-```
-**Disabled names the mismatch:**
-```
-resolve_fused_ops: layer N is assigned to device X but <op> is assigned to device Y
-                   (usually due to missing support)
-resolve_fused_ops: <op> not supported, set to disabled
-```
+**Enabled (expected):** `resolving fused Lightning Indexer support:` then `Lightning Indexer enabled`
+**Never ran:** no Lightning Indexer lines at all even at `-lv 4` — that would be the surprise, and
+it would mean the call is not reached for GLM_DSA.
 
 `-fa on` is **not** a confound here: measured on Metal, `-fa on` skips only the **FA** probe; the
 GDN and Lightning Indexer probes still run. See `docs/RESEARCH-KV-QUANT.md`.
