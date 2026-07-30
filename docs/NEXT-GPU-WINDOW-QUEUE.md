@@ -152,7 +152,8 @@ Rate is **not** constant — it moves with CPU contention from concurrent quanti
 | window | rate | note |
 |---|---|---|
 | ~13:00-15:00 Jul 30 | 257 rows/hr | |
-| 15:09-18:57 Jul 30 | **218 rows/hr** | 15% slower. **CAUSE UNKNOWN** — see below |
+| 15:09-18:57 Jul 30 | **218 rows/hr** | build ran 6 min at the end |
+| **18:57-19:46 Jul 30** | **224 rows/hr** | **build gone entirely — no recovery** |
 
 At 218/hr the chain would free both cards around **05:00 Aug 1 NZST** — but **do not plan on that
 number**, because the slowdown may be transient and its cause is not established.
@@ -165,11 +166,16 @@ cannot explain a *change*. Live candidates, in the order I would bet on them:
 1. the quantize's **bandwidth** footprint growing as it moves from small dense tensors into ~1 GiB
    expert stacks — interference that grows while threads, load and PSI all stay flat
 2. per-row cost drifting as the dataset advances
-3. the build after all (weakest — see the arithmetic above)
+3. ~~the build~~ — **ELIMINATED by measurement.** The rate did **not** recover after the build
+   ended (218 → 224 is flat, both ~13% below the 257 baseline), independently confirming the
+   0.49% arithmetic. Two routes, same answer.
 
 **Discriminator, free:** `boxwatch` already samples rows every 60 s, so any window can be computed
 retroactively. Recovery *while* the quantize still runs implicates the build; recovery only *after*
 it ends implicates bandwidth; no recovery after both end implicates row-cost drift.
+
+**Current best ETA: ~32.4 h from 19:46 Jul 30 → ~04:15 Aug 1**, on the clean 224 rows/hr window.
+Still assumes the rate holds; recompute rather than trust it.
 
 **Use a window of at least ~30-45 min.** At 1.9-20 s per row a few minutes yields too few units to
 resolve — quoting a rate off a too-short window is a documented failure mode here.
