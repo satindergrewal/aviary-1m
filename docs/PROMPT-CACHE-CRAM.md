@@ -140,14 +140,40 @@ prefix of the new prompt. Restoring a 100K state to serve a 10K prompt would was
 remainder, so the heuristic refuses. Consequence: a long session that gets *truncated* or
 restarted short will not reuse the long entry.
 
-**3. The selection is greedy and order-dependent — and this only becomes relevant at
-larger `-cram`.** The winner must beat the incumbent on **both** `f_keep` and `sim`
-(`&&`, not a combined score), and both bests are updated during the scan. A candidate that is
-strictly better on `sim` but marginally worse on `f_keep` is skipped, so which entry wins can
-depend on `states` iteration order. With the shipped 8 GiB cap and 64K states the pool holds
-one entry and this never matters. **The recommendation to raise `-cram` is precisely what makes
-it matter** — worth watching at `-lv 4`, where every candidate is printed with its `lcp`,
-`f_keep` and `sim`.
+**3. The selection is greedy and order-dependent — I raised this as a caveat and then failed to
+demonstrate it. Caveat WITHDRAWN as unsupported.**
+
+The winner must beat the incumbent on **both** `f_keep` and `sim` (`&&`, not a combined score),
+with both bests mutating during the scan, so in principle a candidate that is better on `sim` but
+worse on `f_keep` is skipped. Since raising `-cram` is what lets multiple entries coexist, my own
+recommendation would activate this — so I tested it before recommending it further
+(`tools/prompt-cache/cram_selection.sh`).
+
+**Result: the selection did the optimal thing.** Constructed a request `R` plus a *superset* entry
+`A` containing all of `R` (`f_keep 0.334, sim 1.000`) and a shorter divergent entry `B`
+(`f_keep ≈ 0.83, sim ≈ 0.71`) seeded first. The low-`f_keep` superset — precisely the candidate I
+predicted would lose — **was chosen**: `prompt_n = 1` of 8,982 tokens, **100% reused**.
+
+Two things I could not establish, stated rather than glossed:
+- I could **not confirm both candidates were live** in `states` at the deciding moment. The
+  per-candidate `SRV_TRC` lines (`lcp`/`f_keep`/`sim` per entry) never appeared even at `-lv 4`,
+  so the adversarial *two-live-candidate* case was not verifiably constructed.
+- `f_keep_best` initialises from **the slot's current prompt**, not from the first candidate
+  (`server-task.cpp:1744`). After a displacing request that is `0.000`, so the first improving
+  candidate is accepted outright — which is why the ordering trap may be much harder to hit than
+  the code shape suggests.
+
+Also learned while trying: **two entries where one is a prefix of the other cannot coexist.**
+`alloc()` refuses to save a prompt already contained in an entry (*"prompt is already in the cache,
+skipping"*) and separately erases entries fully contained in the new prompt. The cache keeps only
+the longest. That interaction is what makes the adversarial case hard to build at all, and it is a
+mild defence of the design.
+
+**So: not proven sound, but my concern is unsupported and the only outcome I measured was
+optimal.** No caveat attaches to the `-cram 12288` recommendation on this basis.
+
+Corroboration from the same run: seeding `A` reused 6,351 tokens from `B` across a divergent tail
+(`f_keep 0.718, sim 0.236`), independently confirming partial-prefix reuse.
 
 ## Restore cost is symmetric with save
 
