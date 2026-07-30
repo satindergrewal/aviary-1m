@@ -1,0 +1,5 @@
+{"label": "T1_base_cold", "wall_s": 4.333, "prompt_n": 5116, "prompt_ms": 4270.2, "total_tokens": 5116}
+{"label": "D1_displace", "wall_s": 28.256, "prompt_n": 19610, "prompt_ms": 28133.3, "total_tokens": 19610}
+{"label": "T2_grown", "wall_s": 9.652, "prompt_n": 6237, "prompt_ms": 9396.6, "total_tokens": 11353}
+{"label": "D2_displace", "wall_s": 0.305, "prompt_n": 1, "prompt_ms": 25.5, "total_tokens": 19610}
+{"label": "T3_grown_more", "wall_s": 12.895, "prompt_n": 6236, "prompt_ms": 12700.0, "total_tokens": 17589}
