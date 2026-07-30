@@ -1,5 +1,26 @@
 # Queue for the next free GPU window
 
+## ⚠ CURRENT STATE (2026-07-30 ~22:15 NZST) — CARDS ARE NOT FREE, AND NOT MINE TO GIVE
+
+The GLM regen chain is **PAUSED at 5,220 rows** (last row verified complete JSON). Both cards are
+held by the **Kimi-K3 imatrix collection** run, at Satinder's direction. `HOLD_CHAIN` is in place so
+`chain_autostart` cannot fire.
+
+- **Do not remove `/mnt/data/dspark-test/HOLD_CHAIN`** — that release belongs to whoever owns the K3
+  imatrix work, not to this queue.
+- When it *is* removed, the chain resumes from row 5,220 by itself and the items below become
+  reachable again.
+- **Everything below is lower priority than the K3 imatrix lane.** A working sub-2bpw K3 outranks
+  every optimisation queued here.
+
+**Why the imatrix lane took the window:** our K3 IQ2_KT carries *three* handicaps, not one — REAP80
+pruning, **no imatrix**, and requantization from already-4-bit MXFP4. Every successful sub-2bpw big
+quant we have built used a BF16-direct imatrix; this one used none. Bit-width was the wrong
+explanation, and our own `loop-rate-quality-axis` measurement (744B @1.75bpw is fluent) is what
+refuted it.
+
+---
+
 Written 2026-07-30 while both cards were held by the GLM head chain (~34 h remaining at the
 latest measured rate; see the window forecast at the bottom). Ordered by
 value-per-minute. **Cheapest decisive item first.**
@@ -145,7 +166,7 @@ is 12.0 and `native` resolves to an unsupported `compute_120a`.
 **Verify a build by outcome, not by `[100%]`:** check the produced `.so` size and that the binary
 enumerates the devices. `--version` proves nothing — it never loads a backend.
 
-## Window forecast (measured, keep it current)
+## Window forecast (HISTORICAL — chain is paused; recompute after resume)
 
 Rate is **not** constant — it moves with CPU contention from concurrent quantize/build jobs:
 
