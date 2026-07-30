@@ -1,0 +1,113 @@
+# Queue for the next free GPU window
+
+Written 2026-07-30 while both cards were held by the GLM head chain (~32 h remaining). Ordered by
+value-per-minute. **Cheapest decisive item first.**
+
+Deliberately a checklist, **not** an auto-runner. `boxwatch` detects the free window and alerts
+(`IDLE-UNCLAIMED`, escalating at 5 min then every 15) but is read-only by design — it never
+launches. An auto-seizing watcher already caused one collision in this project: two of my own
+agents took both cards and OOM'd five MTP arms. Whoever is alive picks this up; nothing grabs
+silicon on its own.
+
+**How the window opens:** the chain's `llama-server` (one process, tensor-split across *both*
+cards) exits. Opus's `llama-quantize` is CPU-only and does not hold a card, so both cards free
+together. Confirm with `nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader`
+returning nothing.
+
+---
+
+## 1. Fused Lightning Indexer probe — ~90 seconds, answers a standing Priority-A question
+
+Is the fused DSA lightning indexer enabled on our `--tensor-split 49,51` serve, or does
+`resolve_fused_ops` disable it on a device mismatch? Memory called this "one log line settles it".
+It does — but **the line is `-lv 4`-only** (measured: 0 lines at `-lv 3`, 9 at `-lv 4`), and the
+chain runs at `verbosity = 3`, which is why grepping its log answers nothing.
+
+Throwaway load, read, kill. **Do not run a long job at `-lv 4`** — that verbosity produces very
+large logs.
+
+```sh
+# from the fleet tree, using the normal serve flags; kill as soon as "model loaded" appears
+./build/bin/llama-server -m /mnt/nvme0/bigmodels/glm52-ours/GLM-5.2-ours-IQ1_S-prot-blk78q4.gguf \
+  -ngl 99 --tensor-split 49,51 -c 4096 -np 1 -b 1024 -ub 256 \
+  -ctk q4_0 -ctv q4_0 -fa on --port 8099 -lv 4 > /tmp/lid_probe.log 2>&1 &
+# then:
+grep -E "resolve_fused_ops" /tmp/lid_probe.log
+```
+
+**Enabled looks like:**
+```
+resolve_fused_ops: resolving fused Lightning Indexer support:
+resolve_fused_ops: Lightning Indexer enabled
+```
+**Disabled names the mismatch:**
+```
+resolve_fused_ops: layer N is assigned to device X but <op> is assigned to device Y
+                   (usually due to missing support)
+resolve_fused_ops: <op> not supported, set to disabled
+```
+
+`-fa on` is **not** a confound here: measured on Metal, `-fa on` skips only the **FA** probe; the
+GDN and Lightning Indexer probes still run. See `docs/RESEARCH-KV-QUANT.md`.
+
+---
+
+## 2. DSA dequant-in-gather acceptance gates — the big FIT item
+
+Branch `dsa-dequant-gather` (`42942e19b`) on the fork, off `fleet` @ `c23459b0b`. **Compiles with
+symbols verified; never run on a GPU.** Full rationale in `docs/PLAN-DSA-DEQUANT-IN-GATHER.md`.
+Potential: ~253K → ~572K context *with* flat decode (2.26×), extrapolated from measured inputs.
+
+Build it into a real binary first (this needs the Blackwell toolchain: `/usr/local/cuda-12.9/bin/nvcc`
+and `-DCMAKE_CUDA_ARCHITECTURES=120a`; `/usr/bin/nvcc` is 12.0 and `native` resolves wrong).
+
+Run the gates **in this order** and stop at the first failure:
+
+1. **Correctness.** `-ctk q8_0 -ctv q8_0` under **`-fa auto`**, never `-fa on`. Confirm the DSA
+   gather path is selected, then NIAH at 32K. *Gate: matches the F16 arm.*
+2. **Ceiling.** Load at 398K (q8_0) and 572K (q4_0). *Gate: fits VRAM.* A miss falsifies the
+   extrapolation, not the kernel.
+3. **★ FLAT DECODE — the kill gate.** Decode t/s at depths 1K / 32K / 100K / 200K. *Gate: flat
+   like the F16 gather arm (~50 t/s), NOT the mask path's decay to 29 t/s @100K.* **If decode
+   degrades, the dequant is not free and the change should be dropped, not tuned.**
+4. **Control.** F16 arm **bit-identical** to today, proving the template did not perturb the
+   existing path.
+
+Not for `fleet` until 1, 3 and 4 pass.
+
+---
+
+## 3. `sa_spec +34% acceptance` — the last quarantined claim
+
+Inherited, never verified by me. Do not let it touch `fleet` or the serve config without a local
+log. Everything else in that quarantine has been resolved: the prompt-cache premise, the
+`GGML_CUDA_FA_ALL_QUANTS` "25× CPU fallback" (refuted), and "no tokenization prefix reuse" (true
+but a 5.6 ms non-issue).
+
+---
+
+## 4. GLM live-eviction event — closes the last gap in the `-cram` recommendation
+
+Everything about the prompt cache is measured **on Qwen3-4B / Mac Metal**. The GLM byte arithmetic
+now rests on a measured identity (prompt state == KV size, agreeing to 0.008%), so the one
+unwitnessed thing is narrow: **does eviction actually fire on a live GLM serve at the default
+8192 MiB cap?**
+
+Three requests on the real model — long prompt A, long prompt B, then A again — with `-lv 4`.
+Expect at the default cap: `making room for prompt cache entry, removing oldest entry` and a full
+re-prefill on the third request. Then repeat with `-cram 12288` and expect `prompt_n` to collapse.
+
+See `docs/PROMPT-CACHE-CRAM.md`; harnesses in `tools/prompt-cache/` port directly.
+
+---
+
+## Standing constraints for whoever runs these
+
+- **`fleet` is not a draft.** Merge only on a passing gate, measured on the path that justifies it.
+- Sweep KV-quant types under **`-fa auto`**; pin `-fa on` only for known-good combos — `-fa on`
+  skips the support probe, so it will happily serve a configuration `auto` refuses to start.
+- Do **not** rebuild into a tree whose binary a running job was launched from. Use a throwaway
+  worktree with compile-only output, as `42942e19b` was built.
+- KT quants (`IQ1_KT`/`IQ2_KT`) are ik trellis types **mainline cannot load**.
+- Witness outcomes, not announcements: `prompt_n` over log lines, and cost over "the op was
+  reached". Two of my own claims died on that distinction in one afternoon.
