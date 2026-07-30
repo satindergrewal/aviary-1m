@@ -1,0 +1,3 @@
+{"label": "1_A_cold", "wall_s": 27.417, "prompt_n": 19277, "prompt_ms": 27247.302, "cache_n": 19277, "prompt_per_second": 707.482891333608}
+{"label": "2_B_evicts", "wall_s": 29.731, "prompt_n": 20178, "prompt_ms": 29387.139, "cache_n": 20178, "prompt_per_second": 686.6268948467559}
+{"label": "3_A_reuse", "wall_s": 0.453, "prompt_n": 1, "prompt_ms": 26.59, "cache_n": 19277, "prompt_per_second": 37.608123354644604}
