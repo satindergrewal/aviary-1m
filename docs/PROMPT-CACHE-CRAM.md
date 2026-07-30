@@ -310,3 +310,35 @@ not its announcement.**
 Harnesses retained (`cram_redundant.sh`, `cram_redundant4.sh`) because they now serve as a
 regression check that the existing dedup works — which is a genuine, if smaller, result:
 **9 of 14 candidate saves were correctly refused at zero cost.**
+
+---
+
+# Addendum 4: the state==KV identity is measured, which tightens the parked GLM sizing
+
+The GLM figures in this doc are arithmetic on 93.9 KiB/token. That arithmetic silently assumed
+the *saved prompt state* is the same size as the *KV cache* — no serialisation overhead. That
+assumption is now checked against the same run.
+
+Qwen3-4B geometry, from the server's own `print_info` (not assumed):
+`n_layer = 36`, `n_embd_k_gqa = 1024`, `n_embd_v_gqa = 1024`, F16 KV.
+
+```
+predicted KV/token  = 36 x (1024 + 1024) x 2 B  = 147,456 B = 144.00 KiB
+MEASURED state size = 2712.034 MiB / 19,284 tok = 147,468 B = 144.01 KiB
+                                     agreement  = 0.008%
+```
+
+**The saved prompt state is the KV cache, with no measurable overhead.** So sizing a GLM slot
+state at 93.9 KiB/token is not an assumption about serialisation — the identity behind it is
+measured:
+
+| GLM context | slot state |
+|---|---|
+| 32K | 2.93 GiB |
+| **64K** | **5.87 GiB** |
+| 128K | 11.74 GiB |
+
+This does not promote the GLM claim to *measured* — the one thing still unwitnessed is whether
+eviction actually fires in a live GLM serve at the default cap, and that needs a card. But the
+gap is now narrow and specific: the byte arithmetic is sound, only the live eviction event is
+unobserved.
