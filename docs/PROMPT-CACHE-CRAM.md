@@ -243,3 +243,84 @@ exact-repeat hit documented above — **it also destroys the growing-session reu
 otherwise serve ~97% of every turn at 64K**, and it pays ~368 ms per save for the privilege.
 
 That is the argument for `-cram 12288`, now resting on measurement rather than on a source read.
+
+---
+
+# Addendum 3: an UNCHANGED idle slot is re-copied on every task launch (79% waste, fixable)
+
+**Vehicle for every measurement in this document: Qwen3-4B Q8_0, Mac Metal, `llama-server` from
+`llama.cpp-dspark-metal` @ b874d7414.** All GLM figures are arithmetic on our measured
+93.9 KiB/token, never a GLM serve log.
+
+`server-context.cpp:2393` loops over every slot on each task launch and calls `prompt_save()` on
+each non-processing one, with **no dirty-check**. Predicted waste; measured it.
+
+**First attempt was wrong and is recorded as such.** At `-np 2` I predicted N copies for N
+launches and got **2** — with two slots the parked slot is reallocated almost immediately. The
+magnitude claim needed `-np 4` so a slot can actually stay idle.
+
+`tools/prompt-cache/cram_redundant4.sh`, `-np 4`, six short unrelated requests:
+
+```
+14 saves across 6 requests, 3 distinct states:
+  302.510 MiB x 4  =  1210.0 MiB   (3 redundant)
+  336.122 MiB x 4  =  1344.5 MiB   (3 redundant)
+  336.403 MiB x 6  =  2018.4 MiB   (5 redundant)  <- same unchanged state, SIX copies
+  total copied 4572.9 MiB | useful 975.0 MiB | REDUNDANT 3597.9 MiB = 79%
+```
+
+No tokens were processed on those slots between launches, so the state was identical each time.
+`alloc()` erases the entry "fully contained in the current prompt" — which an *identical* entry
+satisfies — so the cache ends up holding one copy and the other copies bought nothing.
+
+Scaled arithmetically to a 64K GLM state (6,010 MiB, ~368 ms/copy at the measured 16.0 GB/s):
+
+| slot idle across | copies | wasted | pointless memcpy |
+|---|---|---|---|
+| 2 launches | 2 | 0.74 s | 11.7 GiB |
+| 4 launches | 4 | 1.47 s | 23.5 GiB |
+| 6 launches | 6 | **2.21 s** | **35.2 GiB** |
+
+On the request-launch critical path, synchronously, for data that did not change.
+
+## Proposed fix — a deletion, not an optimisation
+
+Add to `server_prompt_cache` (`server-task.h:633`, implement near `alloc` at
+`server-task.cpp:1659`):
+
+```cpp
+// [TAG_IDLE_SLOT_SAVE_DEDUP] an identical state is already resident; copying it again is a no-op
+bool contains_exact(const server_tokens & tokens) const {
+    for (const auto & st : states) {
+        if (st.prompt.tokens.size() == tokens.size() &&
+            st.prompt.tokens.get_common_prefix(tokens) == tokens.size()) {
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+then bail at the top of `prompt_save()` (`server-context.cpp:220`, after the existing
+`size() == 0` guard):
+
+```cpp
+if (prompt_cache.contains_exact(prompt.tokens)) {
+    return false;   // caller then skips prompt_cache->update() -- nothing changed
+}
+```
+
+Token comparisons instead of gigabyte memcpys. Returning `false` already skips
+`prompt_cache->update()` at the call site, so no other plumbing changes.
+
+**Falsifiable prediction:** `cram_redundant4.sh` should go from **14 saves to 3**. If it does
+not, the fix is wrong.
+
+**Honest edge case not yet ruled out:** with a draft context (`ctx_dft`, MTP) the draft state
+could in principle diverge while target tokens are unchanged. It should not — the draft only
+advances when the slot processes tokens — but the dedup is keyed on *target* tokens only, so an
+MTP serve should be checked before this goes anywhere near `fleet`.
+
+**Scope discipline:** deliberately exact-match only. `alloc()` does not erase supersets, so a
+cached entry that merely *contains* this prompt as a prefix is a cache-policy judgement, not
+unambiguous waste. The exact case is unambiguous.
