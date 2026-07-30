@@ -111,3 +111,41 @@ See `docs/PROMPT-CACHE-CRAM.md`; harnesses in `tools/prompt-cache/` port directl
 - KT quants (`IQ1_KT`/`IQ2_KT`) are ik trellis types **mainline cannot load**.
 - Witness outcomes, not announcements: `prompt_n` over log lines, and cost over "the op was
   reached". Two of my own claims died on that distinction in one afternoon.
+
+---
+
+## Build-tree map — check this BEFORE planning any run (added after it nearly cost 2 h)
+
+Opus lost time discovering that **the only K3-capable tree was CPU-only, and the only CUDA build
+had no K3 arch**. Neither fact is discoverable from a model file. Verify the tree can do the job
+*and* the arch before queueing work against it.
+
+| tree | KIMI_K3 arch | CUDA build |
+|---|---|---|
+| `llama.cpp-k3` / `-k3kt` | **yes** | was CPU-only (Opus has since built CUDA: nvcc 12.9, `120a`, `FA_ALL_QUANTS=OFF`) |
+| `llama.cpp-idxfilter` (= `fleet`) | **no** | yes |
+| `llama.cpp-kvpaged` | no | — |
+| `llama.cpp-kt` | no | yes |
+| `llama.cpp-dspark-metal` (Mac) | no | Metal |
+
+Blackwell needs `/usr/local/cuda-12.9/bin/nvcc` + `-DCMAKE_CUDA_ARCHITECTURES=120a`; `/usr/bin/nvcc`
+is 12.0 and `native` resolves to an unsupported `compute_120a`.
+
+**Verify a build by outcome, not by `[100%]`:** check the produced `.so` size and that the binary
+enumerates the devices. `--version` proves nothing — it never loads a backend.
+
+## Window forecast (measured, keep it current)
+
+Rate is **not** constant — it moves with CPU contention from concurrent quantize/build jobs:
+
+| window | rate | note |
+|---|---|---|
+| ~13:00-15:00 Jul 30 | 257 rows/hr | |
+| 15:09-18:57 Jul 30 | **218 rows/hr** | 15% slower under a concurrent quantize + CUDA build |
+
+At 218/hr the chain frees both cards around **05:00 Aug 1 NZST**. Recompute from two of your own
+`boxwatch` readings rather than trusting this line; quoting a stale rate is a documented failure
+mode here.
+
+**Priority note:** a KLD number on our own K3 outranks everything in the queue above. If the K3
+battery wants the window, it takes it — the dequant-in-gather gates are not time-sensitive.
