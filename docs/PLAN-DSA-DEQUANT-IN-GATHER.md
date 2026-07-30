@@ -1,7 +1,26 @@
 # PLAN: dequantize during the DSA gather — ~253K → ~572K context, keeping flat decode
 
-**Status:** designed, API-verified against `llama.cpp-idxfilter` (= `fleet`), **not implemented**.
+**Status: IMPLEMENTED AND COMPILES. Never run on a GPU.**
+Branch `dsa-dequant-gather` on his fork, commit `42942e19b` (off `fleet` @ `c23459b0b`).
 Every source line below was read, not recalled. Blocked only on a GPU card.
+
+**What is established:** nvcc `sm_120a` compiles it, rc=0, with a **baseline compile of the
+unmodified file as the control** (170,656 → 183,888 bytes). Symbols verified present in the
+object, not assumed:
+
+```
+k_dsa_prepare_one_batch_kv_q<(ggml_type)2, 4>    (Q4_0)
+k_dsa_prepare_one_batch_kv_q<(ggml_type)8, 4>    (Q8_0)
+k_dsa_prepare_one_batch_kv(...)                   (F16, preserved unchanged)
+dsa_launch_prepare_kv(ggml_type, ...)             (dispatcher)
+```
+
+**What is NOT established:** correctness, performance, or flat decode. The acceptance gates below
+are all unmet. Not for `fleet` until they pass on hardware.
+
+Built in a throwaway worktree with compile-only output to `/tmp`, deliberately **not** rebuilding
+the binary in the tree the running chain was launched from — a later chain stage could relaunch
+`llama-server` from it and would have silently picked up an untested kernel.
 
 **Why this is the top item in the context-ceiling lane:** it moves the ceiling rather than the
 clock. Today we must *choose* between max context and flat decode. This removes the choice.
