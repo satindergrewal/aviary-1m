@@ -90,8 +90,16 @@ Branch `dsa-dequant-gather` (`42942e19b`) on the fork, off `fleet` @ `c23459b0b`
 symbols verified; never run on a GPU.** Full rationale in `docs/PLAN-DSA-DEQUANT-IN-GATHER.md`.
 Potential: ~253K → ~572K context *with* flat decode (2.26×), extrapolated from measured inputs.
 
-Build it into a real binary first (this needs the Blackwell toolchain: `/usr/local/cuda-12.9/bin/nvcc`
-and `-DCMAKE_CUDA_ARCHITECTURES=120a`; `/usr/bin/nvcc` is 12.0 and `native` resolves wrong).
+**★ ALREADY BUILT — no build time on the critical path.** `/mnt/nvme0/wt-dsa-dequant/build/bin/`,
+built 2026-07-30 while the cards were busy. Verified by outcome: `libggml-cuda.so.0.17.0` 245.4 MB,
+`--version` reports `42942e19b`, `--list-devices` enumerates both Blackwells, and both quantized
+kernel instantiations plus the dispatcher are present in the linked `.so`.
+
+(`llama-server` there is 17,920 bytes — a **thin wrapper**, the same size as fleet's known-good one.
+Do not mistake it for a failed link; the payload is in the `.so`.)
+
+If it ever needs rebuilding: Blackwell requires `/usr/local/cuda-12.9/bin/nvcc` and
+`-DCMAKE_CUDA_ARCHITECTURES=120a`; `/usr/bin/nvcc` is 12.0 and `native` resolves wrong.
 
 Run the gates **in this order** and stop at the first failure:
 
