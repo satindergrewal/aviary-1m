@@ -14,3 +14,17 @@
 # p28-arm2-mac-PASS-99ea0134). Swap-in/out needs the same wall-driven treatment:
 # read swap_out/swap_in + process_swapped_list, fix the state contract, re-run THIS wall.
 # PASS bar: swapped>0 mid-run AND drained via swap_in, 3/3 full-length, zero OOB/errors.
+
+# == ROUNDS 2-3 (tips 99ea0134 -> c1bbeef8): two mechanisms fixed, two remain ==
+# FIXED: (1) mid-sweep eviction filter (candidate evicted after collection rode the batch
+# with CPU ids); (2) growth check on swap-in (victim returned with the same too-short
+# table that got it evicted: peers 13 blocks vs 12, OOB at pos 192 -- exact numbers).
+# ROUND-3 WALL: OOB GONE, swap round-trips live (3 outs/2 ins), 1/3 completes @400.
+# REMAINING (next session's first reads):
+#   (i) swap-drain starvation: steady state running=1/swapped=2 until the runner ends --
+#       swap_in of the pair keeps failing has_free_gpu_blocks while the runner grows;
+#       needs either priority swap-in on free or eviction fairness.
+#   (ii) teardown abort 'tensor read out of bounds' (ggml-backend.cpp:349) in the swap
+#       copy path: gpu/cpu block id spaces cross in do_block_copy offset math (CPU ids
+#       are globally numbered >= num_gpu_blocks but the CPU tensor is 0-based) -- the
+#       P1-6 tail-copy scar class. AUDIT do_block_copy + swap_in/out offset adjustment.
