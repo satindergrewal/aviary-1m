@@ -111,3 +111,11 @@
 #   of the peak -- and the lesson is that a curve bounded on one side is not bounded.
 # Conclusion unchanged in substance: this shape tops out ~1.5x, the >=5x gate needs the
 # MMA/fragment inner loop, and DS4P_PAGED_QTILE stays dark meanwhile.
+
+# == DARK-DEFAULT REGRESSION CHECK (tip 3aca564f, DS4P_PAGED_QTILE unset) ==
+#   prefill 43,717 ms == the 43,726 ms pre-M7 baseline (0.02% apart, run-to-run noise)
+#   decode 36.4 ms/tok == split-K's 36.2 (split-K IS on by default at this ctx, as designed)
+# ★ Proof the flag is genuinely dark: after five kernel edits (tiled kernel, score block,
+#   revert, three tile sizes) an unflagged serve gets exactly the pre-M7 prefill path and
+#   the shipped split-K decode. Nothing a user runs was ever exposed to the dark work --
+#   which is the point of shipping it dark, now measured instead of asserted.
