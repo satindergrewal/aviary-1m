@@ -177,3 +177,16 @@
 #   tiles with multiple mma warps -- the fattn-mma-f16.cuh architecture -- a port with its
 #   own gate, now justified by elimination rather than assumption.
 # All dark. Baseline measured-untouched (43,717 unflagged).
+
+# == 2-WARP PER-WARP (experiment: 7171665a kernel at dim3(64), smem halved): 58,865 ms ==
+#   WORSE than 4-warp per-warp (53,287). test-paged-banded ALL PASSED.
+# ⚠ SELF-CORRECTION #2: my occupancy diagnosis for the per-warp shape was WRONG (or at
+#   most half the story). Halving the private-accumulator smem should have RECOVERED time
+#   if occupancy was the binding cost; instead halving the warps halved the key-tile
+#   parallelism and lost MORE. The per-warp shape's real problem is total serial work per
+#   warp. Diagnoses need their own discriminating walls -- this one got its wall late.
+# TEN WALLS TOTAL. The cluster is unambiguous: every working variant sits in 29-59 s; the
+# gate is 8.7 s; static is 2.5 s. The family cannot reach the gate by rearrangement --
+# now shown by exhaustion across tile size, mapping, partition, pipelining, AND the
+# occupancy counter-test. fattn-mma-f16 architecture (fragment-held state, multi-mma-warp)
+# remains the only unpriced branch, and it is a port.
