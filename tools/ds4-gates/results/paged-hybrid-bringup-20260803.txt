@@ -1,0 +1,17 @@
+0.00.000.806 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.000.814 W srv  llama_server: embeddings enabled with n_batch (2048) > n_ubatch (512)
+0.00.000.814 W srv  llama_server: setting n_batch = n_ubatch = 512 to avoid assertion failure
+0.00.000.979 W srv  llama_server: -----------------
+0.00.000.979 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.000.979 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.000.979 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.000.979 W srv  llama_server: -----------------
+0.00.002.703 I srv    load_model: loading model 'inkling-moe.gguf'
+0.00.005.635 W load: adding 128 dummy tokens
+0.00.006.375 I common_init_result: fitting KV paged params to device memory
+0.00.006.376 W common_fit_paged_kv_blocks: no GPU device found, cannot fit paged KV blocks.
+0.00.007.031 W create_memory: DS4P_PAGED_HYBRID bring-up: constructing paged attention pool for a hybrid arch; the paged hybrid graph path is NOT implemented yet
+0.00.011.096 I srv    load_model: initializing, n_slots = 2, n_ctx_slot = 4096, kv_unified = 'false'
+0.00.012.939 I srv  llama_server: model loaded
+0.00.012.944 I srv  llama_server: listening on http://127.0.0.1:8935
+0.08.037.400 I srv    operator(): operator(): cleaning up before exit...

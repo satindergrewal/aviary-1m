@@ -1,0 +1,10 @@
+# abort_paths_gate 2026-08-03T02:01:45+12:00 url=http://127.0.0.1:8396 ntok=12000
+# tree: unknown
+== mode=fin start=1785679305.877455000
+mode=fin slot_free_latency_s=44.199828000
+== mode=rst start=1785679372.121191000
+mode=rst INVALID: no prefill in progress at kill time (rejected/too fast?)
+== mode=kill9 start=1785679382.144607000
+mode=kill9 INVALID: no prefill in progress at kill time (rejected/too fast?)
+# PASS criterion: latency <= ubatch_time + HTTP_POLLING_SECONDS (compute per config)
+== RESULT: FAIL (invalid mode or timeout - see above) ==

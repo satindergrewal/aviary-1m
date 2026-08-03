@@ -1,0 +1,7 @@
+# q8_banded_probe rerun w/ quantization-noise witness; tree b7972b83+DS4P_BANDED_QKV edit
+  f16-fallback   compute_buf =   268.53 MiB
+  f16-banded     compute_buf =    38.04 MiB
+  q8-fallback    compute_buf =   268.53 MiB
+  q8-banded      compute_buf =    38.04 MiB
+  q8-vs-f16 reference delta (quantization noise witness) = 2.631e-08
+== RESULT: INVALID (q8 cache indistinguishable from f16 - -ctk not in effect?) ==

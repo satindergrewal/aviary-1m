@@ -1,0 +1,7 @@
+# abort_paths_gate 2026-08-03T01:52:00+12:00 url=http://127.0.0.1:8396 ntok=12000
+# tree: unknown
+== mode=fin start=1785678720.856525000
+mode=fin slot_free_latency_s=TIMEOUT_120s (prefill ran on for a dead client)
+== mode=rst start=1785678857.121413000
+mode=rst slot_free_latency_s=TIMEOUT_120s (prefill ran on for a dead client)
+== mode=kill9 start=1785678994.221830000

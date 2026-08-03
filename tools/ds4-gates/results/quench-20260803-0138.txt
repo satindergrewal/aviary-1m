@@ -1,0 +1,13 @@
+# quench_gate 2026-08-03T01:38:49+12:00 bin=$HOME/Documents/GitHub/llama.cpp-ds4ports/build-check/bin/llama-server model=qwen3-4b-dev-Q8_0.gguf
+# provenance: VERIFIED-BY-GATE. GPU-window arm (0.60-acceptance auto-quench <=1.01x) DEFERRED, see header.
+== reference: no-spec greedy output ==
+== phase 1: forced quench fires + output identical to no-spec ==
+  PASS: quench_seqs >= 1 (1 ge 1)
+  PASS: forced-quench output IDENTICAL to no-spec reference
+== phase 2: high-acceptance (draft==target) must NOT quench ==
+  PASS: quench_seqs == 0 (0 eq 0)
+  PASS: spec output identical to reference (lossless)
+== phase 3: feature OFF => counter zero ==
+  PASS: quench_seqs == 0 (off) (0 eq 0)
+== RESULT: PASS (CPU arms; GPU-window arm deferred) ==
+results -> ./results/quench-20260803-0138.txt

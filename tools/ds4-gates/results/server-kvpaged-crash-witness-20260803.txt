@@ -1,0 +1,27 @@
+0.00.001.342 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.839 W srv  llama_server: -----------------
+0.00.001.840 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.840 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.840 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.841 W srv  llama_server: -----------------
+0.00.003.778 I srv    load_model: loading model 'llama-dense.gguf'
+0.00.006.440 W load: adding 128 dummy tokens
+0.00.007.187 I common_init_result: fitting KV paged params to device memory
+0.00.007.189 W common_fit_paged_kv_blocks: no GPU device found, cannot fit paged KV blocks.
+0.00.007.227 W llama_init_from_model: model default pooling_type is [-1], but [0] was specified
+0.00.007.237 W llama_context: n_ctx_seq (2048) > n_ctx_train (128) -- possible training context overflow
+0.00.007.767 W srv    load_model: the slot context (2048) exceeds the training context of the model (128) - capping
+$HOME/Documents/GitHub/llama.cpp-ds4ports/src/llama-kv-cache-paged.cpp:368: GGML_ASSERT(last_paged_info && "no paged batch info set before init_batch was called.") failed
+WARNING: Using native backtrace. Set GGML_BACKTRACE_LLDB for more info.
+WARNING: GGML_BACKTRACE_LLDB may cause native MacOS Terminal.app to crash.
+See: https://github.com/ggml-org/llama.cpp/pull/17869
+0   libggml-base.0.18.0.dylib           0x0000000102f71470 ggml_print_backtrace + 276
+1   libggml-base.0.18.0.dylib           0x0000000102ffc7a4 ggml_abort + 156
+2   libllama.0.0.10289.dylib            0x0000000103ec59b4 _ZN20llama_kv_cache_paged10init_batchER18llama_batch_allocrjb + 784
+3   libllama.0.0.10289.dylib            0x0000000103e64994 _ZN13llama_context6decodeERK11llama_batch + 1088
+4   libllama.0.0.10289.dylib            0x0000000103e6a43c llama_decode + 20
+5   libllama-common.0.0.10289.dylib     0x0000000103a18594 _Z25common_context_can_seq_rmP13llama_context + 112
+6   libllama-server-impl.dylib          0x000000010334d950 _ZN19server_context_impl10load_modelER13common_params + 4604
+7   libllama-server-impl.dylib          0x0000000103279418 _Z12llama_serverR13common_paramsiPPc + 20472
+8   libllama-server-impl.dylib          0x00000001032743bc _Z12llama_serveriPPc + 164
+9   dyld                                0x000000018b027e00 start + 6992
