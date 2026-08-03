@@ -385,3 +385,35 @@
 #   full 22K prefill + 256 decoded tokens is BYTE-IDENTICAL between cp.async on
 #   and off (1,665 chars, exact match). A racing or stale-read staging path
 #   cannot produce that.
+
+# ============================================================================
+# ★★★ DECODE HAD THE SAME DISEASE (ds4-ports d8cbc0ff): 36.3 -> 11.5 ms/tok
+# ============================================================================
+# Decode's grid is (n_heads, n_seq, n_splits) = 32 x 1 x 8 = 256 blocks of 4
+# warps -- the IDENTICAL 5.44 warps/SM the profiler measured on the PREFILL
+# kernel. I shipped split-K for decode when it won 6.1x, hard-coded want = 8,
+# and never re-examined it. The constant was right when written and wrong once
+# the hardware and workload moved. The profiler did not find this; asking
+# whether the SHAPE that starved prefill also starved decode did.
+#
+# SWEPT, NOT MAXIMISED (ms/tok, 22K ctx, one Blackwell card):
+#     8 -> 36.4 | 16 -> 21.2 | 32 -> 13.7 | 48 -> 12.3 | 64 -> 11.6 | 96 -> 12.6
+# It TURNS OVER at 64: past the knee the combine pass and the shrinking
+# per-block work take the gain back. "As high as possible" would have been wrong.
+#
+# DEFAULT IS NOW DERIVED, not a constant:
+#   n_splits = min( 12*nsm / (n_heads*n_seq),  ctx_hint/256,  64 )
+# 12 blocks/SM is the measured knee (64 x 32 heads = 2048 blocks on 188 SMs);
+# dividing by head count means a 64-head model gets half as many splits instead
+# of inheriting a number tuned on a 32-head one. DS4P_PAGED_SPLITK still forces.
+#
+# ⚠ REGRESSION ARM RUN BECAUSE THIS IS **NOT** A DARK PATH -- it changes default
+# decode for every paged request. The honest risk: the split count comes from the
+# POOL span, not the live context, so a short prompt in a big pool could pay
+# combine cost for empty slices. Measured at ~200 tokens:
+#     auto 5.94 ms/tok  vs  old-default-8 6.25 ms/tok  -> FASTER, no regression.
+#
+# WHERE THE PAGED PATH NOW STANDS vs the TUNED static reference (same work):
+#   prefill  3,426 vs 2,396 ms      = 1.43x off   (was 17.8x off)
+#   decode    11.5 vs 7.3 ms/tok    = 1.57x off   (was 4.85x off)
+#   whole 22K request: 6,364 vs ~53,026 ms at the start of the day = 8.3x
