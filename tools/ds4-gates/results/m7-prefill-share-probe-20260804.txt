@@ -1,0 +1,35 @@
+# M7 decision probe -- and it found something much bigger than the prefill gap
+# box GPU0, qwen3-4b IQ4_KT, 22,000-token prompt + 256-token decode, -c 40960 -b/-ub 512,
+# tip ds4-ports cb3246f9, 2026-08-04 08:0x
+#
+#            prefill_ms   prefill tok/s   decode ms/tok   decode tok/s
+#   static      2,462         8,937           7.78          128.5
+#   paged      43,600             -         220.70            4.5
+#
+# ★★ THE PAGED PATH IS ~18x SLOWER TO PREFILL **AND ~28x SLOWER TO DECODE** AT 22K CONTEXT.
+# 4.5 tok/s for a 4B model on a Blackwell card is absurd on its face (accepted-absurdity
+# rule): every prior paged measurement in this lane was at <=8K context with small pools,
+# where the constant factors hide. The kernel's shape is the cause and it hits BOTH phases:
+#   - one CUDA block per (head, seq, query token), head_dim (=128) threads per block;
+#   - each block walks the ENTIRE visible context serially, one KV token at a time;
+#   - so a decode step at 22K context = 22K serial iterations on 128 threads, with no
+#     KV-axis parallelism (no split-K / flash-decoding) and no data reuse.
+# Static banded FA parallelises over the KV axis and reuses tiles, hence 28x.
+#
+# ⚠ OPERATIONAL CONSEQUENCE (record it before anyone serves on this): --kv-paged is
+# correct at long context but NOT fast -- it is a scheduling/memory win today, not a
+# throughput win. Do not put a long-context production serve on the paged path until the
+# kernel work below lands. Everything P2-8 proved (admission, preemption, sharing) STANDS;
+# this is the kernel underneath it.
+#
+# ★ M7 SCOPE CORRECTED: it is not "tiled prefill", it is "the paged attention kernel needs
+# KV-axis parallelism + tiling in BOTH phases":
+#   1. decode: split the context across warps/blocks (flash-decoding), combine partials by
+#      log-sum-exp -- the same shape the current kernel already uses ACROSS warps, extended
+#      to a grid split so long contexts get real parallelism.
+#   2. prefill: two-level (Q_TILE x KV_TILE) tiling per DESIGN-M7-TILED-PAGED-PREFILL.md.
+#   3. or option B from that doc (gather + delegate to the already-gated banded FA kernel),
+#      which now looks stronger: it fixes BOTH phases at once by reusing a kernel that is
+#      already fast and already correctness-gated on both backends.
+# Decision rule from the design doc is ANSWERED: prefill share is 55% (static) / 44%
+# (paged) at this working point -- prefill matters, and decode matters just as much.
