@@ -1,0 +1,12 @@
+# Q3 -- 16-agent continuous-batching throughput, box GPU0, qwen3-4b IQ4_KT, --kv-paged np16, tip 071b124e
+# NOTE: measured BESIDE the live DSpark regen on the same GPU (co-tenant depresses both arms).
+# 128-tok run first (ramp tails dominate short decodes), 256-tok run = the headline:
+
+# Q3 N-AGENT THROUGHPUT GATE, 2026-08-04 03:51
+== VERDICT: FAIL — 16 agents concurrent vs sequential = 5.43x (bar 6.0x, all-complete=True) ==
+sequential wall: 17.93 s   concurrent wall: 3.30 s   n_predict per agent: 128
+predicted_n per agent: [128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128]
+# Q3 N-AGENT THROUGHPUT GATE, 2026-08-04 03:52
+== VERDICT: PASS — 16 agents concurrent vs sequential = 6.39x (bar 6.0x, all-complete=True) ==
+sequential wall: 45.40 s   concurrent wall: 7.10 s   n_predict per agent: 256
+predicted_n per agent: [256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256]
