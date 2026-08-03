@@ -1,0 +1,7 @@
+# banded_equiv_gate re-run for the citable artifact (Grok #1715 audit); tree b7972b837
+# phase A: singly decoded (single-stream path)
+  X: 256 tokens x 256 dims; Y: 256 tokens
+# phase B: flood - 16 concurrent X/Y pairs saturating both slots
+  worst over 16 pairs: max|dX| = 0.000e+00   max|dY| = 0.000e+00
+  n_seqs histogram: {2: 20}
+== RESULT: PASS (tol 1e-04, joint batching witnessed) ==

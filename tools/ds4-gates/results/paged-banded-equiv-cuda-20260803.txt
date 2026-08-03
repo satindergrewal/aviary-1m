@@ -1,0 +1,8 @@
+ggml_cuda_init: found 2 CUDA devices (Total VRAM: 194495 MiB):
+  Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97247 MiB
+  Device 1: NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97247 MiB
+backend: CUDA0
+case A: with_rel=1 paged_window=0 fa_window=24 max_abs=2.384e-07 nmse=2.588e-13 PASS
+case B: with_rel=1 paged_window=8 fa_window=8 max_abs=2.384e-07 nmse=1.783e-13 PASS
+case C: with_rel=0 paged_window=8 fa_window=8 max_abs=2.384e-07 nmse=1.712e-13 PASS
+test-paged-banded: ALL PASSED

@@ -188,9 +188,34 @@ already-quantized copy rather than bf16 weights. A stronger calibration, a MoE a
 finding. The first two findings are about mechanism and are less likely to be
 model-specific, but they have still only been shown on one model.
 
+### D1 unfreeze — MoE-scale confirmation (2026-07-28/29)
+
+**Finding 1 (output-neutral MTP quant) is no longer single-model.** On GLM-5.2
+(744B.A40B, `glm-dsa`) the production MTP block (`blk.78` experts, q6-class /
+cell-zero) was compared to a q4_K re-quant of the same tensors only:
+
+| arm | file | short greedy output_sha | draft acceptance (6 prompts) |
+|---|---|---|---|
+| prod (cell-zero blk.78) | 176.65 GB | `ef2ff5959d239690` (4468 chars) | 0.967 / 0.936 / 0.974 / 0.930 / 0.873 / 0.961 |
+| blk78q4 | 174.16 GB (−2.32 GiB) | **`ef2ff5959d239690` (4468 chars)** | **identical to 5 decimals, all 6 prompts** |
+
+Bit-identical text (reasoning_content+content scrape) **and** bit-identical MTP
+acceptance / mean draft length, reproduced across independent fires. Verification
+makes MTP-block quant throughput-only at MoE scale too — not just on the 27B dense
+block D1 was first measured on.
+
+**Still frozen / not claimed:** D1 finding 3 (imatrix data made no difference). The
+GLM A/B used an existing production quant vs a one-tensor q4_K rewrite; it does
+**not** re-test whether MTP imatrix collection improves a from-scratch low-bit MTP
+quant. Collection wiring for MTP remains a separate open (blk.78 imatrix still 0 on
+our glm-dsa path). Cite D1 for **output-neutrality under verification**; do not cite
+it for "imatrix does not matter on MTP."
+
+**Size note updated:** −2.32 GiB measured on the real 744B MoE MTP block, not
+extrapolated. That headroom is context on the binding VRAM axis.
+
 ## Honest scope
 
-This fixes *collection*, and D1 above shows collection alone did not buy accuracy on this
-model. The size argument should be kept in proportion too: 297 MiB measured on a 27B, and
-extrapolation to a ~744B MoE is arithmetic, not measurement. Real, and it stacks with
-other savings, but not a context-ceiling unlock.
+This fixes *collection*. D1 finding 1 (output-neutral MTP quant under verification)
+now holds on a 27B dense block **and** a 744B MoE block. D1 finding 3 (imatrix
+neutrality) remains a single-model negative result and is not generalized.

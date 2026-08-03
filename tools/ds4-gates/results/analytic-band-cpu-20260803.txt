@@ -1,0 +1,43 @@
+# B4 arc-3 analytic band — CPU gate run 2026-08-03 ~16:40 NZST
+# tree: ds4-ports 0ec96d43 (op plumbing) + increment 2 (caller + batch-print fix), Mac M3 Max CPU build
+# fixture: test-llama-archs -a inkling -o . → inkling-moe.gguf (7 MB synthetic, n_swa=1024, REL_EXTENT 64/32)
+# recipe: llama-server --embeddings --pooling none -fa on -np 2 -c 8192 -ub 512 -lv 5 --no-warmup
+#         + LLAMA_BATCH_DEBUG=1 (witness); arm B adds DS4P_ANALYTIC_BAND=1
+# NOTE (recipe archaeology): the n_seqs witness needs -lv 5 (LOG_LEVEL_DEBUG=5; -lv 4 filters it silently)
+
+== 1. compute-buffer A/B (identical settings, only the flag differs) ==
+arm A (mask):     sched_reserve: CPU compute buffer size = 10.06 MiB
+arm B (analytic): sched_reserve: CPU compute buffer size =  4.56 MiB
+→ mask plane + cont copy GONE (-55% total buffer at toy scale c=8192/ub512/np2).
+  The deleted term is the O(n_kv × n_tokens) one = the ~15.3 GiB floor at ub2048×2M.
+
+== 2. banded_equiv_gate.py, both arms (flood, self-witnessing) ==
+arm A: worst over 16 pairs max|dX|=0.000e+00 max|dY|=0.000e+00; n_seqs histogram {512:16, 256:2, 2:21, 1:35} → PASS
+arm B: worst over 16 pairs max|dX|=0.000e+00 max|dY|=0.000e+00; n_seqs histogram {512:15, 256:4, 2:21, 1:35} → PASS
+(21 witnessed n_seqs=2 joint ubatches each → multi-stream per-stream banded path exercised in analytic mode)
+
+== 3. cross-arm bit-compare (same tokens → both servers, per-token embeddings) ==
+len=64:   rows=64   max|mask − analytic| = 0.000e+00
+len=256:  rows=256  max|mask − analytic| = 0.000e+00
+len=500:  rows=500  max|mask − analytic| = 0.000e+00
+len=137:  rows=137  max|mask − analytic| = 0.000e+00
+== CROSS-ARM: BIT-IDENTICAL ==
+
+== 4. SWA-cutoff vacuity check (n_swa=1024 > all lengths above → re-run at -ub 2048) ==
+len=1500 (rel_dist max 1499 > n_swa 1024): rows=1500 max|d| = 0.000e+00
+len=2000 (rel_dist max 1999 > n_swa 1024): rows=2000 max|d| = 0.000e+00
+→ the SWA visibility boundary itself is crossed and still bit-identical (not vacuous).
+
+== bugs found & fixed en route ==
+1. banded constructor wrote rel_extent via `op_params + 16` = int32 arithmetic = byte 64 =
+   ONE PAST the op_params array (into tensor->flags + padding). Harmless by luck (kernels
+   read rel->ne[0]; nothing reads the slot). Fixed: op_params[4] (byte 16) for rel_extent,
+   op_params[6] (byte 24) for visibility_window.
+2. LLAMA_BATCH_DEBUG=1 + no-vocab fixture: ubatch_print calls vocab->token_to_piece →
+   out_of_range throw on the empty piece cache → server dies at the load-time
+   common_context_can_seq_rm probe. Fixed: skip piece lookup for LLAMA_VOCAB_TYPE_NONE.
+
+== remaining for arc-3 close ==
+- CUDA verdict: test-backend-ops analytic cases (added next) in a box window (~60 s ask).
+- MMA route note: analytic mode pins the FP32 fallback CUDA kernel (MMA derives visibility
+  from the mask tensor); MMA analytic support is a follow-up optimization, correctness first.

@@ -1,0 +1,9 @@
+# abort_paths_gate 2026-08-03T02:07:24+12:00 url=http://127.0.0.1:8396 ntok=12000
+== mode=fin
+  t_detect_s=.548  t_free_s=7.784  prefill_continued_after_death=1
+== mode=rst
+  t_detect_s=.581  t_free_s=9.443  prefill_continued_after_death=1
+== mode=kill9
+  t_detect_s=.563  t_free_s=9.380  prefill_continued_after_death=1
+# judge: t_detect <= ~2s (1s poll tick), t_free <= t_detect + one batch, runaway=0
+== RESULT: MEASURED (judge latencies above) ==

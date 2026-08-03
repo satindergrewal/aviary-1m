@@ -1,0 +1,8 @@
+# q8_banded_probe final (log-witnessed q8); tree b7972b83+DS4P_BANDED_QKV edit
+  f16-fallback   compute_buf =   268.53 MiB
+  f16-banded     compute_buf =    38.04 MiB
+  q8-fallback    compute_buf =   268.53 MiB
+  q8-banded      compute_buf =    38.04 MiB
+  q8 K-cache WITNESSED in boot logs; f16-vs-q8 output delta (info) = 2.631e-08
+  path FP spread: f16(calibration) = 5.244e-07   q8 = 5.244e-07
+== RESULT: PASS (q8 spread within 3x of f16 calibration, limit 1.573e-06) ==

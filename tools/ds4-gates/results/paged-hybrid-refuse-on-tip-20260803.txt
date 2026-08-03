@@ -1,0 +1,28 @@
+0.00.002.044 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.002.055 W srv  llama_server: embeddings enabled with n_batch (2048) > n_ubatch (512)
+0.00.002.059 W srv  llama_server: setting n_batch = n_ubatch = 512 to avoid assertion failure
+0.00.002.726 W srv  llama_server: -----------------
+0.00.002.728 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.002.729 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.002.729 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.002.729 W srv  llama_server: -----------------
+0.00.004.907 I srv    load_model: loading model 'inkling-moe.gguf'
+/Users/satinder/Documents/GitHub/llama.cpp-ds4ports/src/llama-model.cpp:2182: GGML_ASSERT((!cparams.kv_paged || paged_hybrid_dev) && "kv_paged is not yet supported for hybrid architectures") failed
+WARNING: Using native backtrace. Set GGML_BACKTRACE_LLDB for more info.
+WARNING: GGML_BACKTRACE_LLDB may cause native MacOS Terminal.app to crash.
+See: https://github.com/ggml-org/llama.cpp/pull/17869
+0.00.007.896 E create_memory: kv_paged is not yet supported for hybrid architectures; the attention cache would be a full-context static allocation, not a paged one
+0   libggml-base.0.18.0.dylib           0x0000000100e65470 ggml_print_backtrace + 276
+1   libggml-base.0.18.0.dylib           0x0000000100ef072c ggml_abort + 156
+2   libllama.0.0.10287.dylib            0x0000000101061cdc _ZNK11llama_model13create_memoryERK19llama_memory_paramsRK13llama_cparamsP12ggml_backendS7_RKNSt3__16vectorIS7_NS8_9allocatorIS7_EEEE + 2748
+3   libllama.0.0.10287.dylib            0x0000000100fc683c _ZN13llama_contextC2ERK11llama_model20llama_context_params + 5516
+4   libllama.0.0.10287.dylib            0x0000000100fd1350 llama_init_from_model + 728
+5   libllama-common.0.0.10287.dylib     0x0000000101b57504 _ZL34common_get_device_memory_data_implPKcPK18llama_model_paramsPK20llama_context_paramsRNSt3__16vectorIP19ggml_backend_deviceNS7_9allocatorISA_EEEERjSF_SF_14ggml_log_level + 244
+6   libllama-common.0.0.10287.dylib     0x0000000101b57d5c _ZL22common_params_fit_implPKcP18llama_model_paramsP20llama_context_paramsPfP32llama_model_tensor_buft_overridePmj14ggml_log_level + 180
+7   libllama-common.0.0.10287.dylib     0x0000000101b57b00 _Z17common_fit_paramsPKcP18llama_model_paramsP20llama_context_paramsPfP32llama_model_tensor_buft_overridePmj14ggml_log_level + 108
+8   libllama-common.0.0.10287.dylib     0x0000000101b39480 _ZN18common_init_resultC2ER13common_paramsb + 320
+9   libllama-common.0.0.10287.dylib     0x0000000101b3ae50 _Z23common_init_from_paramsR13common_paramsb + 68
+10  libllama-server-impl.dylib          0x000000010147131c _ZN19server_context_impl10load_modelER13common_params + 3016
+11  libllama-server-impl.dylib          0x000000010139d418 _Z12llama_serverR13common_paramsiPPc + 20472
+12  libllama-server-impl.dylib          0x00000001013983bc _Z12llama_serveriPPc + 164
+13  dyld                                0x000000018b027e00 start + 6992

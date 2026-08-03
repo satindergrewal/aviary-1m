@@ -1,0 +1,6 @@
+ggml_compute_forward_paged_attn: running CPU reference implementation of paged attention. This is for correctness validation only and is not optimized. See docs/paged-attention.md for details.
+backend: CPU
+case A: with_rel=1 paged_window=0 fa_window=24 max_abs=2.384e-07 nmse=2.638e-13 PASS
+case B: with_rel=1 paged_window=8 fa_window=8 max_abs=2.384e-07 nmse=1.812e-13 PASS
+case C: with_rel=0 paged_window=8 fa_window=8 max_abs=2.384e-07 nmse=1.738e-13 PASS
+test-paged-banded: ALL PASSED

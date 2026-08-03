@@ -1,0 +1,15 @@
+# reval_gate 2026-08-03T01:19:15+12:00 bin=/Users/satinder/Documents/GitHub/llama.cpp-ds4ports/build-check/bin/llama-server model=qwen3-4b-dev-Q8_0.gguf
+# provenance: VERIFIED-BY-GATE (counters read from /metrics, not from log lines)
+== phase 1: seal + verified load ==
+  FAIL: reval_saves >= 1 (0 not ge 1)
+  FAIL: reval_loads >= 1 (0 not ge 1)
+  PASS: hash_fail == 0 (0 eq 0)
+  PASS: identity_fail == 0 (0 eq 0)
+  PASS: cell_mismatch == 0 (0 eq 0)
+== phase 2: injected corruption detected, degrades to recompute ==
+  FAIL: hash_fail >= 1 (0 not ge 1)
+  PASS: request after detection still completes (recompute path)
+== phase 3: feature OFF => counters stay zero ==
+  PASS: saves == 0 (off) (0 eq 0)
+  PASS: loads == 0 (off) (0 eq 0)
+== RESULT: FAIL ==
