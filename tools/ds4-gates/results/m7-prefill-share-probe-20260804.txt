@@ -770,3 +770,13 @@
 # (recompute=8, evictions=4) | ARM3 3/3 @400 (swap_ins=4 drained). Zero errors.
 # Run because this changed the DEFAULT prefill path again -- same rule as every other
 # default change tonight.
+#
+# q-ROWS-PER-BLOCK CURVE NOW COMPLETE (staging work per q row halves each doubling):
+#    64 rows -> 3,139 / 3,113   (mean ~3,126)
+#   128 rows -> 2,998 / 2,972 / 2,972  (mean ~2,981)   <== OPTIMUM, shipped 309915da
+#   256 rows -> 3,086            TURNS OVER
+# 256 loses for the reason predicted IN ADVANCE in-room: the previous doubling was FREE
+# in shared memory (the q/KV overlay meant max(q, k+v) did not move), this one is not --
+# q staging doubles to ~70 KB and takes blocks/SM with it. Reverted; 128 stands.
+# ★ Stating the turnover risk BEFORE the wall is what makes the reversion a result
+#   rather than a retreat: the curve has a measured peak, not an unexplored edge.
