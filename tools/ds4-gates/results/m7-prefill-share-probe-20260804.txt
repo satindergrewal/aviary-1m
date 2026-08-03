@@ -734,3 +734,34 @@
 # bit-identical to mode 3 as expected since it re-partitions rather than reorders),
 # measured, reverted. Same discipline as the 2-warp counter-test earlier in this arc --
 # dead code that loses has no reason to ship; the measurement is the artifact.
+
+# ============================================================================
+# ★★ THE AXIS THAT ACTUALLY MOVES: FEWER INSTRUCTIONS, NOT MORE WARPS
+#    (ds4-ports 309915da) -- 2,972 ms, first time under 3 seconds
+# ============================================================================
+#   lever                        mechanism                          wall
+#   __launch_bounds__(128,5)     buy warps by SPILLING              3,942  WORSE
+#   8 warps x HALF head_dim      buy warps by DUPLICATING math      4,408  WORSE
+#   8 warps x 128 q rows (THIS)  REDUCE instructions, same warps    2,972  BETTER
+#   control (64 q rows)                                             3,139 / 3,113
+#
+# ★ THE LOSING LEVER AND THE WINNING ONE BOTH USE 8 WARPS. What differs is what the
+#   extra warps DO:
+#     loss: two warps split ONE q tile's output columns and each recomputes the SAME
+#           score tile  -> +50% arithmetic for the same rows
+#     win:  each warp owns its OWN 16 rows -> the block covers 128 q rows and stages
+#           the K/V tile ONCE for twice as many rows -> staging work per q row HALVES
+#   Occupancy is IDENTICAL in both (16 warps/SM). The only variable that changed is
+#   instruction count per q row -- exactly what the re-profile's real top stall
+#   (33.0% fixed-latency EXECUTION dependency) pointed at, as opposed to the occupancy
+#   estimate that led into two dead ends.
+#
+# CONFIRMED before claiming, because 4.9% is the same magnitude as the P1-7a result I
+# had to retract an hour earlier:
+#   this config: 2,998 / 2,972 / 2,972   (spread <1%)
+#   control:     3,139 / 3,113
+#   gain ~5x the noise band. Contrast P1-7a, where the spread (20 pts) EXCEEDED the
+#   effect being claimed -- that is the difference between a win and a wish.
+#
+# STANDING: 2,972 vs static banded FA 2,470 same session = 1.21x off (was 1.26x, and
+# 17.8x off when this arc opened). 14.7x over the 43,726 baseline.
