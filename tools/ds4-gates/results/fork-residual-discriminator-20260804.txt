@@ -21,3 +21,15 @@
 # [0..lcp) fork-vs-independent at the first sample position. Identical checksums => the
 # perturbation is in inputs/bookkeeping (write_slots/context_lens off-by-something at the
 # recomputed boundary tokens); different => inherited-block content diverges and WHERE.
+
+# == SESSION 2: CHECKSUM VERDICT -- (a) CLOSED, fork ACQUITTED (ds4-ports a84acc8c) ==
+# llama_paged_debug_seq_kv_checksum (raw-bit additive per-layer sums, block-table readback):
+#   fork req1 == independent req1: ALL layer sums BIT-IDENTICAL (573427656158; l0-l3 match)
+#   fork req2 == fork req1 (COW: same physical blocks, identical by construction)
+#   ★ independent req2 != independent req1 ON IDENTICAL PREFIX CONTENT
+#     (573430155246 vs 573427656158, differing from LAYER 0 = pure embedding matmul)
+# => the COW fork's inherited + recomputed-boundary KV is BIT-EXACT. The 0.005-0.43-logit
+#    "residual" was the CONTROL ARM's noise: concurrent prefills sharing batches with live
+#    decode rows are not bit-reproducible on this backend (batch-composition sensitivity
+#    of the GEMM). The earlier b-invariance held only for SOLO same-content runs.
+# P1-6 forking status: EXACT at the KV level, full stop.
