@@ -563,3 +563,35 @@
 #   the block that shared memory is already willing to give. Risk is honest -- 5 blocks
 #   means <=102 registers against an architectural floor of ~96 (o_acc 64 + Q 32), so
 #   it may spill; the wall decides.
+#
+# ⚠ ROW 8 SECOND HALF: THE RE-PROFILE'S OWN LEVER FAILED THE WALL.
+#   __launch_bounds__(128,5) -- take the 5th block that shared memory already allows,
+#   ncu Est. Local Speedup 66.67% -- measured 3,942 ms vs 3,113 = 27% WORSE.
+#   Forcing the 5th block spills more than the extra warps return. Reverted; the
+#   number is in the source comment so nobody re-tries it blind. Revert confirms 3,124.
+#   ★★ CLASS: an "Est. Local Speedup" estimates what REMOVING a stall is worth, NOT
+#     that your chosen mechanism removes it without cost. I had cashed two estimates
+#     from this same profile earlier in the day, and that made me credulous about the
+#     third. The estimate proposes; the wall disposes. Sibling of
+#     [[refuted-needs-its-condition]] -- both are about not letting a source of truth
+#     be quoted past what it actually measured.
+#   DESIGNED-NOT-BUILT (named, not claimed): getting past 4 blocks/SM needs a
+#     STRUCTURAL register cut -- 8 warps each owning HALF the head_dim (4 accumulator
+#     tiles = 32 registers instead of 64), two warps cooperating per q tile, paying a
+#     duplicated QK to halve the accumulator.
+#
+# ==== AUDIT SCOREBOARD AT CLOSE ====
+#   row 1 head_dim 128 uncovered by the test .... FIXED 31a84987
+#   row 2 prefill splits never swept ............ FIXED 6f6b3d1b (~8%)
+#   row 3 KV depth 32 skipped by inference ...... FIXED 8a5b288c (wrong in DIRECTION)
+#   row 4 short-ctx prefill never measured ...... CLOSED, no regression 200/2K/22K
+#   row 8 stale profile + unquoted 1.26x ........ CLOSED (re-profiled; lever refuted)
+#   row 5 head_dim 96/192 not instantiated ...... OPEN (fallback loud, hole real)
+#   row 6 P1-5 warm-admit closed AT FAIL ........ OPEN
+#   row 7 P1-7a U-curve, no plan ................ OPEN
+#   row 9 Metal/CPU paged prefill parked ........ OPEN (all gains here are CUDA-only)
+#
+# PREFILL AT AUDIT CLOSE: 3,113-3,124 ms = 14.0x over the 43,726 baseline, 1.26x off
+# the tuned static reference (~2,480). It was 1.43x off when M7 was declared closed --
+# the audit itself moved the number, which is the argument for running audits rather
+# than writing them.
