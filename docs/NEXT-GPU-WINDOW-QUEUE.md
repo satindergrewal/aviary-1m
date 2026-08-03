@@ -27,7 +27,7 @@ refuted it.
 tools/ds4-gates/results/*-box-20260804*):** item 1 CUDA gate PASS · warm-admit mechanism
 EXACT / 5x bar honest-FAIL at 4B-GPU · 16-agent 6.39x PASS · fork-cost ~0% PASS (4 mid-gate
 ships incl. the warp-parallel decode kernel: ref was 40 s/step at 8K ctx) · ub2048 2.05x ·
-M3 ~12% parked · P1-7a parked with full U-curve · P2-8 finale witnesses (see result file).
+M3 ~12% parked · P1-7a parked with full U-curve · P2-8 finale gate: caught the seq_rm-ordering storm (fixed 76da2261); verdict run in flight, result NOT yet banked.
 **REMAINING for a future window:** Q5 quench-econ (needs a V4+drafter serve slot — could
 not co-tenant the regen) · fork-residual discriminator · tiled prefill kernel (~20x).
 
