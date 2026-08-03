@@ -21,3 +21,10 @@ qnr: complete 6/6 @96 | max_swapped=0 swap_outs=0 swap_ins=0 recompute=0 evictio
 rec: complete 3/3 @400 | max_swapped=0 swap_outs=0 swap_ins=0 recompute=10 evictions=5 | pos_dec=0 oob=0 deadlock=0 decode_fail=0
 == ARM 3 swap-preempt ==
 swp: complete 3/3 @400 | max_swapped=2 swap_outs=4 swap_ins=4 recompute=0 evictions=4 | pos_dec=0 oob=0 deadlock=0 decode_fail=0
+
+# == RE-RUN ON THE SPLIT-K TIP (ds4-ports 483ffb05, 08:02) -- STILL 3/3 ==
+# ARM 1 qnr: 6/6 @96   ARM 2 rec: 3/3 @400 (4 evictions, 8 recomputes)
+# ARM 3 swp: 3/3 @400 (4 swap-outs, 4 swap-ins drained)   every arm: pos_dec/oob/deadlock/
+# decode_fail all 0. Regen unharmed (17,623 rows, green).
+# => the M7 split-K decode kernel does not disturb admission or either preemption path,
+# which was the risk worth checking: preemption's batches ride through that same kernel.
