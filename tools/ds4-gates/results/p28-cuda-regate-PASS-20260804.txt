@@ -1,0 +1,23 @@
+# ★★★ P2-8 CUDA RE-GATE: ALL THREE ARMS PASS -- P2-8 CLOSED (2026-08-04 07:21, box GPU0)
+# tip ds4-ports 8314d655 · runner tools/ds4-gates/p28_cuda_regate.sh · pinned CUDA_VISIBLE_DEVICES=0
+# beside the LIVE DSpark regen (76 GiB on both cards): regen HEALTHY throughout, rows 17,316 -> 17,323.
+#
+# BARS AND RESULTS:
+#   ARM 1 queue-not-reject : 6/6 @96  -- excess requests queue, none rejected, zero errors
+#   ARM 2 recompute-preempt: 3/3 @400 -- 5 evictions, 10 RECOMPUTES (lossless replay), zero errors
+#   ARM 3 swap-preempt     : 3/3 @400 -- 4 evictions, 4 swap-outs, 4 SWAP-INS ALL DRAINED, zero errors
+#   every arm: pos_dec=0  oob=0  deadlock=0  decode_fail=0
+#
+# This is the continuous-batching finale (P2-8) proven on the target backend: dynamic
+# admission, queue-instead-of-reject, and BOTH preemption strategies working under real
+# memory pressure -- the thing that opened the night as a 5-million-line livelock.
+#
+== sync + build ==
+8314d6554 scheduler: a failed post-swap-in growth must restore table consistency -- SWAP PATH NOW PASSES
+[100%] Built target llama-server
+== ARM 1 queue-not-reject ==
+qnr: complete 6/6 @96 | max_swapped=0 swap_outs=0 swap_ins=0 recompute=0 evictions=0 | pos_dec=0 oob=0 deadlock=0 decode_fail=0
+== ARM 2 recompute-preempt ==
+rec: complete 3/3 @400 | max_swapped=0 swap_outs=0 swap_ins=0 recompute=10 evictions=5 | pos_dec=0 oob=0 deadlock=0 decode_fail=0
+== ARM 3 swap-preempt ==
+swp: complete 3/3 @400 | max_swapped=2 swap_outs=4 swap_ins=4 recompute=0 evictions=4 | pos_dec=0 oob=0 deadlock=0 decode_fail=0
