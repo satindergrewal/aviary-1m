@@ -76,3 +76,31 @@ cost measures worse than the ~20× it removes.
 3. Throughput: ≥5× prefill tokens/s at 8K, no decode regression, measured on the box.
 4. The P2-8 arm suite (`p28_cuda_regate.sh`) still 3/3 — prefill changes touch the same
    scheduler batches that preemption rides on.
+
+
+## Route correction after reading the wiring (2026-08-04 08:1x, tip `483ffb05`)
+
+Phase 1 (split-K decode) shipped and measured 6.1× (220.7 → 36.2 ms/token at 22K,
+`results/m7-prefill-share-probe-20260804.txt`). For the prefill half, **option B costs more
+than it looked**:
+
+- The paged KV tensor is `[head_dim, block_size, 2*n_heads_kv, n_blocks]` — K heads and V
+  heads interleaved on axis 2, blocks on axis 3 (`llama-kv-cache-paged.cpp:81`).
+- `ggml_flash_attn_ext_banded` wants ordinary `k`/`v` tensors — separate, contiguous over
+  the KV axis (`ggml.h:2462`).
+- So the gather is not a view: it is a real de-interleaving copy, and it has to happen
+  **inside the graph** (the paged branch in `inkling.cpp` builds one fused node). That
+  means a new ggml op (`paged_gather_kv`) plus a graph-level branch that picks
+  gather+banded for prefill ubatches and the paged op for decode ubatches — op, CPU
+  reference, CUDA kernel, backend dispatch, and the graph surgery in every model that
+  gains a paged branch.
+
+**Corrected route: option A, tiled inside `ggml_paged_attn`.** It stays entirely within one
+file (`pagedattn.cu`), needs no new op and no graph change, and the tile loop also removes
+the residual 4.6× on decode (each split-K slice still walks one KV token at a time). Shape:
+grid `(head, seq, query_tile)`, `Q_TILE` = 32 queries per block, KV walked in `block_size`
+tiles staged once in shared memory, per-query online softmax in registers, the analytic band
+and rel-bias applied on the score tile. Split-K composes with it: a long context can split
+across the grid and combine with the same log-sum-exp kernel already written.
+
+Gate unchanged (bit-identical/gated max_abs vs the current kernel, ≥5× prefill, P2-8 3/3).
