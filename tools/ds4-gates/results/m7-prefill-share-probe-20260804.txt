@@ -665,3 +665,36 @@
 # it means populating the slot prompt-token record on the paged path (or routing the
 # paged path's own bookkeeping into prompt_save). Not attempted here -- it is a
 # scheduler/server change that deserves its own gate, not a tail-end patch.
+
+# ============================================================================
+# ROW 7 -- P1-7a RE-TESTED: STILL FAIL, but 5.1x better, and the GATE ITSELF is
+# UNDER-POWERED. Includes a retraction of my own headline.
+# ============================================================================
+# Its FAIL condition moved: the witness mechanism is "the live slot pays the prefill's
+# TOTAL compute regardless of slicing", and M7 cut that compute ~5x. So it was worth
+# re-running -- the [[refuted-needs-its-condition]] rule, second payout of the session.
+#
+#   run       | config                        | inflation | B prefill
+#   attempt 1 | new mma prefill               | -4.3% PASS| 559 ms
+#   CONFIRM   | new mma prefill, same rig     | +15.3% FAIL| 568 ms
+#   CONTROL   | OLD kernel (QTILE=0), same srv| +77.9% FAIL| 2,775 ms
+#   (bar: <10% live-decode tpot inflation. solo tpot ~6.2-6.3 ms/tok in all arms.)
+#
+# ⚠⚠ RETRACTION: on attempt 1 I posted "P1-7a FLIPS FAIL->PASS" to the room. It does
+# not. That was an n=1 POSITIVE -- the same error as the n=1 null already in my ledger,
+# pointed in the pleasant direction, which is exactly why it got past me. In the same
+# message I wrote that a verdict reversal "deserves better than an ambiguous rig", and
+# then published the reversal before the better rig had reported.
+#
+# WHAT IS REAL: 77.9% -> 15.3% is a **5.1x reduction in decode interference**, attributed
+# to M7 by a same-server / same-prompt / same-binary A/B rather than by inference. The
+# mechanism is confirmed: prefill compute 2,775 -> 568 ms, interference fell with it,
+# just not far enough to clear the bar.
+#
+# ★ SECOND FINDING, FROM THE DISAGREEMENT ITSELF: the same config measured -4.3% and
+# +15.3% on consecutive runs -- a ~20-point spread against a 10-point bar. **P1-7a as
+# written is NOT DECIDABLE AT n=1.** Any single run can land either side. The gate needs
+# repeated runs and a stated variance. The original +84.7% FAIL still stands (far outside
+# the noise band) but its PRECISION does not.
+#
+# STATUS: STILL FAIL. Mechanism confirmed, 5.1x improvement measured, methodology flagged.
