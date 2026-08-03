@@ -780,3 +780,33 @@
 # q staging doubles to ~70 KB and takes blocks/SM with it. Reverted; 128 stands.
 # ★ Stating the turnover risk BEFORE the wall is what makes the reversion a result
 #   rather than a retreat: the curve has a measured peak, not an unexplored edge.
+
+# ============================================================================
+# METAL SCOPING (owed item) -- AND THE SHARED UNBLOCK IT REVEALS
+# ============================================================================
+# MEASURED, not assumed: `grep -rn "PAGED_ATTN|FLASH_ATTN_EXT_BANDED" ggml/src/ggml-metal/`
+# returns NOTHING. Metal has 129 kernels and NEITHER of this lane's custom ops. So on
+# Apple silicon the situation is not "slow", it is:
+#   --kv-paged            : cannot run the op on the GPU at all
+#   banded FA (arcs 1-3)  : also absent
+# i.e. two shipped capabilities are CUDA-only, and the fork's headline numbers do not
+# describe what an M-series user gets.
+#
+# RECOMMENDATION -- FUNCTIONALITY BEFORE PERFORMANCE: port the SCALAR paged path
+# (grid-per-token) to MSL first, NOT the mma fast path. The mma kernel leans on
+# nvcuda-specific mma.cuh; Metal's simdgroup_matrix is analogous but not equivalent, so
+# the fast path is a rewrite, not a translation. "Runs slowly" strictly dominates
+# "cannot run", and the scalar port is a fraction of the work.
+#
+# ★★ THE SHARED BLOCKER (this is the useful part): a Metal port CANNOT BE GATED by
+# test-paged-banded, because that test compares paged against FLASH_ATTN_EXT_BANDED --
+# which does not exist on Metal either. That is the SAME blocker as audit row 5:
+# head_dim 96 cannot be verified because fattn-banded static_asserts D==64||128.
+#   ⇒ ONE artifact unblocks BOTH: a harness comparing a backend's paged output against
+#     the CPU paged reference (ggml-cpu/ops.cpp:12101), which has NO head_dim restriction
+#     and NO backend restriction.
+#   ⇒ Build that harness FIRST. It is small, it is the gate for any Metal work, and it
+#     simultaneously retires the head_dim 96/192 instantiation block. Two blocked items,
+#     one dependency.
+# Sizing: reference harness ~hours; scalar Metal paged kernel + device support + dispatch
+# ~1-2 days behind it.
