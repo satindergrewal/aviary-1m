@@ -273,3 +273,19 @@ Remaining 4c-1 work is the graph-branch itself + a hybrid serve witness on the s
 fixture. ⚠ Note the paged pool spans ALL layers today (M4 park): fine for inkling (all
 layers attn). Recurrent/shortconv state stays on the static recurrent member — the paged
 child replaces the ATTENTION side only.
+
+## Fixture-vocab upgrade map (grounded 2026-08-04 ~05:20 — closes hybrid DECODE on Mac)
+The fixture emits `LLM_KV_TOKENIZER_MODEL = "no_vocab"` literally (test-llama-archs.cpp:232)
+with n_vocab=128 (:90). Upgrade to a minimal SPM byte vocab so /completion + sampling work:
+- `tokenizer.ggml.model = "llama"` (SPM); token list of exactly 128 entries (embedding dim
+  constraint): [0]="<unk>" UNKNOWN, [1]="<s>" CONTROL (bos 1), [2]="</s>" CONTROL (eos 2),
+  [3..127] = `<0xNN>` BYTE tokens for bytes 0x00..0x7C.
+- also emit: scores (0.0f), token_type array, bos/eos/unk ids, add_bos=true.
+- ⚠ prompt constraint: test prompts must use chars ≤ 0x7C (all letters/digits/space OK; no
+  '}' '~' curly quotes). SPM byte-fallback tokenizes every such char to its byte token.
+- emission via ms.add_kv for LLM_KV_TOKENIZER_{MODEL,LIST,SCORES,TOKEN_TYPE,BOS_ID,EOS_ID,
+  UNK_ID,ADD_BOS} — check llama_model_saver::add_kv overloads for string-vector support
+  (add_kv_from_model shows the target key set).
+Then the hybrid DECODE gate runs ON MAC: fixture + DS4P_PAGED_HYBRID + --kv-paged + blocks →
+/completion through the scheduler → the 4c-1 branch executes ggml_paged_attn_banded live →
+paged-vs-static parity (greedy agreement framing, F16 pool). Closes 3b end-to-end card-free.
