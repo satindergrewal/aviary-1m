@@ -1,0 +1,21 @@
+# Q7 / P1-7a -- chunked-prefill interleave gate, box GPU0, qwen3-4b, 2026-08-04
+# Setup: agent A decodes 512 tok; agent B posts a ~5.2K-token prompt 0.5 s in.
+# Bar (PLAN-DS4-PORTS P1-7): live-slot decode degradation < 10%. Half (b) -- no logits
+# for prefill-only positions -- is enforced by the chunked-prefill implementation.
+#
+# == VERDICT: FAIL-AT-BAR, PARKED WITH THE FULL U-CURVE ==
+# solo tpot ~5.5 ms/tok. Mixed-arm inflation by prefill quantum:
+#   quantum 512 (full budget): +84.7%   (B prefill 2157 ms)
+#   quantum 256:               +86.5%   (B prefill 2326 ms)
+#   quantum 128:               +97.4%   (B prefill 2663 ms)
+#   quantum  64:               +126.8%  (B prefill 3718 ms)
+# MONOTONIC: smaller quanta are strictly worse on BOTH metrics. Mechanism: the decode and
+# the prefill chunk share one llama_decode graph on one GPU stream, so the live slot pays
+# the prefill's TOTAL compute regardless of slicing; smaller quanta only add per-step
+# fixed cost (graph rebuild on shape-changing batches).
+# => the <10% bar is unreachable by chunk sizing. Real designs, parked with this data:
+#   1. stream-overlapped prefill (separate CUDA stream/graph; decode steps interleave at
+#      kernel granularity) -- the actual fix, medium effort;
+#   2. shape-stable chunking (pad to fixed quantum -> graph reuse) -- trims only the
+#      fixed-cost tail, cannot beat the shared-stream serialization.
+# Ship: DS4P_PREFILL_QUANTUM env knob (63076b9a), default = full budget (measured optimum).
