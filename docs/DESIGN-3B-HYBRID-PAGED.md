@@ -221,3 +221,22 @@ immediately witnessable (paged context only goes live when a scheduler drives it
 (does --kv-paged stay exposed while 4d is built; does hybrid-paged serving land behind
 DS4P_PAGED_HYBRID or a new opt-in). Building the server gate topology before his word risks
 building it twice.
+
+## P1-6 primitive: paged seq_cp as block-table COW (designed 2026-08-03 ~23:50)
+Today: `seq_cp` is an inline no-op (paged.h ~:75, in-tree comment "implement later CoW
+mechanism" — the tree anticipates exactly this). Design:
+- **Fork (full-range seq_cp src→dst)**: dst's block table = src's block ids (table copy via
+  existing `concat_block_ids`), ++refcount per shared block. O(n_blocks) table work, ZERO KV
+  bytes moved — vs the static cache's O(n_ctx) cell copy. This IS the vLLM-style fork and
+  THE P1-6 payoff (agent fan-out from a shared prefix in microseconds).
+- **Partial range [p0,p1)**: blocks fully inside share (refcount++); boundary blocks get a
+  fresh block + `do_block_copy` (both primitives already exist :108-109).
+- **Refcount**: block manager gains a per-block count; `free_blocks` decrements and only
+  returns a block to the free list at 0. allocate() unchanged (new blocks start at 1).
+- **The real cost — write-path COW check**: the write path (write_slots store) must check
+  "is my tail block shared?" → if refcount>1, allocate fresh block, do_block_copy the
+  partial contents, swap the table entry, refcount--. One branch per token-write on the hot
+  path; only taken on post-fork writes. This is where the correctness gate must probe
+  (fork → diverge both seqs → outputs must equal two independent seqs).
+- **Sequencing**: needs 4d (scheduler serving) live first so fork is exercisable end-to-end;
+  code surface is llama-kv-cache-paged.{h,cpp} + the scheduler's group bookkeeping.
