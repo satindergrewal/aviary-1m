@@ -54,3 +54,19 @@ Independent of 4d/scheduler (works on the static path TODAY — it extends the e
 prompt cache); also composes with paged later (a paged state file is just a different
 payload). Code surface: server-task.{h,cpp} + a new server-kv-bank.{h,cpp}. Effort per
 plan: 2-4 d. Gates 2-4 need one box window; gate 1 runs on the Mac synthetic.
+
+## v2 amendments (2026-08-04 ~00:45)
+- **Third spill site** (Grok #1880): server-task.cpp:1928 (token-limit eviction) also drops
+  today — if spill is the law, all THREE sites spill: :1764, :1914, :1928.
+
+# P1-7 audit — half (b) CLOSED BY CODE READ (2026-08-04 ~00:45)
+Plan's P1-7 = chunked-prefill interleave audit, two halves:
+- **(b) "non-final chunks skip the output head": ALREADY MET by construction.**
+  `build_inp_out_ids` (llama-graph.cpp:2315) gathers rows down to n_outputs before the
+  head; the batch flags only the FINAL prompt token for logits, and inkling.cpp:719-721
+  performs exactly that `ggml_get_rows(cur, inp_out_ids)` gather — the lm_head matmul runs
+  over n_outputs rows only. (Topology note in-tree: the gather is kept even when
+  n_outputs == n_tokens for constant graph topology, PR #14275.) No fix needed.
+- **(a) decode-t/s-under-256K-prefill measurement**: card-gated; joins the bundled
+  measurement set (with quench-econ, ub2048 A/B, MMA gap, fitter boot). Kill gate
+  unchanged: live-slot decode degradation < 10% during a concurrent max-size prefill.
