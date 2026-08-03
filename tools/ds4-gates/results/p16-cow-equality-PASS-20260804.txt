@@ -1,0 +1,18 @@
+# ★★ P1-6 COW FORK EQUALITY GATE: PASS (bit-identical), 2026-08-04 ~07:45, qwen3-4b IQ4_KT, Mac CPU
+# arms: mode 1 = children FORKED off a live parent (COW); mode 3 = same prompts, same timing, NO fork
+
+FORKED:
+  req 1 step 0: top=576 (21.146072) runner=10423 (20.524971) gap=0.621101 -> ' The tallest'
+  req 2 step 0: top=10423 (19.965519) runner=576 (17.941853) gap=2.023666 -> ' Mount Everest'
+INDEPENDENT (control):
+  req 1 step 0: top=576 (21.146072) runner=10423 (20.524971) gap=0.621101 -> ' The tallest'
+  req 2 step 0: top=10423 (19.965519) runner=576 (17.941853) gap=2.023666 -> ' Mount Everest'
+
+== EQUALITY PASS: logits BIT-IDENTICAL to 6 decimals on both children; text identical. ==
+
+★ THE REAL BUG THIS FOUND AND FIXED (llama-paged-scheduler-impl.cpp:435):
+  prefill fed n_prompt tokens starting at logical_seq[0] and IGNORED n_past, so a forked
+  child re-read tokens 0..N while WRITING them at positions n_past.. -- wrong tokens at
+  wrong positions. Pre-fix delta was ~3.7 logits (24.259 vs 20.525 on the same token):
+  far too large for a reduction-order tie, which is what the discriminator established.
+  Fix: prefill feeds only logical_seq[n_past .. n_prompt).
