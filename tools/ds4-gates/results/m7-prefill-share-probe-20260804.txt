@@ -619,3 +619,49 @@
 #   head_dim 192 stays out for a separate, pre-measurement reason: 12 accumulator tiles
 #   = 96 registers plus Q residency exceeds what launch_bounds(128,4) enforces, and this
 #   session's own wall says forcing blocks against register pressure costs 27%.
+
+# ============================================================================
+# ⚠⚠ ROW 6 -- P1-5's DISK KV BANK IS NON-FUNCTIONAL ON THE PAGED PATH
+# ============================================================================
+# I listed row 6 as "warm-admit bar FAIL at 1.5x, abandoned". WRONG on both counts.
+# The witness (kvbank-gates-1-3-20260804.txt) says GATE 1 and GATE 3 PASS FLOAT-EXACT
+# and GATE 2 is "box-gated, bundled with the measurement window" -- it was never RUN.
+# Not abandoned-at-FAIL: unblocked work I had mislabelled as dead, which is worse,
+# because a FAIL invites a retry and an imagined FAIL does not.
+#
+# Then gate 2 would not run, through FIVE harness bugs, all mine:
+#   1. one request into an 8 GiB cache never evicts -> nothing spills -> both arms
+#      just pay full prefill (2,937 vs 2,958). I nearly banked that as "warm-admit
+#      buys nothing", which would have been a confident null from a broken rig.
+#   2. added forced eviction -- still nothing.
+#   3. `--cache-ram` is in MiB, NOT GiB: my "1" was 1 MiB against ~283 MiB states,
+#      so the cache could never store anything.
+#   4. my request template carried "cache_prompt": false -- every request explicitly
+#      opted OUT of the very cache under test. (fa-on-disables-the-guard, third time
+#      today: after sudo stripping DS4P_PAGED_QTILE, and my pkill killing ncu.)
+#   5. still nothing -> stopped guessing, ran the server at -lv 4.
+#
+# ★★ THE FINDING (definitive A/B: same binary, same flags, same prompts, ONLY
+# --kv-paged differs):
+#   NON-PAGED:  "updating prompt cache"
+#               "prompt_save: - saving prompt with length 2013, total state size
+#                = 283.102 MiB"                                    <- PROCEEDS
+#   PAGED:      "updating prompt cache"
+#               (the saving-prompt line NEVER appears)              <- BAILS
+#   prompt_save()'s only early return before that trace is:
+#       if (prompt.tokens.size() == 0) { return false; }   (server-context.cpp:303)
+#   => under --kv-paged the slot's PROMPT TOKEN RECORD IS EMPTY, so prompt_save
+#      returns false immediately, so the prompt cache stores nothing, so the disk
+#      KV bank NEVER SPILLS. P1-5 does not function on the paged path -- the exact
+#      path this lane exists to build.
+#
+# ⚠⚠ THE ACCEPTED ABSURDITY I READ PAST ALL DAY: every paged timing in this file
+# reports `prompt_n=0` -- for a 22,000-token prompt. Zero prompt tokens processed is
+# absurd on its face, it appeared in EVERY paged wall I took today, and I never once
+# asked why. It was the symptom of this bug the whole time, sitting in the output I
+# was quoting. The non-paged arms report prompt_n=2010/4200 correctly.
+#
+# STATUS: gate 2 remains UNRUN and is now BLOCKED ON A BUG, not on a window. Fixing
+# it means populating the slot prompt-token record on the paged path (or routing the
+# paged path's own bookkeeping into prompt_save). Not attempted here -- it is a
+# scheduler/server change that deserves its own gate, not a tail-end patch.
