@@ -61,3 +61,22 @@
 # governor's real job is untouched.
 # REMAINING (ledgered M8 option 3): a re-armable quench with periodic probe, for a pair
 # that degrades MID-RUN rather than at the start -- warmup cannot cover that case.
+
+# == M8 OPTION 3 SHIPPED + VERIFIED: re-armable quench (ds4-ports cb3246f9) ==
+# DS4P_QUENCH_PROBE (default 256 decoded tokens): after a quench the request gets ONE
+# fresh chance with clean state (EWMA at guard, no debt, warmup grace re-applied); a
+# still-bad drafter re-quenches within minev. PROBE=0 restores ds4 terminal semantics.
+#
+# SAME PAIR / PROMPTS, box GPU0:
+#   healthy prompt  probe=64: draft 163 acc 0.883 tps 230.3   probe=0: draft 163 0.883 212.9
+#   marginal prompt probe=64: draft 135 acc 0.674 tps 182.2   probe=0: draft  63 0.603 176.5
+#   RE-ARMED lines: probe64 = 1, probe0 = 0.   FIRED: 1 each.
+# ★ VERDICT: the re-arm fires exactly once, recovers 2.1x the drafting on the marginal
+# request (63 -> 135 tokens), and the recovered speculation was BETTER than the pre-quench
+# stretch (acc 0.603 -> 0.674 overall) -- i.e. the drafter HAD degraded in a phase and did
+# recover, which is precisely the case ds4's terminal quench cannot express. Throughput
+# +3.2% on that request; the healthy request is untouched by the knob (identical drafting).
+#
+# M8 STATUS: all three ranked options resolved -- (1) calibrate minev = measured
+# (MINEV=32 arm), (2) cold-start immunity = SHIPPED dea6a281, (3) re-armable = SHIPPED
+# cb3246f9. Both ds4 behaviours remain reproducible by env (WARMUP=0, PROBE=0).
