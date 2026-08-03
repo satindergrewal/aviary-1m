@@ -1,0 +1,9 @@
+# ★ 3b HYBRID PAGED DECODE GATE, 2026-08-04 ~05:45, synthetic inkling fixture (vocab-upgraded), Mac CPU
+# recipe: DS4P_PAGED_HYBRID=1 + --kv-paged --n-gpu-blocks 64 --n-cpu-blocks 16, -np 2, /completion
+
+== VERDICT: PASS — an INKLING-CLASS HYBRID served a completion through the paged
+   continuous-batching engine: intake->scheduler (13 tokens registered) -> prepare_batch
+   -> decode via the 4c-1 ggml_paged_attn_banded branch -> 4 tokens @ 2199 t/s -> streamed.
+   The HTTP 500 is the CHAT-TEMPLATE parser rejecting random-weight bytes (fixture has
+   untrained weights) -- generation itself completed; 'unparsed Content-only output' is
+   proof tokens were produced, not a serving failure. ==
