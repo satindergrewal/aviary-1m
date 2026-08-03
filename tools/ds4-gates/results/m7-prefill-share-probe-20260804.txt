@@ -810,3 +810,40 @@
 #     one dependency.
 # Sizing: reference harness ~hours; scalar Metal paged kernel + device support + dispatch
 # ~1-2 days behind it.
+
+# ============================================================================
+# ★★ THE SHARED UNBLOCK, BUILT (ds4-ports def6b346) -- AND IT CAUGHT A BUG IN MY
+#    OWN FOUR-HOUR-OLD COMMIT WITHIN MINUTES (fix 4327c521)
+# ============================================================================
+# tests/test-paged-vs-cpu.cpp compares a backend's paged output against the CPU
+# implementation of the SAME op. No FLASH_ATTN_EXT_BANDED dependency => no head_dim
+# restriction, no backend restriction. Gates a Metal port AND retires the head_dim
+# block with one artifact. 12 cases (D=64/96/128/192 x 3): ALL PASSED.
+#
+# ★ UNPLANNED SELF-WITNESS -- THE ERROR MAGNITUDE REPORTS WHICH KERNEL RAN:
+#     D= 64/128 -> max_abs ~4e-05   (mma path: f16 tensor-core rounding)
+#     D= 96/192 -> max_abs ~4e-08   (~1 ULP: scalar path)
+#   This is exactly what was MISSING when mode 4's bit-identical bar proved nothing
+#   about dispatch. Keep it: any future paged kernel work can read the magnitude to
+#   confirm the intended path executed.
+#
+# ⚠⚠ IT PAID IMMEDIATELY. Re-added the head_dim 96 mma instantiation to close audit
+# row 5. EVERY CASE PRINTED PASS -- and the fingerprint still read 4.47e-08 = SCALAR.
+# The mma kernel was not running. A pass/fail bar would have shown three green PASSes
+# and "head_dim 96 supported" would have shipped as a lie.
+#
+# ROOT CAUSE, and it corrects TWO things I shipped earlier tonight:
+#   `if (head_dim == 64 || head_dim == 128)` is an OUTER guard wrapping EVERYTHING
+#   fast -- mma prefill, split-K decode, warp-parallel decode. The inner dispatch I
+#   patched was dead code inside a block head_dim 96 never enters.
+#   1. The loud fallback warning shipped in 7e75d119 sits INSIDE that same guard, so
+#      IT CAN NEVER FIRE for the head_dims it describes. A warning that cannot fire is
+#      worse than none: it reads as coverage. Moved outside (4327c521).
+#   2. Its text was wrong too: a head_dim outside 64/128 does not get a "12.8x slower
+#      prefill", it gets the generic scalar kernel for prefill AND DECODE. I understated
+#      the cost of the very thing I was warning about.
+#
+# AUDIT ROW 5 THEREFORE CLOSES AS: the blocker was never the mma instantiation list --
+# it is the outer guard, and widening it (head_dim % 32 == 0 divides cleanly at 96/192
+# for the decode kernel's n_warps) changes the DECODE path as well and needs its own
+# gate. Named and sized, not faked.
