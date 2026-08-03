@@ -135,3 +135,16 @@
 # STATE: DS4P_PAGED_QTILE unset/=1 untouched and still the measured paths; =2 is the dark
 # fragment path. Three shapes now measured for prefill (f32 tile 1.52x, score-block 0.41x,
 # fragment 0.50x) -- all dark, none shipped, the baseline path is what anyone runs.
+
+# == MULTI-WARP FRAGMENT PREFILL (ds4-ports 52b036ab): 87,793 -> 31,915 ms (2.75x) ==
+#   test-paged-banded ALL PASSED under QTILE=2. Now at parity with the best f32 tile
+#   (28,816) and still 3.6x off the <= 8,745 gate.
+#   Fix: block is 4 warps -- staging, per-row softmax rescale and writeback are block-wide;
+#   fragment ops stay warp-0 (wmma is warp-scoped); barriers upgraded to __syncthreads.
+#   This confirms the s3b diagnosis exactly: the 32-thread shape, not the tensor cores.
+# ★ WHAT REMAINS IN THIS SHAPE: warp 0 issues both matmuls while three warps idle through
+#   them. Real flash-attention gives each warp its OWN key tile and merges the per-warp
+#   (m, l, acc) states at the end -- a structural change, not a knob. That is the next
+#   commit, and it is the last idea in this line that has a mechanism behind it.
+# PREFILL SCOREBOARD (all dark, baseline is what runs): baseline 43,726 · f32 tile 28,816
+#   (1.52x) · score-block 106,201 · fragment 1-warp 87,793 · fragment 4-warp 31,915.
