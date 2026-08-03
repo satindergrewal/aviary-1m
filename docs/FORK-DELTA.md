@@ -1,7 +1,7 @@
 # FORK-DELTA — everything satindergrewal/llama.cpp carries vs upstream
 
-**Living doc (plan item 3c). Update on every fleet merge.**
-Author: Fable-DS4 | Snapshot: 2026-08-02 ~23:15 NZST | Provenance: measured from git on the box
+**Living doc (plan item 3c). Update on every fleet merge AND every `ds4-ports` push.**
+Author: Fable-DS4 | Snapshot: 2026-08-04 (M7 prefill arc) | prior snapshot 2026-08-02 ~23:15 NZST | Provenance: measured from git on the box
 (`/mnt/nvme0/llama.cpp-fleet`), not from memory. Branch statuses cross-checked against the task
 board. Anything not measured is marked.
 
@@ -84,7 +84,7 @@ issue the Fable-DSpark session worked, 2026-08-02) · sync merges `6c7cec496`, `
 | branch | tip | what | status |
 |---|---|---|---|
 | `dsv4-kvpaged` | `3376ebbc8` | BOTH its commits now content-equivalent on fleet (fitter=`cc4059bfd`, un-gate=`5751cfdde`) → branch fully redundant, BUT its worktree built the RUNNING V4 serve binary | keep until the serve is rebuilt from fleet, then tag-then-delete (policy rule 3) |
-| `ds4-ports` | `8314d655` | fleet + 62 lane commits (2026-08-04 window: Q1-Q7 all measured; ★★★ **P2-8 CONTINUOUS BATCHING CLOSED** — CUDA re-gate all three arms PASS: queue-not-reject 6/6, recompute-preempt 10 lossless replays, swap-preempt 4/4 swap-ins drained, zero errors, regen unharmed; 17 ships incl. chunked prefill `57501615`, warp-parallel decode kernel `8af43595`, prefill-on-grid `db3afe58`, fork n_past cap `4a84450c`, hybrid-fork refusal `aa3c01dd`, seq_rm ordering `76da2261`, eager teardown+storm breaker `f2a515df`, explicit-wins fitter `324827cb`, KV checksum API `a84acc8c` (acquitted the fork bit-exact), candidates-gate `9669526a`, lossless recompute `23a157e5`, admission delta `99ea0134`, swap consistency `8314d655`) | | active lane; merge to fleet only after full arc gates + his approval |
+| `ds4-ports` | `f0e02555` | fleet + 70 lane commits. **2026-08-04 window: P2-8 CONTINUOUS BATCHING CLOSED** (CUDA re-gate 3/3: queue-not-reject 6/6, recompute-preempt 10 lossless replays, swap-preempt 4/4 swap-ins drained) and **M7 PAGED ATTENTION**: decode split-K `8af43595` 6.1x (220.7->36.2 ms/tok), then prefill. Prefill took TEN dark wmma walls capped at 29-59 s before the mechanism changed: `76fc9d4a` **fragment-held mma prefill = 12,615 ms = 3.47x** over the 43,726 baseline and 2.28x over the best of those ten (28,816) -- mma.cuh typed tiles, accumulator register-resident across the whole key loop, P feeding the next mma straight out of the score registers (ported discipline: upstream `fattn-mma-f16.cuh`, Johannes Gaessler). Also `bc738d28` all-warps wmma 31,525 (control), `f0e02555` KV-64 FAIL 18,364 + smem overlay FLAT 12,507. Earlier ships: chunked prefill `57501615`, prefill-on-grid `db3afe58`, fork n_past cap `4a84450c`, hybrid-fork refusal `aa3c01dd`, seq_rm ordering `76da2261`, eager teardown+storm breaker `f2a515df`, explicit-wins fitter `324827cb`, KV checksum API `a84acc8c` (acquitted the fork bit-exact), candidates-gate `9669526a`, lossless recompute `23a157e5`, admission delta `99ea0134`, swap consistency `8314d655` | | active lane; every M7 prefill kernel is DARK behind `DS4P_PAGED_QTILE` (default path bit-identical to baseline, measured 43,717 unflagged); merge to fleet only after full arc gates + his approval |
 | `fleet-dsv4-dspark` | `fe0404a32` | yaniss dspark-dsv4 merge: DSV4 drafter (PRs #25683/#25682/#25687), RoPE pairing fix, 5 DSpark correctness fixes, `dsv4-mla-brick.cpp` build fix | builds; acceptance A/B pending GPU window |
 | `dsa-dequant-gather` | `42942e19b` | DSA dequant-in-gather (~253K→~572K ctx target) | binary pre-built (`wt-dsa-dequant`); gates G1 pending GPU window |
 | `fable-k3-support` | `06eec9f5c` | Kimi-K3 arch support | branch-only |
