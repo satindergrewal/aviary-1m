@@ -1,0 +1,11 @@
+# 3b HYBRID PAGED DECODE GATE (op-level), 2026-08-04 01:47
+# recipe: DS4P_PAGED_HYBRID=1 GGML_SCHED_DEBUG=2 llama-server -b 512 -ub 512 --kv-paged, /completion + grammar, -lv 5
+
+== VERDICT: FAIL — serving succeeded but through the STATIC UNFUSED path (no flash, no paged op): both use_banded_flash and the 4c-1 branch switched off; the static cache silently did all the work ==
+
+http=200 predicted_n=8 content=' ve ve v'
+markers={'pool_constructed': True, 'sched_discovered': True, 'sched_initialized': True, 'sched_stepped': 9, 'request_registered': True}
+serve-window ops: {'MUL_MAT': 168, 'ADD': 128, 'MUL': 112, 'CONT': 104, 'RMS_NORM': 80, 'CPY': 80, 'GET_ROWS': 72, 'CONCAT': 72, 'SSM_CONV': 64, 'SCALE': 48, 'MUL_MAT_ID': 48, 'SET_ROWS': 32, 'SOFT_MAX': 24, 'SWIGLU': 24, 'PAD': 16, 'NEG': 16, 'SIGMOID': 8, 'ARGSORT': 8, 'SOFTPLUS': 8}
+load-window ops (context only): {'MUL_MAT': 361, 'ADD': 296, 'MUL': 294, 'CONCAT': 229, 'RMS_NORM': 210, 'CPY': 210, 'CONT': 193, 'SSM_CONV': 168, 'GET_ROWS': 149, 'MUL_MAT_ID': 126, 'SCALE': 86, 'SET_ROWS': 84, 'FLASH_ATTN': 80, 'SWIGLU': 63, 'NEG': 42, 'SOFT_MAX': 23, 'SIGMOID': 21, 'ARGSORT': 21, 'SOFTPLUS': 21, 'PAD': 2}
+paged ops in serve window: 0   flash ops in serve window: 0
+raw server log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/hybrid-paged-decode-raw-20260804.log

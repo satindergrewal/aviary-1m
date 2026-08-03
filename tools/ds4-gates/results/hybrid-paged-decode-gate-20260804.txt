@@ -1,3 +1,12 @@
+# ⛔ CORRECTION 2026-08-04 01:47 (op-level gate hybrid_paged_gate.sh, results/hybrid-paged-decode-raw-20260804.txt):
+# The claim below that decode went "via the 4c-1 ggml_paged_attn_banded branch" was INFERRED, not
+# measured, and is WRONG. GGML_SCHED_DEBUG=2 graph dumps show ZERO paged ops and ZERO flash ops in
+# the serve-time graphs: the request was served by the STATIC cache through the UNFUSED attention
+# path. Root cause: the 4c-1 branch condition ANDs use_banded_flash(il), which requires the STATIC
+# cache's n_kv_pos_contiguous > 0 -- a property scheduler-driven decode does not maintain -- so both
+# banded flash and the paged branch silently switch off. Scheduler intake/prepare/update all ran
+# (markers all true), which is what made the fallback invisible. "Serving worked" != "branch taken".
+#
 # ★ 3b HYBRID PAGED DECODE GATE, 2026-08-04 ~05:45, synthetic inkling fixture (vocab-upgraded), Mac CPU
 # recipe: DS4P_PAGED_HYBRID=1 + --kv-paged --n-gpu-blocks 64 --n-cpu-blocks 16, -np 2, /completion
 
