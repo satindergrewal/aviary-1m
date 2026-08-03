@@ -64,3 +64,20 @@
 #   already written and equivalence-gated, so the change is local to the score loop.
 # Honest position: phase 2 as written is a correct but modestly-profitable step; it stays
 # dark until the score-block mapping lands and the >=5x gate is actually met.
+
+# == M7 PHASE 2b (score block) -- REGRESSED 3.4x, REVERTED (ds4-ports 2f9c4c81) ==
+#   22K prefill: 31,272 ms (phase 2 tiled) -> 106,201 ms (score block) = 0.41x
+#   test-paged-banded still ALL PASSED -> the MATH was right, the MEMORY SHAPE was wrong.
+# ★ WHY: "lane owns a whole query's dot product" removes the shuffles but destroys
+#   COALESCING -- each active lane then streams all head_dim values of the SAME k vector
+#   from global memory by itself, so the warp re-reads one cache line q_cnt times instead
+#   of loading it cooperatively (32 lanes x 4 dims) once.
+# ★ LESSON (worth more than the commit): shuffles were not the whole cost. A mapping that
+#   deletes them by breaking coalescing loses more than it saves. The win must keep
+#   lane-owns-dims cooperative loads AND amortize each load across queries -- i.e. phase 2's
+#   shape (4cb656dd, 1.40x) is the right skeleton and needs a cheaper per-query reduction
+#   inside it (e.g. score several queries per shuffle tree, or stage K in smem once per
+#   tile so the reduction reads smem instead of re-reading global).
+# STATE: reverted to phase 2's mapping; DS4P_PAGED_QTILE still dark; M7 prefill OPEN with
+# the search space now measured from both sides (too few reductions AND too little
+# coalescing both lose).
