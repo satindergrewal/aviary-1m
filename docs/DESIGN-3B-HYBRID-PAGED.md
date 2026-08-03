@@ -258,3 +258,18 @@ For the hybrid family:
 - ⚠ CORRECTION of my #1876 claim: the fitter is GPU-ONLY ("no GPU device found, cannot fit"
   — witnessed on the Mac tonight). Its hybrid boot witness = box light-touch (CUDA context
   during load), i.e. permission-gated, bundle with any future window.
+
+## 4c-1 grounding (2026-08-04 ~04:35, post-4d-flip)
+Branch point confirmed: inkling.cpp:345 `build_inp_mem_hybrid_iswa()` → :434
+`inp_hybrid->get_attn()` (the STATIC iswa context). 4c-1 = when the hybrid context carries
+a paged child (4b's `get_attn_paged()`, live once the scheduler drives it), the attention
+branch takes paged inputs + `ggml_paged_attn_banded` instead of the static per-stream
+banded loop. Everything below it is already proven:
+- kernel: ggml_paged_attn_banded CPU+CUDA, 2.4e-07 vs the banded-FA reference;
+- inputs: build_attn_inp_kv_paged(ctx) overload (4c-0);
+- cache: hybrid_iswa owns + routes the pool (4a-0/4b);
+- serving: the scheduler loop now WORKS (4d flip + parity + concurrent, 2026-08-04).
+Remaining 4c-1 work is the graph-branch itself + a hybrid serve witness on the synthetic
+fixture. ⚠ Note the paged pool spans ALL layers today (M4 park): fine for inkling (all
+layers attn). Recurrent/shortconv state stays on the static recurrent member — the paged
+child replaces the ATTENTION side only.
