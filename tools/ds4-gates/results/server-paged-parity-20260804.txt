@@ -1,0 +1,6 @@
+# 4d single-request parity witness, 2026-08-04 ~04:15, tip 0aae294f, real 4B, Mac CPU
+# arms: --kv-paged (scheduler+paged reference kernel) vs static (same binary, no flag); temp 0, n_probs 5
+paged : ' Paris. The population of Paris is about'
+static: ' Paris. The population of Paris is about'
+greedy-token agreement: 8/8; first-token |dlogprob| = 0.0301; max |dlogprob| = 0.1392
+== PARITY PASS (same greedy output; drift = F16 interleaved reference kernel class, bit-exactness not expected by construction) ==
