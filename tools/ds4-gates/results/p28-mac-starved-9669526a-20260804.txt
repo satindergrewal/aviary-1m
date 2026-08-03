@@ -1,0 +1,18 @@
+# P2-8 arm2 Mac starved wall, tip 9669526a, 2026-08-04 06:1x
+# cmd: llama-server qwen3-4b IQ4_KT -c 4096 -np 3 -b/-ub 128 --kv-paged
+#      --n-gpu-blocks 40 --n-cpu-blocks 8 --cache-ram 0 ; 3 concurrent x 400-tok, temp 0
+#
+# == VERDICT: CLEAN PASS on all bars (Mac CPU) ==
+# completions: 3/3 HTTP 200 at FULL 400 tokens
+# positions-are-decreasing errors: 0   <- the earlier "28" was a GREP FALSE POSITIVE:
+#   the pattern 'decreasing' matched "Swapped count has been non-decreasing" inside
+#   check_livelock's ADVISORY text (28 detector lines while one victim stayed swapped).
+#   Witness greps must use the full error string 'positions are decreasing'.
+# terminal deadlock returns: 0 (the 9669526a candidates-gate held: decode progressed past
+#   the stuck victim; swapped pinned at 1 mid-run, drained by completion -- all 3 finished)
+# decode failures: 0; recompute branch: not exercised on this wall (victim fit CPU blocks)
+#
+# Remaining for box re-gate (next window, regen holds cards): same bar on CUDA --
+# all complete + swapped>0 + zero 'positions are decreasing' + zero terminal deadlock.
+# Residual holes still open (lane memory): logical_seq truncation discards generated
+# tokens on the recompute path (unexercised here); exercise it with --n-cpu-blocks 2.
