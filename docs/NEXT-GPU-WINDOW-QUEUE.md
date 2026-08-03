@@ -21,6 +21,25 @@ refuted it.
 
 ---
 
+## ds4-ports lane items (added 2026-08-04, tip `071b124e` — Fable-DS4)
+
+Current holder is the DSpark regen (~27 h to target at the 2026-08-04 03:1x measure); these
+ride whatever window Satinder opens, after the holder's own resume needs.
+
+1. **CUDA hybrid_paged_gate (~20 min, cheapest decisive).** `git -C /mnt/nvme0/wt-ds4-ports
+   fetch fork && git checkout 071b124e` → rebuild `build-cuda` → run ornith
+   `tools/ds4-gates/hybrid_paged_gate.sh <build-cuda> <port>`. Closes the ONLY open 3b arm:
+   the CUDA 4c-1 hybrid path has never executed (Mac close was CPU). The gate is
+   self-witnessing (op-level + parity + it writes its own results file).
+2. **P1-5 gate 2: warm-admit ≥5× @64K** (box, real model, ~30 min).
+3. **16-agent ≥6× throughput gate** (the continuous-batching headline number, ~45 min).
+4. **fork-cost gate** (P1-6 COW: N forks vs N cold prefills, ~20 min).
+5. **quench-econ window** (`tools/ds4-gates/quench_econ_window.sh`, ~30 min).
+6. **ub2048 A/B + MMA gap + fitter boot** (parked M3/M4 measurement plans, ~40 min bundle).
+7. **P1-7a** (per its design doc).
+
+---
+
 Written 2026-07-30 while both cards were held by the GLM head chain (~34 h remaining at the
 latest measured rate; see the window forecast at the bottom). Ordered by
 value-per-minute. **Cheapest decisive item first.**
