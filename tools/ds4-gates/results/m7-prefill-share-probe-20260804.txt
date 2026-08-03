@@ -119,3 +119,19 @@
 #   revert, three tile sizes) an unflagged serve gets exactly the pre-M7 prefill path and
 #   the shipped split-K decode. Nothing a user runs was ever exposed to the dark work --
 #   which is the point of shipping it dark, now measured instead of asserted.
+
+# == M7 STAGE 3b: WMMA FRAGMENT PREFILL, WIRED AND MEASURED (ds4-ports 07113d21) ==
+#   22K prefill: 87,793 ms  (baseline 43,726 · best f32 tile 28,816 · static ~2,500)
+#   = 3.0x SLOWER than the f32 tile path. Gate (<= 8,745) not approached.
+#   test-paged-banded ALL PASSED under DS4P_PAGED_QTILE=2 -> the FRAGMENT MATH IS RIGHT.
+# ★ ROOT: the shape, not the tensor cores. One warp owns a 16-query tile (32 threads per
+#   block), so the SM sits nearly empty, and the per-row online softmax -- 16 rows x
+#   head_dim scalar rescales per key tile -- serialises across that single warp. The
+#   matmuls are fast; everything around them is 32 threads wide.
+# ★ NEXT SHAPE (not a new idea, the same kernel with more warps): multiple warps per block
+#   -- one per key tile or per row group -- so staging, softmax and the fragment ops
+#   overlap instead of queueing behind 32 threads. That is the difference between "uses
+#   tensor cores" and "is a flash-attention kernel".
+# STATE: DS4P_PAGED_QTILE unset/=1 untouched and still the measured paths; =2 is the dark
+# fragment path. Three shapes now measured for prefill (f32 tile 1.52x, score-block 0.41x,
+# fragment 0.50x) -- all dark, none shipped, the baseline path is what anyone runs.
