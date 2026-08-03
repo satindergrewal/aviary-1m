@@ -14,7 +14,9 @@ LOG1=/tmp/p28-arm1-server.log
 LOG2=/tmp/p28-arm2-server.log
 
 boot() { # $1 log, $2 extra args
-    pkill -x llama-server 2>/dev/null || true; sleep 2
+    # kill ONLY this gate's server: other llama-server instances (e.g. a regen serve)
+    # may be live on the box -- pkill -x llama-server once nearly killed a co-tenant
+    pkill -f "port $PORT" 2>/dev/null || true; sleep 2
     # shellcheck disable=SC2086
     nohup "$BUILD/bin/llama-server" -m "$MODEL" -ngl 99 -b 512 -ub 512 \
         --cache-ram 0 --port "$PORT" --no-warmup $2 > "$1" 2>&1 &
@@ -34,12 +36,12 @@ fire() { # $1 count, $2 n_predict, $3 tag
 echo "== ARM 1: queue-not-reject (np2, 6 concurrent) =="
 boot "$LOG1" "-c 8192 -np 2 --kv-paged --n-gpu-blocks 1024 --n-cpu-blocks 128 -lv 5"
 fire 6 96 qnr
-pkill -x llama-server 2>/dev/null || true; sleep 2
+pkill -f "port $PORT" 2>/dev/null || true; sleep 2
 
 echo "== ARM 2: evict/preempt (np3, pool starved: 56 gpu blocks) =="
 boot "$LOG2" "-c 8192 -np 3 --kv-paged --n-gpu-blocks 56 --n-cpu-blocks 128 -lv 5"
 fire 3 320 evi
-pkill -x llama-server 2>/dev/null || true; sleep 2
+pkill -f "port $PORT" 2>/dev/null || true; sleep 2
 
 python3 - "$OUT" <<'EOF'
 import glob, json, re, sys, time
