@@ -47,3 +47,20 @@
 # lifts prefill (untouched here, 82.5% of this request now) at the same time.
 # Auto-enable threshold: pool span >= 4096 tokens. DS4P_PAGED_SPLITK=N forces, =0 disables
 # (=0 keeps the whole-context path bit-for-bit).
+
+# == M7 PHASE 2 (tiled prefill, ds4-ports 4cb656dd, DS4P_PAGED_QTILE=1): 1.40x -- GATE NOT MET ==
+#   prefill_ms 43,726 -> 31,272   (static reference 2,488)
+#   test-paged-kv ALL PASSED; test-paged-banded ALL PASSED **with QTILE=1** (equivalence holds)
+#   gate wanted >=5x. Flag STAYS OFF by default.
+# ★ WHY (root, from the kernel I wrote): Q_TILE=8 cuts KV *loads* 8x but my mapping does
+#   EIGHT separate warp-shuffle reductions per KV token (one per query in the tile) where
+#   the old kernel did one. Loads went down 8x, reduction work went UP 8x -- net 1.4x means
+#   loads were only part of the cost and the per-pair reduction is now the bottleneck.
+# ★ THE FIX (next increment, this is what real FA does): stop reducing per (query, key)
+#   pair. Map lanes to a Q_TILE x KV_TILE SCORE BLOCK -- each lane owns one (query, key)
+#   product chain over a dim slice, so a warp computes 32 scores at once instead of one;
+#   accumulate V into per-query registers from the score block. That is the MMA-shaped
+#   inner loop; the outer structure (tiles, band, online softmax, cross-warp merge) is
+#   already written and equivalence-gated, so the change is local to the score loop.
+# Honest position: phase 2 as written is a correct but modestly-profitable step; it stays
+# dark until the score-block mapping lands and the >=5x gate is actually met.
