@@ -28,7 +28,14 @@ git -C "$WT" log -1 --oneline | tee -a "$OUT"
 cmake --build "$BUILD" --target llama-server -j 24 2>&1 | tail -1 | tee -a "$OUT"
 
 arm() { # $1 tag  $2 server-args  $3 n_requests  $4 n_predict
-    local tag="$1" args="$2" n="$3" npred="$4" log="/tmp/p28cr-$tag.log"
+    # NOTE: one `local` per line -- a single `local a=.. b="$a"` evaluates the later
+    # expansion BEFORE the earlier assignment lands under some shells, and `set -u` then
+    # kills the run with "tag: unbound variable" (measured 2026-08-04)
+    local tag="$1"
+    local args="$2"
+    local n="$3"
+    local npred="$4"
+    local log="/tmp/p28cr-$tag.log"
     pkill -f "por[t] $PORT" 2>/dev/null || true; sleep 2
     # shellcheck disable=SC2086
     nohup "$BUILD/bin/llama-server" -m "$MODEL" -ngl 99 -b 128 -ub 128 --cache-ram 0 \
