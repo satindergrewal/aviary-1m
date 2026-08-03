@@ -162,3 +162,18 @@
 #   double-buffering, fragment reuse across tiles = the fattn-mma-f16.cuh discipline), not
 #   another partition of the same work. That is a port-class effort with its own gate.
 # All shapes dark. Baseline is what runs, and that is measured (43,717 unflagged).
+
+# == DOUBLE-BUFFERED PIPELINE (ds4-ports 18953b60): 32,559 ms -- FLAT, hypothesis killed ==
+#   Warps 1-3 prefetch T+1 while warp 0 computes T; smem +8.7 KB only (occupancy held);
+#   test-paged-banded ALL PASSED. Overlap bought NOTHING vs 31,915 -> staging latency was
+#   NOT the cost. The per-tile floor is warp 0's serial compute (softmax rows + fragment
+#   issue); staging was already hidden by 4-warp parallel loads in the shared shape.
+# ★★ NINE SHAPES, EVERY BRANCH PRICED, INCLUDING PIPELINING:
+#   baseline 43,726 · f32 Q2 31,277 · f32 Q4 28,816 BEST (1.52x) · f32 Q8 31,272 ·
+#   f32 Q16 218,100 (spill) · score-block 106,201 (coalescing) · frag-1w 87,793
+#   (occupancy) · frag-4w-shared 31,915 (serial warp0) · frag-per-warp 53,287
+#   (smem/occupancy) · frag-double-buffer 32,559 (staging was not the cost).
+#   Gate <= 8,745. Static ~2,495. The remaining 3.7x REQUIRES fragment-held state across
+#   tiles with multiple mma warps -- the fattn-mma-f16.cuh architecture -- a port with its
+#   own gate, now justified by elimination rather than assumption.
+# All dark. Baseline measured-untouched (43,717 unflagged).
