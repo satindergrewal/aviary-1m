@@ -349,3 +349,39 @@
 # failed and `set -e` killed the run. The diff against the pushed tip was EMPTY (the scp'd
 # file was byte-identical to b1b42e83), so nothing was lost, but a gate script that dies on
 # a dirty tree looks exactly like a gate script that ran and found nothing. Reset first.
+
+# ============================================================================
+# ★★★ cp.async STAGING: 3,424 ms = 12.8x, WITHIN 1.39x OF TUNED FA (76234a5f)
+# ============================================================================
+#   paired arms in ONE binary (DS4P_PAGED_CPASYNC): ON 3,424 | OFF 8,126 = 2.37x
+#   ladder: 43,726 -> 12,615 -> 9,570 -> 8,342 (gate) -> 3,424
+#   static banded FA doing the same work: ~2,460  => paged is now 1.39x off it,
+#   from 17.8x off at the start of this arc.
+#
+# THE PROFILE'S SECOND ESTIMATE, CASHED. ncu said 61.8% of stall cycles were
+# L1TEX memory dependency with Est. Local Speedup 61.9%. Measured cut: 58%.
+# BOTH headline numbers from that single profiling run have now been converted:
+#   occupancy (Est. 83.3%) -> split-K + __launch_bounds__  : 12,507 -> 8,342
+#   L1TEX    (Est. 61.9%) -> cp.async staging             :  8,126 -> 3,424
+#
+# ★ LEDGER RULE THIS PROVES: "refuted" and "refuted UNDER CONDITION X" are
+# different entries. cp.async was correctly refuted AT 5.44 warps/SM -- prefetch
+# hides latency behind other work and there was none -- and it is worth 2.37x at
+# 3x that occupancy. Had it been filed as dead rather than as conditional, this
+# 2.37x would have been permanently lost.
+#
+# CHANGES, in dependency order:
+#   1. V staged CONTIGUOUS like K, transposed for free on load via
+#      load_ldmatrix_trans (upstream fattn-mma-f16's own convention: V normal in
+#      SRAM, fragment transposes on load). PREREQUISITE -- cp.async cannot
+#      transpose while it copies.
+#   2. K and V both stage with cp.async, 16 B per instruction, global->shared
+#      with no register round-trip. All offsets are multiples of 8 halves so both
+#      ends are 16 B aligned (ld = HD+8, stride_head = HD, stride_token =
+#      2*n_heads_kv*HD).
+#
+# CORRECTNESS BEYOND THE UNIT TEST (a 2.37x jump does not stand on a green bar):
+#   test-paged-banded ALL PASSED on BOTH arms, and the generated text over the
+#   full 22K prefill + 256 decoded tokens is BYTE-IDENTICAL between cp.async on
+#   and off (1,665 chars, exact match). A racing or stale-read staging path
+#   cannot produce that.
