@@ -1,0 +1,26 @@
+# P2-8 SWAP WALL: ★★ FULL PASS, tip 8314d655, 2026-08-04 07:0x (Mac CPU)
+# cmd: llama-server qwen3-4b -c 4096 -np 3 -b/-ub 128 --kv-paged
+#      --n-gpu-blocks 40 --n-cpu-blocks 128 --cache-ram 0 -lv 5 ; 3x400-tok concurrent, temp 0
+#
+# == BAR (Grok's, unchanged): swapped>0 mid-run AND drained via swap_in, 3/3 full-length,
+#    zero assert/OOB. ALL MET. ==
+# completions: 3/3 HTTP 200 @ 400 tokens
+# max swapped: 2   swap-outs: 4   swap-ins: 4 (ALL DRAINED)   recompute: 0 (CPU pool fits)
+# positions-decreasing: 0   OOB/out-of-bounds: 0   deadlock: 0   decode failures: 0
+# regressions: test-paged-kv ALL PASSED, test-paged-banded ALL PASSED
+#
+# Four-fix chain for the swap path (each found by re-running THIS wall):
+#   1. candidates filtered to RUNNING (evicted-mid-sweep group rode the batch with CPU ids)
+#   2. growth check before promoting a swapped-in group (it returns with the same
+#      too-short table that got it evicted: peers 13 blocks vs 12, OOB at pos 192)
+#   3. ★ a FAILED post-swap-in growth must swap the group back OUT: I had left it in
+#      `swapped` with an already-swapped-IN (GPU-id) table, so the next tick re-entered
+#      swap_in and do_block_copy computed id - num_gpu_blocks on GPU ids -> underflow ->
+#      wild offset -> "tensor read out of bounds". (Self-inflicted by fix 2; the wall
+#      caught it in one run.) Fallback to recompute if the re-swap-out also fails.
+#   4. (prior) admission delta + candidates-gate + lossless replay made eviction reachable
+#      at all -- see p28-arm2-mac-PASS-99ea0134.
+#
+# P2-8 arm2 Mac side is now COMPLETE: recompute path AND swap path both witnessed working.
+# REMAINING for P2-8 CLOSED: the box CUDA re-gate (same bars, both arms) in the next card
+# window. No Mac-reachable work left on this item.
