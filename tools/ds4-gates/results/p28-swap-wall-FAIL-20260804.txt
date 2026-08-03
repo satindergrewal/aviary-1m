@@ -1,0 +1,16 @@
+# P2-8 swap-out wall, tip 99ea0134, 2026-08-04 06:5x -- FIRST GENUINE EXERCISE = CRASH
+# cmd: same 40-GPU-block starve, --n-cpu-blocks 128 (victims FIT -> swap_out fires)
+#
+# == VERDICT: FAIL -- server ABORTS on the swap path ==
+# 2 evictions -> 2 swap-outs -> GGML_ASSERT "block_table_id OOB" at
+# llama-paged-scheduler-impl.cpp:406 (calculate_global_slot_index) inside
+# update_slots -> server dead, 0/3 responses.
+# MECHANISM (from the assert site): a swapped-out group re-enters populate_batch_from
+# as a candidate while its block_table no longer covers its n_past positions --
+# swap_out moves/clears GPU block ids but the group's scheduling state still presents
+# it as computable (suspects: process_swapped_list promotes without a successful
+# swap_in; or swap_out leaves n_past/table inconsistent for the slot-index math).
+# NOTE: recompute-preemption (the sibling path) is PROVEN GOOD (8 live replays,
+# p28-arm2-mac-PASS-99ea0134). Swap-in/out needs the same wall-driven treatment:
+# read swap_out/swap_in + process_swapped_list, fix the state contract, re-run THIS wall.
+# PASS bar: swapped>0 mid-run AND drained via swap_in, 3/3 full-length, zero OOB/errors.
