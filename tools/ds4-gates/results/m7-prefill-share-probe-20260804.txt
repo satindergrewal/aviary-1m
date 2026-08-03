@@ -425,3 +425,46 @@
 #   p28-cuda-regate-20260804-1038.txt
 # Run because the decode split default is NOT dark -- every prefill kernel in
 # this arc sits behind DS4P_PAGED_QTILE, but this one changes what ships.
+
+# ============================================================================
+# ★★★ THE FLIP: mma prefill is now the DEFAULT (ds4-ports f63906c2)
+# ============================================================================
+# Everything above was DARK behind DS4P_PAGED_QTILE=3. That was right for
+# experiments -- it is what kept the baseline honest through ten dark walls --
+# and wrong the moment they won: a --kv-paged serve was still running the old
+# grid-per-token prefill and getting NONE of the 12.8x. Work that only runs when
+# someone sets an env var is a demo, not a shipped kernel.
+# Default is now 3; 0/1/2 still reach grid-per-token / f32-tile / wmma.
+#
+# ⚠⚠ THE REGRESSION CAUGHT *BEFORE* THE FLIP (the important part of this entry):
+# the old kernel SKIPS keys older than the visibility window (lo = max(0, q_pos -
+# window + 1)); the mma kernel only MASKED them, walking every key from 0. On an
+# unbanded model those are identical. On a BANDED model -- Inkling with SWA, the
+# class this lane exists for -- 22K context with a 1024 window means ~22,000 keys
+# walked instead of ~1,024: ~21x more work. It would have shipped GREEN, because
+# qwen3-4b-dev has no window and EVERY wall in this arc ran on it, and no
+# numerical test could catch it (it is a performance regression, not a wrong
+# answer). Found by asking what the OLD path does that mine does not.
+# The mma kernel now takes the same analytic bound, block-level (the block's
+# smallest q position, floored to a tile); per-row edges stay on the mask.
+#
+# WITNESS ON THE PATH THAT ACTUALLY CHANGED (not on the flag being tested):
+#   - test-paged-banded, NO env set: ALL PASSED, max_abs 4.067e-05, INCLUDING the
+#     paged_window=8 banded cases which now exercise the new skip.
+#   - Semantic equivalence, real prompt, temperature 0, same binary:
+#       NEW == OLD == STATIC, all three BYTE-IDENTICAL, answer correct.
+#     Three independent attention implementations agreeing token for token.
+#   - wall with no env: 3,432 ms (vs static 2,446).
+#   - P2-8 arms 3/3 AGAIN -- and this run matters differently from the previous
+#     three, because the arms now exercise the NEW kernel by default rather than
+#     the old one while the new hid behind a flag.
+#     witness: box /tmp/ds4gates/results/p28-cuda-regate-20260804-1045.txt
+#
+# ⚠ FALSE ALARM, RECORDED SO IT IS NOT RE-LITIGATED: on the 22K FILLER prompt the
+# old and new paths diverge at character 8 (1,690 vs 1,666 chars) at temperature 0.
+# That is NOT evidence of a bug: different summation order makes byte-identity
+# impossible in principle, and on 22K of repeated filler the top-2 logits are
+# near-tied so a 4e-05 attention difference flips the argmax immediately. The
+# discriminating test is a prompt with ONE right answer -- and there all three
+# implementations agree byte for byte. (cp.async on-vs-off WAS byte-identical
+# because that pair shares the arithmetic and only changes how bytes reach smem.)
