@@ -508,3 +508,22 @@
 #      43% IS. The ncu profile it would come from is now STALE -- taken before
 #      split-K, launch_bounds, cp.async and the band skip.
 #   9. Every gain in this arc is CUDA-only; Metal/CPU paged prefill (M6) is parked.
+#
+# ROW 2 CLOSED (ds4-ports 6f6b3d1b): prefill n_splits SWEPT at last.
+#     3 (the old auto value) -> 3,413 | 6 -> 3,141 | 12 -> 3,156 | 24 -> 3,348
+#   Knee 6-12, turns over at 24. Target changed 4 -> 8 blocks/SM; auto now picks 6.
+#   Verified at the new default: 3,195 ms, bar ALL PASSED incl. the new head_dim 128.
+#   ★ Prefill wants ~8 blocks/SM, decode ~12 -- NOT a copied constant. A decode block
+#     does one token's work; a prefill block does 64 q rows across a context slice.
+#   ⚠ THE HONEST PART: I swept DECODE's split count, found its knee, wrote a commit
+#     about how an unexamined constant had cost 3.16x -- and did not ask the identical
+#     question of PREFILL, whose constant I had written MYSELF an hour earlier.
+#     Finding a lesson and applying it to exactly one place is not learning it.
+#
+# ROW 4 CLOSED: short-context PREFILL, new vs old (never measured before -- n_splits
+#   comes from the POOL span, not the live context, so a short prompt in a big pool is
+#   where the new kernel could plausibly lose):
+#       200 tok:  new 91 ms   vs old 93 ms
+#     2,000 tok:  new 266 ms  vs old 550 ms   (2.07x)
+#    22,000 tok:  new 3,195   vs old 43,726
+#   No regression at any length measured; the new kernel wins everywhere.
