@@ -1,0 +1,21 @@
+# Q6 -- M4 fitter boot + ub2048 A/B + M3 MMA-gap, box GPU0 beside live regen, 2026-08-04
+#
+# == M4 fitter boot (hybrid fixture, --kv-paged, NO explicit block counts) ==
+# fitter ENGAGES on hybrid: "device CUDA0: 20397.2 MiB free of 97247.6" ->
+# bytes_per_block=32768, n_gpu_blocks=619944, n_cpu_blocks=154986 (fills free VRAM by
+# design). Subset-attn refinement (the actual M4 item) STAYS PARKED: no subset-attn
+# hybrid is a paged target yet; fixture is attn+recurrent and boots fine.
+#
+# == ub2048 A/B (qwen3-4b, --kv-paged np16, 16 agents x 256 tok, agent_throughput harness) ==
+# ub 512 : sequential 18.99 s | concurrent 4.45 s
+# ub 2048: sequential 19.06 s | concurrent 2.17 s  -> ub2048 = 2.05x concurrent throughput
+# The serve-config recommendation is now MEASURED on the paged engine.
+# NOTE: one "Aborted" on server teardown after the ub2048 run (post-result, during pkill
+# window) -- teardown-path only, results unaffected; worth a look if it recurs.
+#
+# == M3 mask-vs-analytic (fixture serve-level, 7410-token prefill, -ub 2048, 3 reps) ==
+# mask (DS4P_ANALYTIC_BAND=0): 96.6 / 97.6 ms   analytic (=1): 109.5 / 108.4 ms
+# gap ~12% at 8K-class ctx (fixture; regen co-tenant noise) -- borderline vs the <10%
+# park bar, and the structural fact stands: at 2M shapes the mask plane cannot exist, so
+# MMA-mask is unavailable exactly where analytic matters. M3 STAYS PARKED, number banked.
+# (test-backend-ops perf has no banded cases in its perf list -- serve-level A/B used.)
