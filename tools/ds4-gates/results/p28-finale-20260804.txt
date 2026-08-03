@@ -28,15 +28,25 @@
 #   shows init@40 then fitter@7719). NINTH ship: 324827cb — explicit block flags now
 #   disable the fitter. Gate-harness fix on the way here: fire() waited on the server
 #   job and hung (0fce0bc).
-# TRUE-STARVED arm-2 (first ever): [appended on completion]
+# TRUE-STARVED arm-2 (first ever, fitter off -- init@40+8 REAL, fitter lines 0):
+#   ★ VERDICT: SWAP-LIVELOCK, honest FAIL-AT-BAR. swap ENGAGED for the first time
+#   (max swapped=1) then never drained: 5,032,631 livelock-detector lines in ~3 min
+#   (5.1 GB log), zero decodes completing, curls stalled, decode-fails 0.
+#   MECHANISM (from code + walls): 3 requests each needing ~38 blocks admitted into a
+#   40-block pool (admission allocates only n_prompt+1); none can grow; evict() swaps ONE
+#   victim toward 8 CPU blocks (too small to hold 38) and the remaining runners still
+#   cannot allocate; the swapped one can never swap in; check_livelock DETECTS the state
+#   every tick but nobody ACTS on it -- the server ignores the DEADLOCK status and ticks
+#   forever. Storm-class log growth on a new axis.
+#   THE FIX (named, parked as the next implementation): recompute-preemption -- when
+#   swap-out cannot fit CPU blocks, abort the victim to WAITING with blocks freed and
+#   n_past=0; logical_seq already holds prompt+generated tokens so chunked prefill can
+#   REPLAY it losslessly (the P1-5 tail-replay concept scheduler-side). Plus: the server
+#   must ACT on DEADLOCK status (cancel or backoff), never tick-loop on it.
 #
 # == Q5 QUENCH-ECON: HONEST PARK, the fit math ==
 # Needs a second V4 (dsv4-flash UD-Q4_K_XL ~150 GiB across cards) + drafter serve.
 # Free beside the green regen: GPU0 21.6 + GPU1 24.3 GiB = 45.9 total, non-contiguous.
 # 150 >> 45.9 -> cannot co-tenant; single-card solo also impossible (150 > 97.9).
 # Q5 runs ONLY in a full-box window (regen paused at a boundary, per its own queue rules).
-# (superseded pending-block below)
-# == BOX CUDA VERDICT: PENDING -- embargoed ==
-# My gate's pkill -x killed the DSpark regen server (incident owned, room #1993/#1995);
-# no ds4 process boots on the box until DSpark posts regen green. On green: full
-# p28_finale_gate re-run (both arms incl. evict/preempt swap witness) + Q5 fit check.
+# (embargo footer removed 06:00 -- regen GREEN, walls above are the record)
