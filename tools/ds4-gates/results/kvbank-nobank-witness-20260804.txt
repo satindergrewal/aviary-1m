@@ -1,0 +1,5 @@
+# P1-5 --no-kv-bank negation witness, 2026-08-04 ~03:10, tip 908d6dd9
+# recipe: DS4P_KV_BANK=<dir> env SET + --no-kv-bank flag; healthy boot, zero bank-enabled lines
+health: ok
+grep -c 'kv-bank: enabled' = 0
+(no kv-bank lines in log = force-disable held)
