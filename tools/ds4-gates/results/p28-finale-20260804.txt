@@ -16,6 +16,26 @@
 # == MAC GATE (arm-1 scenario, CPU, qwen3-4b, np2, 6 concurrent): PASS ==
 # 6/6 complete at full length; storm lines: 0; decode failures: 0.
 #
+
+# == BOX CUDA WALLS (tip f2a515df -> 324827cb, regen green + unharmed throughout) ==
+# ARM 1 queue-not-reject: ★ TRUE PASS — 6/6 HTTP 200 at full 96 tokens, arm1_dec = 0
+#   (zero 'positions are decreasing' under concurrent seq reuse: the f2a515df race fix
+#   holds at the CUDA wall). GATE_RC=0.
+# ARM 2 evict/preempt: WEAK-PASS x3 runs (320-tok, 600-tok, dual-starved 40+8) — all
+#   completions full-length, zero storm, but swap NEVER engaged... because the pool was
+#   NEVER REAL: the auto-fitter ran after the explicit init and re-sized 40 blocks to
+#   7719 (proof: 1815 tokens 'fit' a 768-token pool; max block id 7718 = 7719-1; log
+#   shows init@40 then fitter@7719). NINTH ship: 324827cb — explicit block flags now
+#   disable the fitter. Gate-harness fix on the way here: fire() waited on the server
+#   job and hung (0fce0bc).
+# TRUE-STARVED arm-2 (first ever): [appended on completion]
+#
+# == Q5 QUENCH-ECON: HONEST PARK, the fit math ==
+# Needs a second V4 (dsv4-flash UD-Q4_K_XL ~150 GiB across cards) + drafter serve.
+# Free beside the green regen: GPU0 21.6 + GPU1 24.3 GiB = 45.9 total, non-contiguous.
+# 150 >> 45.9 -> cannot co-tenant; single-card solo also impossible (150 > 97.9).
+# Q5 runs ONLY in a full-box window (regen paused at a boundary, per its own queue rules).
+# (superseded pending-block below)
 # == BOX CUDA VERDICT: PENDING -- embargoed ==
 # My gate's pkill -x killed the DSpark regen server (incident owned, room #1993/#1995);
 # no ds4 process boots on the box until DSpark posts regen green. On green: full
