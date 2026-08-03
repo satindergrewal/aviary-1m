@@ -1,0 +1,8 @@
+# 4d FLIP WITNESS: server --kv-paged serves, 2026-08-04 ~04:05, real qwen3-4b IQ4_KT, Mac CPU (paged reference kernel)
+# EXACT recipe that aborted 2026-08-03 (results/server-kvpaged-crash-witness-20260803.txt):
+#   -np 2 -b 512 -ub 512 --kv-paged (+ explicit blocks on CPU: no fitter)
+health: ok (probe decodes degrade gracefully: 'no paged batch info -> failed prepare' WARNs)
+request: 'The capital of France is', n_predict 8, temp 0
+response: ' Paris. The population of Paris is about' (predicted_n = 8)
+chain proven: intake->add_request -> prepare_batch -> llama_decode (ggml paged CPU reference) -> sample@batch_offsets -> process_token -> update() -> streamed response
+self-drive: NEXT_RESPONSE posted while any slot processing (first attempt crawled to client-timeout without it - diagnosed from log, fixed)
