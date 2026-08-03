@@ -190,3 +190,58 @@
 # now shown by exhaustion across tile size, mapping, partition, pipelining, AND the
 # occupancy counter-test. fattn-mma-f16 architecture (fragment-held state, multi-mma-warp)
 # remains the only unpriced branch, and it is a port.
+
+# ============================================================================
+# == THE WALL BREAKS: FRAGMENT-HELD mma PREFILL (ds4-ports 76fc9d4a) ==
+# ============================================================================
+# WALL: 12,615 ms  =  3.47x over baseline 43,726  =  2.28x over the ten-wall best
+#       (f32-Q4 28,816) and 2.50x over the best wmma shape (31,525).
+# BAR:  test-paged-banded ALL PASSED, max_abs 4.067e-05.
+# Static ceiling 2,496. Gate <= 8,745 -- 1.44x still open.
+#
+# Ported discipline: ggml/src/ggml-cuda/fattn-mma-f16.cuh (upstream llama.cpp,
+# Johannes Gaessler). Credited in the kernel header and the commit message.
+#
+# WHY EVERY EARLIER SHAPE WAS CAPPED (the honest re-reading of ten walls):
+#   wmma::fragment is OPAQUE -- there is no defined element mapping, so the
+#   accumulator must be stored to shared memory and reloaded once per key tile,
+#   and the softmax probabilities must round-trip through shared memory to
+#   become the next operand. Six wmma shapes therefore all sat at 29-32 s: they
+#   were not bad arrangements of a good mechanism, they were arrangements of a
+#   mechanism that cannot hold state. Rearranging something that spills every
+#   tile cannot beat spilling. The elimination map was correct about the
+#   mechanism (staging flat, occupancy not binding, warp-0 issue flat) and it
+#   was correct that the answer was the fattn-mma architecture -- what it could
+#   not do was quantify the prize, which turned out to be 2.5x.
+#
+# THE LOAD-BEARING FACT (verified index-by-index against mma.cuh BEFORE coding):
+#   for m16n8k16, tile<16,16,float> (f32 accumulator) and tile<16,8,half2>
+#   (A operand) have the SAME per-thread element mapping, pairwise:
+#     acc l=0,1 -> i=tid/4,   j=2(tid%4),+1     == A half2 l=0
+#     acc l=2,3 -> i=tid/4+8, same j pair       == A half2 l=1
+#     acc l=4,5 -> i=tid/4,   j=8+2(tid%4),+1   == A half2 l=2
+#     acc l=6,7 -> i=tid/4+8, same j pair       == A half2 l=3
+#   So P enters the next mma as make_half2(p0,p1) straight out of the score
+#   registers: no store, no reload, no barrier.
+#
+# SHAPE: block = 4 warps = 4 INDEPENDENT 16-row q tiles (64 tokens). Warps share
+#   the staged K/V tile but own disjoint q rows => NO cross-warp softmax merge.
+#   Q fragments load once and stay resident for the whole key loop. o_acc lives
+#   in 8 register tiles (64 f32/thread). Online-softmax rescale is a register
+#   multiply indexed by (l/2)%2; row max/sum is two __shfl_xor across the four
+#   lanes sharing a row. V staged TRANSPOSED so P x V is a plain row.col mma.
+#   blockDim is dim3(32,4): mma.cuh indexes fragments by threadIdx.x, so a
+#   128-wide block would silently compute garbage rows.
+#
+# == KV-DEPTH 64 (experiment): 18,364 ms -- FAIL, 1.46x WORSE than KV-16 ==
+#   Bar green, so a clean speed loss. DISCRIMINATING, because KV-64 stages the
+#   SAME total bytes with 4x fewer barriers and 4x less staging-loop overhead;
+#   the only thing that worsened was smem 27.9 KB -> 53.2 KB (blocks/SM halved).
+#   If the kernel were barrier- or staging-bound, KV-64 had to win. It lost.
+#   => the mma kernel is OCCUPANCY/LATENCY-bound; shared memory is the lever.
+#   Reverted to KV=16.
+#
+# HYPOTHESIS KILLED WITHOUT SPENDING A WALL: "static 2.4 s is unfair because the
+#   model is banded and the paged path masks instead of skipping." Checked the
+#   serve log and the arch: qwen3-4b-dev has NO visibility window, both arms do
+#   the same full-causal work. The gate stands as a legitimate target.
