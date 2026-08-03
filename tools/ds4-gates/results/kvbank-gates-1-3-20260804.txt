@@ -1,0 +1,8 @@
+# P1-5 kill gates 1+3, 2026-08-04 ~02:15, real qwen3-4b IQ4_KT, Mac CPU, tip b2b0fe20
+# arms: cold prefill (bank off, fresh proc) vs disk-restored (bank on, fresh proc); temp 0, n_probs 5, 12 positions
+== GATE 1: FULL restore (admit lcp 22 of 22) ==
+text equal: True; 72 logprobs; id mismatches 0; max |dlogprob| = 0.000e+00 -> PASS FLOAT-EXACT
+== GATE 3: PARTIAL restore + tail-replay (admit lcp 22 of 28, 6-token tail) ==
+text equal: True; 72 logprobs; id mismatches 0; max |dlogprob| = 0.000e+00 -> PASS FLOAT-EXACT
+== GATE 4 (spill fires + latency class): witnessed in kvbank-spill/cap witnesses; spill ~2 ms after eviction WRN ==
+== GATE 2 (warm-admit >=5x @64K): box-gated, bundled with the measurement window ==
