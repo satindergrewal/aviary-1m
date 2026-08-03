@@ -81,3 +81,20 @@
 # STATE: reverted to phase 2's mapping; DS4P_PAGED_QTILE still dark; M7 prefill OPEN with
 # the search space now measured from both sides (too few reductions AND too little
 # coalescing both lose).
+
+# == M7 PREFILL: THREE MAPPINGS MEASURED, SHAPE'S CEILING FOUND (final, tip 52a58345) ==
+#   22K prefill_ms      mapping
+#   43,726              baseline (one block per query, no tiling)
+#   31,272   1.40x      phase 2: Q_TILE=8, lane-owns-dims loads + per-query shuffle reduce
+#  106,201   0.41x      phase 2b: lane-owns-a-whole-query (no shuffles) -- COALESCING LOST
+#  218,100   0.20x      Q_TILE=16 -- REGISTER SPILL (16 queries x 4 acc + m/l per lane)
+#   (static banded-FA reference: 2,488-2,542 ms; the >=5x gate needs <= ~8,745 ms)
+# ★ CONCLUSION, measured from three directions: this kernel family's binding constraint is
+#   REGISTER PRESSURE, not KV traffic. Q_TILE=8 is its local optimum at 1.40x, and the
+#   >=5x gate is NOT reachable by tuning this shape -- bigger tiles spill, and removing the
+#   reductions costs more coalescing than it saves.
+# ★ THE ROUTE THAT REMAINS: an MMA / tensor-core inner loop -- score tiles held in warp
+#   fragments instead of per-lane accumulator arrays, which is exactly how flash-attention
+#   escapes this ceiling (and why the static banded kernel is 12-18x faster here). That is
+#   a different class of work: new kernel, fragment layouts, a correctness gate of its own.
+#   Until it lands, DS4P_PAGED_QTILE stays DARK and paged prefill keeps the baseline path.
