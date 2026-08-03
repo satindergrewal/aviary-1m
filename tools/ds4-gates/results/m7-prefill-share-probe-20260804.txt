@@ -595,3 +595,27 @@
 # the tuned static reference (~2,480). It was 1.43x off when M7 was declared closed --
 # the audit itself moved the number, which is the argument for running audits rather
 # than writing them.
+#
+# POST-AUDIT P2-8 RE-GATE on c07a2916: 3/3 PASS.
+#   ARM1 6/6 @96 | ARM2 3/3 @400 (recompute=10, evictions=5) | ARM3 3/3 @400
+#   (swap_outs=4, swap_ins=4 drained). Zero pos_dec/oob/deadlock/decode_fail.
+#   Run because the audit changed the DEFAULT prefill path three times after the
+#   previous arm pass (split target 6f6b3d1b, KV=32 8a5b288c, lb revert c07a2916)
+#   and the close-out was quoting a stale 3/3 -- the same "green quoted past what
+#   it covered" shape as row 1.
+#
+# ROW 5 -- head_dim 96: BUILT, TESTED, DELIBERATELY NOT SHIPPED. ⚠ BLOCKED, NOT SKIPPED.
+#   Instantiated it and added it to the equivalence test. The test ABORTED -- inside
+#   `ggml_cuda_flash_attn_ext_banded`, i.e. the REFERENCE side, not the paged kernel:
+#     fattn-banded.cu:80  static_assert(D == 64 || D == 128,
+#                         "banded FA supports head dimensions 64 and 128")
+#   There is NO REFERENCE to verify head_dim 96 against, so the instantiation was
+#   REVERTED rather than shipped unverified. Shipping a path with no bar behind it --
+#   hours after writing row 1, which exists precisely because a green test got quoted
+#   past its coverage -- would be the identical failure with better intentions.
+#   UNBLOCK PATH (concrete, not a shrug): either add a 96 instantiation to fattn-banded
+#   first, or build a harness comparing CUDA-paged against the CPU-paged reference,
+#   which carries no 64/128 restriction.
+#   head_dim 192 stays out for a separate, pre-measurement reason: 12 accumulator tiles
+#   = 96 registers plus Q residency exceeds what launch_bounds(128,4) enforces, and this
+#   session's own wall says forcing blocks against register pressure costs 27%.
