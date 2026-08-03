@@ -1,11 +1,16 @@
-# 3b HYBRID PAGED DECODE GATE (op-level), 2026-08-04 01:56
+# 3b HYBRID PAGED DECODE GATE (op-level), 2026-08-04 02:12
 # recipe: DS4P_PAGED_HYBRID=1 GGML_SCHED_DEBUG=2 llama-server -b 512 -ub 512 --kv-paged, /completion + grammar, -lv 5
 
-== VERDICT: PASS — hybrid serving executed the paged banded attention op (4c-1) with a clean HTTP 200 ==
+== VERDICT: PASS — 4c-1 paged op executed, clean HTTP 200, AND static-vs-paged parity 4/4 at temp 0 ==
 
 http=200 predicted_n=8 content=' ve ve v'
-markers={'pool_constructed': True, 'sched_discovered': True, 'sched_initialized': True, 'sched_stepped': 9, 'request_registered': True}
-serve-window ops: {'MUL_MAT': 136, 'MUL': 112, 'ADD': 112, 'RMS_NORM': 80, 'CPY': 80, 'CONCAT': 72, 'SSM_CONV': 64, 'GET_ROWS': 56, 'CONT': 56, 'MUL_MAT_ID': 48, 'SCALE': 32, 'SWIGLU': 24, 'PAGED_ATTN': 16, 'NEG': 16, 'SIGMOID': 8, 'ARGSORT': 8, 'SOFTPLUS': 8, 'SOFT_MAX': 8}
+markers={'pool_constructed': True, 'sched_discovered': True, 'sched_initialized': True, 'sched_stepped': 73, 'request_registered': True}
+serve-window ops: {'MUL_MAT': 1224, 'MUL': 1008, 'ADD': 1008, 'RMS_NORM': 720, 'CPY': 720, 'CONCAT': 648, 'SSM_CONV': 576, 'GET_ROWS': 504, 'CONT': 504, 'MUL_MAT_ID': 432, 'SCALE': 288, 'SWIGLU': 216, 'PAGED_ATTN': 144, 'NEG': 144, 'SIGMOID': 72, 'ARGSORT': 72, 'SOFTPLUS': 72, 'SOFT_MAX': 72}
 load-window ops (context only): {'MUL_MAT': 361, 'ADD': 296, 'MUL': 294, 'CONCAT': 229, 'RMS_NORM': 210, 'CPY': 210, 'CONT': 193, 'SSM_CONV': 168, 'GET_ROWS': 149, 'MUL_MAT_ID': 126, 'SCALE': 86, 'SET_ROWS': 84, 'FLASH_ATTN': 80, 'SWIGLU': 63, 'NEG': 42, 'SOFT_MAX': 23, 'SIGMOID': 21, 'ARGSORT': 21, 'SOFTPLUS': 21, 'PAD': 2}
-paged ops in serve window: 16   flash ops in serve window: 0
+paged ops in serve window: 144   flash ops in serve window: 0
+parity (static vs paged, temp 0, grammar, n_predict 16):
+  prompt 0: MATCH  paged=' ve ve ve ve ve '  static=' ve ve ve ve ve '
+  prompt 1: MATCH  paged=' ve ve ve ve ve '  static=' ve ve ve ve ve '
+  prompt 2: MATCH  paged='rm ve ve ve ve v'  static='rm ve ve ve ve v'
+  prompt 3: MATCH  paged='nlsipipipipipipi'  static='nlsipipipipipipi'
 raw server log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/hybrid-paged-decode-raw-20260804.log
