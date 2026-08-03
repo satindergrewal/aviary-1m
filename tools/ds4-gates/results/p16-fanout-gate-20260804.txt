@@ -1,0 +1,5 @@
+# P1-6 dual-slot fan-out gate, 2026-08-04 ~02:45, real qwen3-4b IQ4_KT, Mac CPU, tip 6c9c2554
+# np=2 shared-prefix fork (agent B admits the cached prefix) vs np=1 independent continuations; temp 0, n_probs 5, 8 positions each
+agent A (np2-forked vs np1-independent): 48 logprobs, mismatches 0, max|d| = 0.000e+00 -> PASS
+agent B (np2-forked vs np1-independent): 48 logprobs, mismatches 0, max|d| = 0.000e+00 -> PASS
+== P1-6 DUAL-SLOT FAN-OUT GATE: PASS FLOAT-EXACT — N agents from one prefix, exact ==
