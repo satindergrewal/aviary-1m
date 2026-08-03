@@ -70,3 +70,20 @@ Plan's P1-7 = chunked-prefill interleave audit, two halves:
 - **(a) decode-t/s-under-256K-prefill measurement**: card-gated; joins the bundled
   measurement set (with quench-econ, ub2048 A/B, MMA gap, fitter boot). Kill gate
   unchanged: live-slot decode degradation < 10% during a concurrent max-size prefill.
+
+## v0 IMPLEMENTATION MAP (grounded 2026-08-04 ~01:15 — code from here is mechanical)
+- **Entry struct** (server-task.h:628): `server_prompt_cache_state { server_prompt prompt;
+  server_prompt_data data; binding_hash_main/drft; binding_identity; }` — P0-2's
+  `binding_identity` IS the format's identity field, already computed at seal.
+- **The three spill sites** operate on `states.front()` / iterators of
+  `std::list<server_prompt_cache_state> states` (server-task.h:655): :1764 (making room),
+  :1914 (size limit), :1928 (token limit).
+- **Format reuse**: the entry's `data` vectors carry the same payload
+  `llama_state_seq_save_file` writes (existing machinery at server-context.cpp:2666 via
+  --slot-save-path). v0 bank file = small header {magic, ver, binding_identity,
+  n_tokens} + token ids + the data vectors verbatim. No new serialization concepts.
+- **Files**: new tools/server/server-kv-bank.{h,cpp} (~120 lines) + 3 one-line hooks +
+  `--kv-bank DIR` param. Admit side: probe by token-LCP over bank index at RAM-miss
+  (server_prompt_cache lookup site), reconstruct the entry, tail-replay as designed.
+- **Increment order**: (1) bank writer + spill hooks + flag, witness = spill fires on the
+  synthetic (Mac, no cards: force tiny --cram); (2) admit+probe; (3) gates.
