@@ -1,0 +1,20 @@
+# 3b HYBRID PAGED CONCURRENT + FLAT REUSE witnesses, 2026-08-04 02:2x, Mac CPU, tip 071b124e
+#
+# ARM 1 -- hybrid concurrent (np 2, two simultaneous /completion, n_predict 300 each,
+#          temp 0 + grammar, DS4P_PAGED_HYBRID=1 --kv-paged, synthetic inkling fixture):
+#   registered 9 us apart; scheduler occupancy: 300 steps at running=2, swapped=0, waiting=0
+#   req1 "once upon a time" -> ' ve ve ve ve ve ve ve ve'... n=300  == its sequential reference
+#   req2 "hello world"      -> 'nlsipipipipipipipipipipi'... n=300  == its sequential reference
+#   VERDICT: true continuous-batching concurrency on a HYBRID arch, zero cross-request
+#   contamination (temp-0 content identical to solo runs).
+#   NOTE (recipe): "Scheduler status" occupancy lines are libllama INFO -- invisible without
+#   -lv 5; a first attempt "measured" 0 overlap because of exactly this filter. Same trap as
+#   the gate header documents.
+#
+# ARM 2 -- flat reuse regression (qwen3-4b IQ4_KT, --kv-paged, 4 sequential requests
+#          exercising seq-id reuse after the 071b124e seq_rm/n_decoded fixes):
+#   'The capital of France is' -> ' Paris. The population of Paris is about' n=8
+#   'The capital of Japan is'  -> ' Tokyo. The capital of France is Paris'   n=8
+#   'Two plus two equals'      -> ' four. That's a simple equation.'          n=8
+#   'The largest planet is'    -> ' Jupiter. The next largest is Saturn.'    n=8
+#   VERDICT: flat serving unaffected by the hybrid completion-cleanup fixes.
