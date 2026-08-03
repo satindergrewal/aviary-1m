@@ -468,3 +468,43 @@
 # discriminating test is a prompt with ONE right answer -- and there all three
 # implementations agree byte for byte. (cp.async on-vs-off WAS byte-identical
 # because that pair shares the arithmetic and only changes how bytes reach smem.)
+
+# ============================================================================
+# AUDIT (Satinder's "push it harder on its audit log slacked list")
+# ============================================================================
+# ROW 1 -- ⚠ THE EQUIVALENCE TEST COVERED ONLY head_dim 64. FIXED 31a84987.
+#   test-paged-banded hard-coded `const int D = 64`. The CUDA mma prefill
+#   instantiates 64 and 128 SEPARATELY, and 128 is what qwen3/GLM/llama use.
+#   So EVERY "bar ALL PASSED" in this entire file validated the 64 instantiation
+#   while the SHIPPING one had no equivalence coverage at all. The kernel was
+#   fine -- the three-way byte-identical semantic check is real evidence for 128
+#   -- but the unit evidence and the claim were not the same size, and nothing
+#   flagged it because the test kept printing ALL PASSED.
+#   Now parameterised, both run:
+#     head_dim  64: max_abs 4.067e-05 / 4.067e-05 / 2.956e-05  PASS
+#     head_dim 128: max_abs 3.491e-05 / 3.491e-05 / 2.976e-05  PASS   (bar 2e-3)
+#   ★ CLASS: a test whose coverage is narrower than the claim it is quoted for is
+#     worse than no test, because it manufactures confidence. Check what the test
+#     actually instantiates before citing it.
+#
+# ROW 2 -- PREFILL n_splits WAS NEVER SWEPT (open, measuring now).
+#   I swept DECODE 8->96 and found the knee at 64 (~12 blocks/SM). Prefill's auto
+#   formula targets 4 blocks/SM and picked 3. I learned the lesson on decode and
+#   did not carry it back to prefill IN THE SAME SESSION. Sweeping 3/6/12/24.
+#
+# REMAINING AUDIT ROWS (open, with what pushed-hard looks like):
+#   3. KV tile depth: only 16 and 64 measured; 32 SKIPPED on the inference that it
+#      "would be between" -- the exact inference-not-measurement this lane was
+#      corrected for earlier.
+#   4. n_splits derives from POOL span, not live context, in BOTH kernels. Short-ctx
+#      DECODE was measured (faster, fine); short-ctx PREFILL never was.
+#   5. head_dim 96/192/256 have no instantiation. 7e75d119 made the fallback LOUD,
+#      not unnecessary; a 96-dim model still runs ~12.8x slow, it just says so.
+#      (192 needs its own launch_bounds: 12 accumulator tiles = 96 registers.)
+#   6. P1-5 warm-admit: closed AT FAIL (1.5x bar), never re-opened with a hypothesis.
+#   7. P1-7a prefill quantum (11f0fd99): capped at 64 with a U-curve and no plan to
+#      find the U's floor.
+#   8. The "1.43x off tuned FA" ratio is quoted without saying what the remaining
+#      43% IS. The ncu profile it would come from is now STALE -- taken before
+#      split-K, launch_bounds, cp.async and the band skip.
+#   9. Every gain in this arc is CUDA-only; Metal/CPU paged prefill (M6) is parked.
