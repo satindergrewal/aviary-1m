@@ -240,3 +240,21 @@ mechanism" — the tree anticipates exactly this). Design:
   (fork → diverge both seqs → outputs must equal two independent seqs).
 - **Sequencing**: needs 4d (scheduler serving) live first so fork is exercisable end-to-end;
   code surface is llama-kv-cache-paged.{h,cpp} + the scheduler's group bookkeeping.
+
+## Plan item 4 (fitter bytes_per_block) — ANALYZED, refinement PARKED as M4 (2026-08-04 ~00:20)
+common_fit_paged_kv_blocks (common.cpp:1217+): bytes_per_block = 2·head_dim·n_heads_kv·
+block_size·n_layers·f16, head_dim correctly via n_embd_head_v (the 1.60x bug already fixed;
+comment in-tree), pool sized off the MOST CONSTRAINED device (asymmetric-split fix in-tree).
+For the hybrid family:
+- **Inkling: fitter and 4b scaffold ALREADY AGREE** — every layer has attn (FALCON_H1-class
+  filter), so n_layers = attn layers on both sides. No correctness gap for the 3b target.
+- **Qwen3.5/Ornith/K3-class** (attn on a subset): both sides currently size over ALL layers
+  ⇒ over-budget in the SAME direction (pool smaller than possible, never OOM). Safe.
+  Refinement = attn-layer count on BOTH sides paired (needs a new public accessor for the
+  fitter's common/ side) → **PARKED as marginal M4**: optimization not correctness; build
+  when a subset-hybrid becomes a paged target.
+- Margin math must eventually include the recurrent state (n_seq-bounded, tiny) and, in
+  bring-up only, the static double-alloc.
+- ⚠ CORRECTION of my #1876 claim: the fitter is GPU-ONLY ("no GPU device found, cannot fit"
+  — witnessed on the Mac tonight). Its hybrid boot witness = box light-touch (CUDA context
+  during load), i.e. permission-gated, bundle with any future window.
