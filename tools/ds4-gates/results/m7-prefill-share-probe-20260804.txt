@@ -98,3 +98,16 @@
 #   escapes this ceiling (and why the static banded kernel is 12-18x faster here). That is
 #   a different class of work: new kernel, fragment layouts, a correctness gate of its own.
 #   Until it lands, DS4P_PAGED_QTILE stays DARK and paged prefill keeps the baseline path.
+
+# == FULL Q_TILE SWEEP -- the optimum is 4, not 8 (tip 3aca564f) ==
+#   Q_TILE  2 : 31,277 ms        Q_TILE  8 : 31,272 ms
+#   Q_TILE  4 : 28,816 ms ★      Q_TILE 16 : 218,100 ms (spill)
+#   baseline 43,726 · static reference ~2,500 · gate needs <= 8,745
+# ★ 1.52x at Q_TILE=4 -- a real INTERIOR optimum: below 4 the coalesced K load stops
+#   amortising, above 4 accumulator pressure costs more than the reuse buys.
+# ⚠ CORRECTION TO THE PREVIOUS ENTRY: I called Q_TILE=8 "this family's local optimum"
+#   after bounding the curve only from ABOVE (16 spilled). Measuring the LOWER side moved
+#   it. The finding that survives is the CEILING (~1.5x, gate needs 5x), not the location
+#   of the peak -- and the lesson is that a curve bounded on one side is not bounded.
+# Conclusion unchanged in substance: this shape tops out ~1.5x, the >=5x gate needs the
+# MMA/fragment inner loop, and DS4P_PAGED_QTILE stays dark meanwhile.
