@@ -22,3 +22,21 @@
 # acceptance-health gate (only engage when measured acceptance drops below the guard),
 # otherwise it taxes the good case. Parked as the concrete next quench work.
 # The V4-config econ question (does it help THERE) still needs the full-box window.
+
+# == ARM C (discriminator): DS4P_QUENCH_MINEV=32 -- ROOT FOUND ==
+#  tps 261.1  draft_n 163  acc 0.883   <- IDENTICAL drafting to governor-OFF, faster tps
+#  tps 211.7  draft_n  96  acc 0.646   <- quench fired once, but LATE (1 FIRED line)
+#
+# ★ ROOT: the default minev=4 (with EWMA alpha=1/8, initialized AT the guard) judges a
+# request inside its COLD START. A drafter whose first verify steps accept little -- and
+# then recovers to 0.88 -- is condemned before it can prove itself, and the quench is
+# TERMINAL for the request, so it never drafts again. With 32 steps of evidence the SAME
+# pair drafts exactly as much as governor-OFF and runs FASTER than the OFF arm.
+# So the earlier "the governor taxes healthy pairs" reading is refined: the governor is
+# not wrong about health, it MEASURES TOO EARLY.
+# FIXES, in order of honesty: (1) calibrate minev per serve config -- the code already
+# says the guard is per-config, the same is true of the evidence window; (2) exclude the
+# first K verify steps from debt accumulation (cold-start immunity); (3) make quench
+# re-armable (periodic probe) so one bad phase does not kill a whole request.
+# NOT silently changing the shipped default: minev=4 is the ported ds4 semantics
+# (credit-ported-code rule) -- this is a calibration finding, flagged for Satinder.
