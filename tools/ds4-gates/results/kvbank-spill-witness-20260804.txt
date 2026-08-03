@@ -1,0 +1,5 @@
+# P1-5 increment-1 spill witness, 2026-08-04 ~01:25, Mac M3 Max CPU, real qwen3-4b IQ4_KT
+# recipe: --cache-ram 4 (MiB) + DS4P_KV_BANK dir; 3 completions w/ ~20-tok prompts force evict
+0.13.416.421 W srv         alloc:  - making room for prompt cache entry, removing oldest entry (size = 3.517 MiB)
+0.13.418.345 I srv         spill:  - kv-bank: spilled evicted entry -> /private/tmp/claude-501/-Users-satinder-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-935ca107290192a6.kv (3.517 MiB, n_tok = 25, total spills = 1)
+-rw-r--r--  1 satinder  wheel  3687624 Aug  3 23:25 kvbk-935ca107290192a6.kv
