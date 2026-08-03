@@ -25,12 +25,16 @@ boot() { # $1 log, $2 extra args
 }
 
 fire() { # $1 count, $2 n_predict, $3 tag
+    # wait ONLY on the curl PIDs: a bare `wait` also waits on the backgrounded server
+    # job and hangs the gate forever after the last response (caught live 2026-08-04)
+    local pids=()
     for i in $(seq 1 "$1"); do
         curl -s --max-time 900 -w "%{http_code}" -o "/tmp/p28-$3-$i.json" "http://127.0.0.1:$PORT/completion" \
             -d "{\"prompt\":\"Request $i ($3): the story of packet number $i begins\",\"n_predict\":$2,\"temperature\":0,\"cache_prompt\":false}" \
             > "/tmp/p28-$3-$i.code" &
+        pids+=($!)
     done
-    wait
+    wait "${pids[@]}"
 }
 
 echo "== ARM 1: queue-not-reject (np2, 6 concurrent) =="
