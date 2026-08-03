@@ -527,3 +527,39 @@
 #     2,000 tok:  new 266 ms  vs old 550 ms   (2.07x)
 #    22,000 tok:  new 3,195   vs old 43,726
 #   No regression at any length measured; the new kernel wins everywhere.
+#
+# ROW 3 CLOSED (ds4-ports 8a5b288c): KV tile depth 32 -- MY INFERENCE WAS WRONG IN
+#   DIRECTION, not merely in precision.
+#     KV=16: 3,195 ms | KV=32: 3,113 ms | KV=64: lost badly in the earlier regime
+#   I had written "64 lost, so 32 would be between" and moved on. 32 beats BOTH.
+#   The reasoning was wrong on its own terms: with the q/KV overlay, smem = max(q, k+v)
+#     KV=16 -> max(17,408, 8,704)  = 17,408   the K/V half is HALF EMPTY
+#     KV=32 -> max(17,408, 17,408) = 17,408   IDENTICAL -- free
+#     KV=64 -> max(17,408, 34,816) = 34,816   crossed the ~100 KB/SM cliff, lost
+#   ★ CLASS: assuming a monotonic curve between two measured points without checking
+#     what the curve is MADE OF. The cost function had a plateau I never looked for.
+#
+# ROW 8 CLOSED -- RE-PROFILE OF THE SHIPPED KERNEL. The old ncu run was stale: taken
+# before split-K, launch_bounds, cp.async, the band skip, the split-target change and
+# KV=32. Every decision after it was made against a picture that no longer held.
+#   metric                     OLD profile          SHIPPED NOW
+#   grid                       (32,1,8)=256 blk     (32,1,48)=1536 blk
+#   achieved occupancy         11.33% (5.44 w/SM)   30.55% (14.66 w/SM)
+#   theoretical occupancy      16.67% (regs->2blk)  33.33% (regs->4blk)
+#   TOP STALL                  61.8% L1TEX memory   33.0% fixed-latency EXECUTION
+#   warp cycles per issue      11.65                7.10
+#   compute (SM) throughput    11.13%               42.86%
+#   L1/TEX throughput          6.78%                36.58%
+#   DRAM throughput            0.44%                3.90%
+#   ⇒ THE MEMORY STALL IS GONE FROM THE TOP SPOT. What replaced it is the stall ncu
+#     itself describes as "typically very low, and only a top contributor in ALREADY
+#     HIGHLY OPTIMIZED kernels" -- i.e. mma/ALU dependency chains.
+#   SO WHAT IS THE REMAINING GAP TO FA (1.26x)? Two named things, no longer a shrug:
+#     (a) occupancy still capped at 33.3% BY REGISTERS -- Block Limit Registers = 4,
+#         while Block Limit Shared Mem = 5. There is one whole block per SM available
+#         that register pressure is refusing to use. Est. Local Speedup 66.67%.
+#     (b) instruction-level dependency chains (33% of 7.1 cycles).
+#   NEXT LEVER, chosen by the profile and not by me: __launch_bounds__(128,5) to take
+#   the block that shared memory is already willing to give. Risk is honest -- 5 blocks
+#   means <=102 registers against an architectural floor of ~96 (o_acc 64 + Q 32), so
+#   it may spill; the wall decides.
