@@ -1,0 +1,24 @@
+# Q5-SCALED quench-econ, box GPU0 pinned, 2026-08-04 07:3x (tip ds4-ports 8314d655)
+# Pair: qwen3-4b-dev-IQ4_KT target + Qwen3-0.6B-Q8_0 drafter (fetched for this gate,
+# 610 MB), --spec-type draft-simple, -c 8192 -np 1, 3 mixed prompts x 200 tokens, temp 0.
+# NOT the V4 config the original Q5 asks for (that needs ~150 GiB = a full-box window);
+# this is the governor's ECON BEHAVIOUR measured on a real target+drafter pair.
+#
+# == ARM A: governor OFF ==            == ARM B: DS4P_YIELD_QUENCH=1 ==
+#  tps 240.9  draft_n 163  acc 0.883    tps 179.3  draft_n  15  acc 0.000
+#  tps 197.0  draft_n 204  acc 0.642    tps 187.8  draft_n  63  acc 0.603
+#  tps 197.2  draft_n 200  acc 0.660    tps 186.6  draft_n  33  acc 0.455
+#
+# == VERDICT: the governor DOES what it was built to do, and it COSTS throughput here ==
+# Drafting volume collapses 5.4x (567 -> 111 draft tokens): the quench governor is
+# throttling speculation exactly as designed. But on THIS pair the speculation was
+# already winning (acc 0.64-0.88), so throttling it costs ~9% tps (211.7 -> 184.6 avg)
+# and buys nothing -- there was no acceptance collapse to protect against.
+# ★ READ THIS AS A CONFIRMATION, NOT A CONDEMNATION: the governor's premise is a
+# drafter whose acceptance DEGRADES under load (the DSpark/V4 case that motivated P0-1).
+# A pair with stable high acceptance is exactly where a governor should stay out of the
+# way -- and the honest finding is that it does NOT stay out of the way: it throttles
+# on a healthy pair too. That is an actionable design note: the quench trigger needs an
+# acceptance-health gate (only engage when measured acceptance drops below the guard),
+# otherwise it taxes the good case. Parked as the concrete next quench work.
+# The V4-config econ question (does it help THERE) still needs the full-box window.
