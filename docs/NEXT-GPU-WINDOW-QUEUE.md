@@ -21,7 +21,15 @@ refuted it.
 
 ---
 
-## ds4-ports lane items (added 2026-08-04, tip `071b124e` — Fable-DS4)
+## ds4-ports lane items (added 2026-08-04, tip `071b124e`; ★ EXECUTED 2026-08-04 window, tip `aa3c01dd` — Fable-DS4)
+
+**2026-08-04 window outcome (Satinder's direct "do your work" order; witnesses in
+tools/ds4-gates/results/*-box-20260804*):** item 1 CUDA gate PASS · warm-admit mechanism
+EXACT / 5x bar honest-FAIL at 4B-GPU · 16-agent 6.39x PASS · fork-cost ~0% PASS (4 mid-gate
+ships incl. the warp-parallel decode kernel: ref was 40 s/step at 8K ctx) · ub2048 2.05x ·
+M3 ~12% parked · P1-7a parked with full U-curve · P2-8 finale witnesses (see result file).
+**REMAINING for a future window:** Q5 quench-econ (needs a V4+drafter serve slot — could
+not co-tenant the regen) · fork-residual discriminator · tiled prefill kernel (~20x).
 
 Current holder is the DSpark regen (~27 h to target at the 2026-08-04 03:1x measure); these
 ride whatever window Satinder opens, after the holder's own resume needs.
