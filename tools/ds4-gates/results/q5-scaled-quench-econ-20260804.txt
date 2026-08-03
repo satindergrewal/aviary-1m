@@ -40,3 +40,24 @@
 # re-armable (periodic probe) so one bad phase does not kill a whole request.
 # NOT silently changing the shipped default: minev=4 is the ported ds4 semantics
 # (credit-ported-code rule) -- this is a calibration finding, flagged for Satinder.
+
+# == FIX SHIPPED + VERIFIED: cold-start immunity (ds4-ports dea6a281) ==
+# DS4P_QUENCH_WARMUP (default 8): during warmup the governor does not observe -- EWMA
+# stays at its guard init, no debt accrues, minev counts from the end of warmup.
+# DS4P_QUENCH_WARMUP=0 reproduces ds4 semantics EXACTLY (credit-ported-code rule kept:
+# the faithful port is one env var away and reproducible).
+#
+# SAME PAIR, SAME PROMPTS, box GPU0:
+#   prompt 1  default warmup=8 : draft_n 163  acc 0.883  tps 239.0   <- FULL drafting,
+#                                                                       == governor-OFF
+#   prompt 1  warmup=0 (ds4)   : draft_n  15  acc 0.000  tps 179.6   <- the old collapse
+#   prompt 2  warmup=8         : draft_n  63  acc 0.603  tps 188.1
+#   prompt 2  warmup=0         : draft_n  63  acc 0.603  tps 186.5
+#   quench FIRED: warm8 = 1, warm0 = 2
+# ★ VERDICT: the fix does exactly what it should and NOTHING more. The healthy-start
+# request (prompt 1) keeps all its speculation instead of being killed at step 4 -- a
+# 10.9x drafting recovery and +33% tps on that request. The genuinely marginal request
+# (prompt 2, acc 0.603 vs guard 2.16/step) STILL quenches under both settings: the
+# governor's real job is untouched.
+# REMAINING (ledgered M8 option 3): a re-armable quench with periodic probe, for a pair
+# that degrades MID-RUN rather than at the start -- warmup cannot cover that case.
