@@ -1,0 +1,4 @@
+# P1-6 COW stack regressions, 2026-08-04 ~06:30, tip 3bacd7a2 (df0952a9 primitive + f731b8dd scheduler + 3bacd7a2 API)
+test-paged-kv: ALL PASSED
+case C: with_rel=0 paged_window=8 fa_window=8 max_abs=2.384e-07 nmse=1.738e-13 PASS
+test-paged-banded: ALL PASSED

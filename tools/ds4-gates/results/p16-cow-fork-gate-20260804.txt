@@ -1,0 +1,21 @@
+# ★ P1-6 COW FORK GATE, 2026-08-04 ~07:05, real qwen3-4b IQ4_KT, Mac CPU, examples/paged --fork-gate
+# parent seeded, decoded live, then TWO children forked off it via llama_paged_scheduler_fork_request
+0.00.362.010 I main: FORK GATE: parent 41 tokens; children 44 / 44 tokens
+0.01.216.897 I fork_blocks: forked request 0 -> 1: 2 blocks shared by reference, 32 tokens inherited (partial tail of 10 tokens re-prefilled)
+0.01.216.898 I queue_forked_request: request 1 forked from 0: common prefix 42, 32 tokens inherited by reference (no re-prefill) of 44 prompt tokens
+0.01.216.900 I fork_blocks: forked request 0 -> 2: 2 blocks shared by reference, 32 tokens inherited (partial tail of 10 tokens re-prefilled)
+0.03.570.987 I Request Id: 0:<s> Answer:<\s>
+0.03.570.987 I Request Id: 1:<s> Mount Everest<\s>
+0.03.570.987 I Request Id: 2:<s> Mount Everest<\s>
+
+== PASS: 2 blocks (32 tokens) inherited BY REFERENCE per child, only the 10-token
+   remainder re-prefilled; both children answered correctly off the shared prefix. ==
+
+BUGS THE GATE CAUGHT (all fixed before this run):
+ 1. fork-at-queue-time inherits nothing (parent has no blocks yet) -> fork must target a LIVE sequence
+ 2. full-prefix check rejected every live fork (parent's logical_seq grows with its own
+    generated tokens) -> common-prefix semantics
+ 3. tail-block copy crossed the gpu/cpu block id spaces -> out-of-bounds abort; DELETED
+    (cost of not inheriting a partial tail is <= block_size-1 tokens)
+ 4. block count derived from the parent's table handed over the parent's GENERATED tokens
+    (16 inherited from a 9-token common prefix) -> derive from the shared span
