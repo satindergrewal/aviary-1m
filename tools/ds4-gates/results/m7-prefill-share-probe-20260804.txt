@@ -306,3 +306,30 @@
 #      Fixed with `sudo -n env DS4P_PAGED_QTILE=3 ... ncu`. This is the
 #      fa-on-disables-the-guard class: a privilege boundary silently dropping an
 #      explicit flag.
+
+# ============================================================================
+# ★★★ M7 PREFILL GATE MET (ds4-ports b1b42e83) ★★★
+# ============================================================================
+#   wall (ub 512, the ORIGINAL protocol) : 8,342 ms   confirm run: 8,320 ms
+#   baseline                             : 43,726 ms
+#   ratio                                : 5.24x      GATE: >=5.00x / <=8,745 ms
+#   bar                                  : test-paged-banded ALL PASSED, max_abs 4.067e-05
+#   decode                               : ~9,300 ms, unchanged across the whole arc
+#   static banded FA (ceiling)           : ~2,460 ms
+#
+# THE ARC:  43,726 -> [ten dark wmma shapes, ALL 29-59 s] -> 12,615 -> 9,570 -> 8,342
+#   76fc9d4a  fragment-held mma          12,615  (3.47x)
+#   db218d9d  + split-K over key range    9,570  (4.57x)
+#   b1b42e83  + __launch_bounds__(128,4)  8,342  (5.24x)  <= GATE
+#
+# The last two steps came from the PROFILER, not from reasoning. The profile said the
+# kernel was STARVED (5.44 warps/SM), which killed the cp.async prefetch that was the
+# next thing on my list -- prefetching hides latency behind other work and there was no
+# other work. Split-K created the warps; the register cap let four blocks be resident to
+# use them. Neither works without the other, which is why they were measured separately.
+#
+# REMAINING HEADROOM (not claimed, just visible): static banded FA is ~2,460 ms, so the
+# paged path is still 3.4x off a fully tuned kernel. The profile's untouched finding is
+# the 61.8% L1TEX stall; with occupancy now 3x higher, cp.async staging finally has
+# something to hide behind and is worth ONE wall -- it was correctly refuted at 5 warps/SM,
+# not refuted in general.
