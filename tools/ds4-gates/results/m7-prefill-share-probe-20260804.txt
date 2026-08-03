@@ -33,3 +33,17 @@
 #      already fast and already correctness-gated on both backends.
 # Decision rule from the design doc is ANSWERED: prefill share is 55% (static) / 44%
 # (paged) at this working point -- prefill matters, and decode matters just as much.
+
+# == M7 PHASE 1 SHIPPED + MEASURED: split-K decode (ds4-ports 483ffb05) ==
+# Same 22K probe, same box/card, after the split-K decode kernel + log-sum-exp combine:
+#            decode ms/tok      decode tok/s     prefill_ms
+#   before      220.70              4.5            43,600
+#   after        36.18             27.6            43,726   (prefill untouched by design)
+#   static        7.46            134.0             2,412
+# ★ 6.1x DECODE SPEEDUP, equivalence suites green (test-paged-kv + test-paged-banded ALL
+# PASSED with split-K auto-enabled at this context length). Still 4.6x off static, which
+# is the expected residual: the slices are merged correctly but each slice still walks its
+# span one KV token at a time with no tile reuse -- tiling is the next increment, and it
+# lifts prefill (untouched here, 82.5% of this request now) at the same time.
+# Auto-enable threshold: pool span >= 4096 tokens. DS4P_PAGED_SPLITK=N forces, =0 disables
+# (=0 keeps the whole-context path bit-for-bit).
