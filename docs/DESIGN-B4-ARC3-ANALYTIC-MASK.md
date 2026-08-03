@@ -89,3 +89,17 @@ Finding: control-flow read (fill_mask, banded kernels, inkling hparams) — file
 Subtlety: verified (separate KV keys). Convergence: this is K-2 finding #4
 (docs/K2-METAL-FA-DIFF.md — MLX Steel does causal analytically, zero mask traffic); two
 independent investigations land on the same mechanism.
+
+## Epilogue: MMA-analytic follow-up — PARKED with a measurement plan (2026-08-04 ~00:05)
+Analytic mode currently pins the FP32 fallback CUDA kernel (the MMA F16/BF16 fast route is
+guarded off because it derives visibility from the mask tensor). Extending the MMA template
+family to take a visibility window is a LARGE surface (fattn-mma instances) for an UNKNOWN
+delta — the marginal-ledger doctrine says quantify first:
+- **Measurement (one box slot, ~5 min, bundle with any window)**: test-backend-ops perf
+  mode (or a timed banded case) comparing mask-mode (MMA route) vs analytic (FP32 route) on
+  the 8192-KV depth case, F16 K/V. The gap IS the marginal.
+- **Decision rule**: gap < ~10% at serving shapes → stays parked (correctness path is
+  complete and witnessed); gap large → the MMA window check becomes a scheduled item.
+- Note: at 2M-context serving shapes the mask itself costs ~15.3 GiB, so mask-mode MMA is
+  not actually available there — the comparison only matters for shapes where the mask fits.
+Recorded in the marginal ledger.
