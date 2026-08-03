@@ -1,0 +1,23 @@
+# (a) fork-residual discriminator, session 1 (black-box sweep, Mac CPU, qwen3-4b, temp 0)
+# Residual under test: post-4a84450c fork children differ from independents by ~0.005-0.43
+# logits; independents proven BIT-INVARIANT across -b 128/2048 (chunk-shape invariance).
+#
+# == PREFIX SWEEP (n=4 decode, b128) ==
+# prefix  64: argmax MATCH both children; top-logit deltas 0.058 / 0.374
+# prefix 256: argmax MATCH both children; top-logit deltas 0.170 / 0.057
+# prefix 448 (earlier): argmax match req1 (delta 0.005), req2 near-tie flip (0.43)
+# => the residual is PRESENT AT ALL prefix lengths at roughly constant scale (0.05-0.4),
+#    NOT growing with inherited span -- rules out accumulation-over-inherited-KV; points
+#    at a constant boundary/bookkeeping perturbation.
+#
+# == ELIMINATED SO FAR ==
+# - chunk-shape fp noise (independents bit-invariant across b)
+# - mid-prefill garbage inheritance (fixed 4a84450c; deltas collapsed 2-3 logits -> this)
+# - accumulation with span length (this sweep)
+#
+# == NEXT (decisive, needs a small ship) ==
+# Per-layer KV checksum debug accessor (llama_paged_debug_seq_checksum or FORKPROBE
+# extension reading the pool via existing test hooks): checksum the child's visible KV
+# [0..lcp) fork-vs-independent at the first sample position. Identical checksums => the
+# perturbation is in inputs/bookkeeping (write_slots/context_lens off-by-something at the
+# recomputed boundary tokens); different => inherited-block content diverges and WHERE.
