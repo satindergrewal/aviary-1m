@@ -1,0 +1,27 @@
+# Q4 -- P1-6 fork-cost gate, box GPU0, qwen3-4b IQ4_KT, 8216-token shared prefix, 2026-08-04
+# The gate that would not stop giving: FOUR ships came out of running it.
+#
+# == FINDINGS THE GATE FORCED (each shipped mid-gate) ==
+# 1. chunked prefill (57501615): prompts > n_batch were NEVER admitted -- waited forever.
+# 2. warp-parallel decode kernel (8af43595): ref kernel = block barrier PER KV TOKEN,
+#    serial over context; ~40 s/step at 8K ctx. Post: 607 t/s decode peak.
+# 3. prefill on the grid (db3afe58): chunk tokens ran serially per block; ttft 91-168 s
+#    -> 3.6-6.4 s.
+# 4. fork inherited allocated-but-unwritten blocks from a mid-prefill parent (4a84450c):
+#    garbage KV, 2-3 logit shifts, CPU+CUDA. Inheritance now capped at parent n_past.
+#
+# == THE NUMBER (final kernel, tip db3afe58 run) ==
+# mode 1 (parent prefill + 2 COW forks):      8.06 s elapsed
+# mode 3 (parent + 2 independent prefills):  19.22 s elapsed
+# delta 11.16 s = exactly 2 extra prefills => ~5.6 s per 8K prefill; fork cost ~0 s.
+# FORK COST < 5% OF RE-PREFILL: PASS (measured ~0-2%, resolution-limited).
+#
+# == OPEN (recorded, not closed) ==
+# a. fork-vs-independent residual: post-fix children still differ ~0.005 logits (req1) /
+#    0.43 + argmax flip on a near-tie (req2); independent arm is BIT-INVARIANT across
+#    -b 128/2048, so the residual is real fork-path state. Follow-up discriminator owed.
+# b. fork on HYBRID archs segfaults (CPU repro, fixture) -- recurrent state cannot rewind
+#    to the fork point; needs loud refusal or tip-fork+seq_cp design. Re-test post-4a84450c.
+# c. paged prefill is ~20x off ideal FA prefill (0.68 ms/tok vs ~0.025): the decode-kernel
+#    shape re-scans context per query token (O(n^2) work). A tiled two-level prefill
+#    kernel is the fix; quantified, marginal-ledger class.
