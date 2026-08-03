@@ -1,0 +1,10 @@
+# 3b scheduler->hybrid-pool discovery witness, 2026-08-04 ~05:00, synthetic inkling fixture, Mac CPU
+# recipe: DS4P_PAGED_HYBRID=1 + --kv-paged + explicit blocks, -lv 5
+0.00.005.980 W create_memory: DS4P_PAGED_HYBRID bring-up: constructing paged attention pool for a hybrid arch; the paged hybrid graph path is NOT implemented yet
+0.00.005.985 I init: initializing paged KV cache. n_gpu_blocks=64, n_cpu_blocks=16, block_size=16, watermark=0.05
+0.00.010.577 W create_memory: DS4P_PAGED_HYBRID bring-up: constructing paged attention pool for a hybrid arch; the paged hybrid graph path is NOT implemented yet
+0.00.010.578 I init: initializing paged KV cache. n_gpu_blocks=64, n_cpu_blocks=16, block_size=16, watermark=0.05
+0.00.014.871 I llama_paged_scheduler_init: using the hybrid wrapper's paged attention pool
+health: ok
+== the scheduler discovers the hybrid wrapper's pool (not the flat cast); server boots healthy ==
+note: full hybrid DECODE witness needs a vocab-ed hybrid model (fixture is no-vocab; embeddings does not drive the completion scheduler) — joins the box bundle or a fixture-vocab upgrade
