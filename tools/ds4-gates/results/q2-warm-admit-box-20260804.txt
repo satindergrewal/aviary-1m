@@ -1,0 +1,22 @@
+# Q2 -- P1-5 gate 2: warm-admit on the box (GPU0, qwen3-4b IQ4_KT, tip 071b124e), 2026-08-04 ~03:5x
+# recipe: --kv-bank <BOX>/q2-kvbank --cache-ram 6144 -c 40960 -ngl 99; 36,606-token prompt
+# (64K framing capped by the model's native 40960 ctx); spill needs THREE requests (states save
+# at displacement; a state larger than cache-ram is never inserted -> can never spill: cache-ram
+# must HOLD the state, then later states push it out. cache-ram 4/0 both produce NO spill.)
+
+== MECHANISM: PASS, exact ==
+spill:  kvbk-a5cf788c66c7ff2b.kv  5149.123 MiB  n_tok 36,613  (NVMe, not tmpfs)
+admit (CROSS-RESTART): lcp = 36,606 of 36,606 new tokens -> prompt_n = 1 (cold: 36,606)
+prompt_ms: cold 5023.3 / warm 12.9  (389x on the prefill counter)
+content IDENTICAL cold vs warm (': 1. The text is a') -- disk round-trip is lossless in effect
+
+== BAR (>=5x TTFT): FAIL at this config, measured honestly ==
+cold wall ~5.2 s vs warm wall 3.35 s => ~1.5x. The 5.1 GiB state read (~3.3 s ~ 1.55 GB/s)
+rivals this GPU's 5 s prefill. f16 KV = 144 KiB/token is the driver.
+Crossover: warm-admit wins big when prefill_time >> state_read_time -- big models (minutes of
+prefill), longer contexts, quantized KV (q8 halves the state). On Mac CPU the same mechanism
+measured prompt_n 22->1 with tiny states = huge ratio; on a fast GPU with a small model the
+bar needs the real workload.
+NOTE (marginal-ledger candidate): 1.55 GB/s admit read is ~1/3 of this NVMe -- likely
+single-threaded read; parallel/streamed read would roughly 3x the warm arm at zero risk.
+Regen during Q2: untouched (separate GPU memory, CPU-side spill/read only).
