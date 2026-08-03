@@ -28,7 +28,7 @@ tools/ds4-gates/results/*-box-20260804*):** item 1 CUDA gate PASS · warm-admit 
 EXACT / 5x bar honest-FAIL at 4B-GPU · 16-agent 6.39x PASS · fork-cost ~0% PASS (4 mid-gate
 ships incl. the warp-parallel decode kernel: ref was 40 s/step at 8K ctx) · ub2048 2.05x ·
 M3 ~12% parked · P1-7a parked with full U-curve · P2-8 finale: arm1 queue-not-reject TRUE PASS on CUDA (dec=0, f2a515df); arm2 evict/preempt = honest FAIL-AT-BAR (swap engages then LIVELOCKS; fix named: recompute-preemption + act-on-DEADLOCK; fitter-override ship 324827cb came out of it). Witness results/p28-finale-20260804.txt.
-**REMAINING for a future window:** Q5 quench-econ (needs a full-box window; fit math banked) · ★ P2-8 ARM2: Mac FULL PASS at 99ea0134 (evict+recompute live, 3-fix chain in results/p28-arm2-mac-PASS-*); remaining = ★ swap-path FIX (first exercise = block_table_id OOB abort, results/p28-swap-wall-FAIL-*) then its Mac wall, then the CUDA re-gate · tiled prefill kernel (M7). fork-residual CLOSED — fork acquitted bit-exact (7df46f0).
+**REMAINING for a future window:** Q5 quench-econ (needs a full-box window; fit math banked) · ★ P2-8 ARM2: Mac FULL PASS at 99ea0134 (evict+recompute live, 3-fix chain in results/p28-arm2-mac-PASS-*); ★ Mac side COMPLETE: recompute path (p28-arm2-mac-PASS-99ea0134) AND swap path (p28-swap-wall-PASS-8314d655, 4/4 swap-ins drained, 3/3 full-length) both witnessed. Remaining = the box CUDA re-gate only · tiled prefill kernel (M7). fork-residual CLOSED — fork acquitted bit-exact (7df46f0).
 
 Current holder is the DSpark regen (~27 h to target at the 2026-08-04 03:1x measure); these
 ride whatever window Satinder opens, after the holder's own resume needs.
