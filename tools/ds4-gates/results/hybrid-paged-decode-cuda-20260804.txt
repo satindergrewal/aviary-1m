@@ -1,0 +1,29 @@
+# ★★ CUDA ARM (box, RTX PRO 6000 pair, CUDA_VISIBLE_DEVICES=0, tip 071b124e3) — closes the
+# LAST open 3b arm: the CUDA 4c-1 hybrid path had NEVER executed before this run.
+# Run beside the live DSpark regen (anti-collision): baseline 16099 rows @03:36:56, after
+# 16125 @03:40:52 = 6.6/min vs ~7.4/min baseline — within short-window noise (rate-windows
+# rule: 4-min window, bursty writer); GPU memory byte-identical after gate exit
+# (76283/73659 MiB). Zero regen client errors.
+# CAVEAT (bucketing, does not affect verdict): 'flash ops in serve window: 80' is the
+# LOAD/probe graphs misbinned — the box loads slower than the Mac so load graphs cross the
+# 0.00.0x timestamp boundary; the Mac run shows the same 80 in its load window. The paged
+# claim rests on PAGED_ATTN x144 + parity 4/4, both unambiguous.
+# Note content differs from the Mac run ('pmepmepm' vs ' ve ve v'): CUDA vs CPU arithmetic
+# on random weights — parity WITHIN a backend is the bar, and it is 4/4 on both.
+#
+# 3b HYBRID PAGED DECODE GATE (op-level), 2026-08-04 03:40
+# recipe: DS4P_PAGED_HYBRID=1 GGML_SCHED_DEBUG=2 llama-server -b 512 -ub 512 --kv-paged, /completion + grammar, -lv 5
+
+== VERDICT: PASS — 4c-1 paged op executed, clean HTTP 200, AND static-vs-paged parity 4/4 at temp 0 ==
+
+http=200 predicted_n=8 content='pmepmepm'
+markers={'pool_constructed': True, 'sched_discovered': True, 'sched_initialized': True, 'sched_stepped': 73, 'request_registered': True}
+serve-window ops: {'MUL_MAT': 1585, 'ADD': 1304, 'MUL': 1302, 'RMS_NORM': 930, 'CPY': 930, 'CONCAT': 877, 'SSM_CONV': 744, 'CONT': 697, 'GET_ROWS': 653, 'MUL_MAT_ID': 558, 'SCALE': 374, 'SWIGLU': 279, 'NEG': 186, 'PAGED_ATTN': 144, 'SOFT_MAX': 95, 'SIGMOID': 93, 'ARGSORT': 93, 'SOFTPLUS': 93, 'SET_ROWS': 84, 'FLASH_ATTN': 80, 'PAD': 2}
+load-window ops (context only): {}
+paged ops in serve window: 144   flash ops in serve window: 80
+parity (static vs paged, temp 0, grammar, n_predict 16):
+  prompt 0: MATCH  paged='pmepmepmepmepmep'  static='pmepmepmepmepmep'
+  prompt 1: MATCH  paged='pmepmepmepmepmep'  static='pmepmepmepmepmep'
+  prompt 2: MATCH  paged='houizkouizkouild'  static='houizkouizkouild'
+  prompt 3: MATCH  paged='ybbbbbbbbbbbbbbb'  static='ybbbbbbbbbbbbbbb'
+raw server log: /tmp/results/hybrid-paged-decode-raw-20260804.log
