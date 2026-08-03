@@ -20,6 +20,11 @@
 #  - load/probe/reserve graphs (t=0.00.x) legitimately contain static FLASH nodes;
 #    only t>=0.01 graphs are serve-time => the verdict counts the serve window only
 #
+# v2 adds the PARITY arm: the same 4 prompts served by the classic static path and by
+# the paged engine must produce IDENTICAL text at temp 0 (token-level bar, the hybrid
+# analogue of flat's server-paged-parity 8/8; bit-identical logits are NOT the bar --
+# different kernels legally differ in reduction order).
+#
 # Usage: ./hybrid_paged_gate.sh [build_dir] [port]
 set -euo pipefail
 
@@ -51,13 +56,38 @@ curl -sf "http://127.0.0.1:$PORT/health" >/dev/null || { echo "FAIL: server neve
 HTTP=$(curl -s --max-time 120 -w "%{http_code}" -o "$WORK/resp.json" \
     "http://127.0.0.1:$PORT/completion" \
     -d "{\"prompt\":\"The\",\"n_predict\":$N_PREDICT,\"temperature\":0,\"cache_prompt\":false,\"grammar\":\"root ::= [a-z ]+\"}")
+
+# parity prompts against the SAME paged server (temp 0, grammar; longer decode)
+PROMPTS=("The" "once upon a time" "a b c" "hello world")
+for i in 0 1 2 3; do
+    # a crash mid-sequence must surface as a parity FAIL, not silently kill the gate
+    curl -s --max-time 120 -o "$WORK/paged-$i.json" "http://127.0.0.1:$PORT/completion" \
+        -d "{\"prompt\":\"${PROMPTS[$i]}\",\"n_predict\":16,\"temperature\":0,\"cache_prompt\":false,\"grammar\":\"root ::= [a-z ]+\"}" \
+        || echo '{"content":null,"error":"curl failed (server died?)"}' > "$WORK/paged-$i.json"
+done
+pkill -f "inkling-moe.gguf.*--port $PORT" 2>/dev/null || true
+sleep 1
+
+echo "== static arm (classic serve, no --kv-paged) =="
+( "$BUILD/bin/llama-server" -m "$FIX" \
+    -c 2048 -np 2 -b 512 -ub 512 \
+    --port "$PORT" --no-warmup > "$WORK/static.log" 2>&1 & )
+for _ in $(seq 1 90); do
+    curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 1
+done
+curl -sf "http://127.0.0.1:$PORT/health" >/dev/null || { echo "FAIL: static server never healthy"; tail -20 "$WORK/static.log"; exit 1; }
+for i in 0 1 2 3; do
+    curl -s --max-time 120 -o "$WORK/static-$i.json" "http://127.0.0.1:$PORT/completion" \
+        -d "{\"prompt\":\"${PROMPTS[$i]}\",\"n_predict\":16,\"temperature\":0,\"cache_prompt\":false,\"grammar\":\"root ::= [a-z ]+\"}" \
+        || echo '{"content":null,"error":"curl failed (server died?)"}' > "$WORK/static-$i.json"
+done
 pkill -f "inkling-moe.gguf.*--port $PORT" 2>/dev/null || true
 sleep 1
 
 echo "== verdict =="
-python3 - "$RAWLOG" "$WORK/resp.json" "$HTTP" "$OUT" "$N_PREDICT" <<'EOF'
+python3 - "$RAWLOG" "$WORK/resp.json" "$HTTP" "$OUT" "$N_PREDICT" "$WORK" <<'EOF'
 import json, re, sys, time
-rawlog, respf, http, outf, n_predict = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
+rawlog, respf, http, outf, n_predict, work = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]), sys.argv[6]
 data = open(rawlog, 'rb').read().decode('utf-8', 'replace')
 
 def ops(window):  # window: fn(ts_prefix)->bool
@@ -90,8 +120,22 @@ flash_serve = sum(v for k, v in serve.items() if 'FLASH' in k)
 ok_http = (http == '200' and predicted_n == n_predict)
 ok_op   = paged_serve > 0
 
-if ok_op and ok_http:
-    verdict = 'PASS — hybrid serving executed the paged banded attention op (4c-1) with a clean HTTP 200'
+# parity arm: same prompts, static vs paged serve, temp 0 -> identical text required
+parity, parity_rows = True, []
+for i in range(4):
+    try:
+        p = json.load(open(f'{work}/paged-{i}.json')).get('content')
+        s = json.load(open(f'{work}/static-{i}.json')).get('content')
+    except Exception as e:
+        p, s = f'<err {e}>', '<err>'
+    same = (p == s and p is not None)
+    parity &= same
+    parity_rows.append(f'  prompt {i}: {"MATCH" if same else "DIFFER"}  paged={p!r}  static={s!r}')
+
+if ok_op and ok_http and parity:
+    verdict = 'PASS — 4c-1 paged op executed, clean HTTP 200, AND static-vs-paged parity 4/4 at temp 0'
+elif ok_op and ok_http:
+    verdict = 'FAIL — paged op executed with clean 200 but static-vs-paged PARITY BROKE (see rows)'
 elif ok_http and flash_serve > 0:
     verdict = 'FAIL — serving succeeded but through STATIC banded flash: the 4c-1 paged branch never executed'
 elif ok_http:
@@ -111,8 +155,10 @@ lines.append(f'markers={markers}')
 lines.append(f'serve-window ops: {serve}')
 lines.append(f'load-window ops (context only): {load}')
 lines.append(f'paged ops in serve window: {paged_serve}   flash ops in serve window: {flash_serve}')
+lines.append('parity (static vs paged, temp 0, grammar, n_predict 16):')
+lines.extend(parity_rows)
 lines.append(f'raw server log: {rawlog}')
 open(outf, 'w').write('\n'.join(lines) + '\n')
 print('\n'.join(lines))
-sys.exit(0 if (ok_op and ok_http) else 2)
+sys.exit(0 if (ok_op and ok_http and parity) else 2)
 EOF
