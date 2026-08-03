@@ -1,0 +1,23 @@
+# ⚠ P1-6 COW fork DIVERGE-EQUALS ARM: OPEN DISCREPANCY, 2026-08-04 ~07:20, qwen3-4b IQ4_KT, Mac CPU
+# three arms, all --kv-paged, temp 0, identical prompts (parent 41 tok; children = parent + ' Answer A:' / ' Answer B:')
+
+mode 1 FORKED (children queued LATE, COW):
+0.03.567.630 I Request Id: 0:<s> Answer:<\s>
+0.03.567.631 I Request Id: 1:<s> Mount Everest<\s>
+0.03.567.631 I Request Id: 2:<s> Mount Everest<\s>
+
+mode 3 DEFERRED-INDEPENDENT (children queued LATE, NO fork -- timing-matched control):
+0.02.856.907 I Request Id: 0:<s> Answer:<\s>
+0.02.856.907 I Request Id: 1:<s> The tallest<\s>
+0.02.856.907 I Request Id: 2:<s> Mount Everest<\s>
+
+== RESULT: child 2 MATCHES across arms; child 1 DIFFERS ('Mount Everest' forked vs
+   'The tallest' independent). Timing is controlled for, so this is NOT a scheduling
+   artifact. TWO HYPOTHESES, NOT YET DISCRIMINATED:
+   (a) real KV defect in the COW path (child inherits subtly wrong state), or
+   (b) near-tie flip: the forked child prefills 12 tokens vs 44 independently, so the
+       paged CPU reference kernel accumulates in a different order; both continuations
+       are plausible for the prompt.
+   DISCRIMINATOR NEEDED: logprob-level comparison (the example prints text only) or a
+   forced-token teacher-forcing arm. P1-6 COW is therefore NOT closed: inherit-by-ref
+   and correct-looking answers are witnessed (p16-cow-fork-gate), equality is NOT. ==
