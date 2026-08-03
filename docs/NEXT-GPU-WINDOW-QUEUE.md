@@ -28,8 +28,7 @@ tools/ds4-gates/results/*-box-20260804*):** item 1 CUDA gate PASS · warm-admit 
 EXACT / 5x bar honest-FAIL at 4B-GPU · 16-agent 6.39x PASS · fork-cost ~0% PASS (4 mid-gate
 ships incl. the warp-parallel decode kernel: ref was 40 s/step at 8K ctx) · ub2048 2.05x ·
 M3 ~12% parked · P1-7a parked with full U-curve · P2-8 finale: arm1 queue-not-reject TRUE PASS on CUDA (dec=0, f2a515df); arm2 evict/preempt = honest FAIL-AT-BAR (swap engages then LIVELOCKS; fix named: recompute-preemption + act-on-DEADLOCK; fitter-override ship 324827cb came out of it). Witness results/p28-finale-20260804.txt.
-**REMAINING for a future window:** Q5 quench-econ (needs a V4+drafter serve slot — could
-not co-tenant the regen) · fork-residual discriminator · tiled prefill kernel (~20x).
+**REMAINING for a future window:** Q5 quench-econ (needs a full-box window; fit math banked) · ★ P2-8 ARM2 FAIL-AT-BAR: recompute-preemption + act-on-DEADLOCK then the re-gate (PASS bar: all complete + swapped>0 + zero livelock) · tiled prefill kernel (M7). fork-residual CLOSED — fork acquitted bit-exact (7df46f0).
 
 Current holder is the DSpark regen (~27 h to target at the 2026-08-04 03:1x measure); these
 ride whatever window the owner opens, after the holder's own resume needs.
