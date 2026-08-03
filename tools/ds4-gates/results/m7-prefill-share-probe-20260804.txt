@@ -698,3 +698,39 @@
 # the noise band) but its PRECISION does not.
 #
 # STATUS: STILL FAIL. Mechanism confirmed, 5.1x improvement measured, methodology flagged.
+
+# ============================================================================
+# ⚠⚠ THE REGISTER CAP IS **NOT** THE BINDING CONSTRAINT -- TWO LEVERS, BOTH LOSE
+# ============================================================================
+# The re-profile named occupancy (capped at 4 blocks/SM BY REGISTERS, Est. Local
+# Speedup 66.67%) as the remaining headroom. TWO independent attempts to convert
+# registers into occupancy have now both measured WORSE:
+#
+#   lever                                    | wall ms | vs 3,113-3,139 best
+#   __launch_bounds__(128,5) (compiler)      | 3,942   | +27% WORSE  (c07a2916)
+#   structural: 8 warps x HALF head_dim      | 4,408   | +40% WORSE  (this)
+#     (accumulator 4 tiles = 32 regs not 64; pair of warps per q tile; each warp's
+#      serial chain 16 mma -> 12; total mma 1.5x from the duplicated score tile;
+#      ~24 warps/SM projected vs 16)
+#   same-session control, mode 3             | 3,139   | baseline for this pair
+#
+# PREDICTION MADE BEFORE THE WALL (on record in-room): "10-25% win, real chance of a
+# loss, building to price it not because I know." The loss branch landed, harder than
+# I would have guessed.
+#
+# ★★ WHAT THE PAIR ESTABLISHES: at 14.66 achieved warps/SM this kernel is NO LONGER
+# occupancy-starved. Buying warps by spilling (lever 1) or by duplicating arithmetic
+# (lever 2) is negative in both directions, which is much stronger evidence than either
+# result alone -- two different mechanisms, same verdict. The profile's 66.67% occupancy
+# estimate is refuted BY CONSTRUCTION, twice. (See the earlier note: an Est. Local
+# Speedup prices REMOVING a stall, not any particular way of removing it.)
+#
+# ⇒ THE REMAINING ~1.26x TO STATIC IS NOT AN OCCUPANCY PROBLEM. It is arithmetic and
+# dependency chains (the re-profile's actual top stall: 33.0% fixed-latency EXECUTION).
+# Closing it needs FEWER INSTRUCTIONS, not more warps -- or a different algorithm.
+# Anything that adds work to add parallelism is now measured-dead on this kernel.
+#
+# The losing kernel was NOT committed: compile-verified, bar-green (max_abs 3.491e-05,
+# bit-identical to mode 3 as expected since it re-partitions rather than reorders),
+# measured, reverted. Same discipline as the 2-warp counter-test earlier in this arc --
+# dead code that loses has no reason to ship; the measurement is the artifact.
