@@ -289,3 +289,45 @@ with n_vocab=128 (:90). Upgrade to a minimal SPM byte vocab so /completion + sam
 Then the hybrid DECODE gate runs ON MAC: fixture + DS4P_PAGED_HYBRID + --kv-paged + blocks →
 /completion through the scheduler → the 4c-1 branch executes ggml_paged_attn_banded live →
 paged-vs-static parity (greedy agreement framing, F16 pool). Closes 3b end-to-end card-free.
+
+## EPILOGUE — the 5-defect night (2026-08-04, ds4-ports 071b124e, ornith 1a91967)
+The plan above ended with "the 4c-1 branch executes ... live". Building the op-level gate
+(tools/ds4-gates/hybrid_paged_gate.sh) proved that claim had been INFERRED, never measured:
+serving returned clean tokens while running entirely on the static unfused path. Two gate
+arms then surfaced five real defects in one night, every one invisible to "serving works":
+
+1. **Branch condition coupled to the wrong cache.** The 4c-1 branch ANDed
+   `use_banded_flash(il)`, whose `n_kv_flash > 0` term reads the STATIC cache's
+   `n_kv_pos_contiguous` — a property scheduler-driven decode does not maintain. Both
+   banded flash and the paged branch silently switched off. Fix: `use_paged_banded(il)`
+   checks only the paged kernel's own contract (head_dim 64/128, GQA divisibility, pool
+   tensor type) + a WARN so this fallback class can never be silent again.
+2. **Unconsumed input tensor.** `needs_rel_idx_*` counted paged layers, creating a static
+   rel-idx input no node consumes → unallocated → `set_input_pos_rel_flat` crashed on
+   GGML_ASSERT(buffer). Paged layers now excluded from the needs computation.
+3. **Invisible op.** `GGML_OP_PAGED_ATTN` was declared AFTER `GGML_OP_COUNT`: no
+   GGML_OP_NAME/SYMBOL entries, `ggml_op_name()` read out of bounds, the op printed as
+   garbage in sched-debug dumps — unauditable by graph inspection. Moved inside COUNT
+   (asserts 103→104).
+4. **Stale static seq state on completion.** The scheduler frees only paged blocks; a
+   finished request left its static attn+recr positions behind, so the next request
+   reusing that seq id failed llama_batch validation and killed the decode. Fix:
+   `llama_memory_seq_rm` on paged completion (flat: erases bookkeeping only).
+5. **Inherited generation counter.** The classic DONE_PROMPT site that zeroes
+   `slot.n_decoded` never runs for paged slots; a reused slot stopped early with the
+   predecessor's count (measured: a 16-token request returned exactly 16−8=8 tokens).
+   Fix: zero it at paged intake.
+
+**Final state, all measured:** op-level PASS (PAGED_ATTN ×144 in serve graphs, zero flash,
+zero static SET_ROWS — the fused op owns the KV write); static-vs-paged parity 4/4
+char-identical at temp 0 incl. multi-token prefills; concurrent arm: two simultaneous
+300-token requests, 300 scheduler steps at running=2, each char-identical to its solo
+reference. Flat serving regression-free (real-model reuse 4/4). Witnesses:
+tools/ds4-gates/results/hybrid-paged-decode-raw-20260804.{txt,log.gz},
+hybrid-paged-concurrent-20260804.txt.
+
+**Still open (box-gated):** the CUDA pagedattn banded path has never executed the 4c-1
+hybrid graph — re-run hybrid_paged_gate on the box after pulling 071b124e.
+**Methodology note:** the measurement traps (binary logs break grep, fragmented sched-dump
+lines, libllama INFO filtered at default verbosity, load-vs-serve graph windows) are encoded
+in the gate script header so the next runner does not rediscover them.
