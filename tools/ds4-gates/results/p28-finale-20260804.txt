@@ -1,0 +1,22 @@
+# P2-8 finale gate trail, 2026-08-04 (tips through ds4-ports f2a515df)
+#
+# The queue-not-reject arm (6 concurrent on np2) surfaced a TWO-LAYER defect:
+# 1. seq_rm ordering (76da2261): completion-time clear ran before scheduler update
+#    re-wrote positions -- stale state for reused seq ids. Fixed; storm SURVIVED.
+# 2. THE REAL INJECTION (f2a515df): the scheduler's own id lifecycle -- a stopped
+#    group's teardown waited one step; the server relaunched on the reused slot id in
+#    that window; queue_request silently overwrote id_to_group; the late sweep erased
+#    the NEW request's mapping -> orphaned request -> 'positions are decreasing'.
+#    Plus the amplifier: a failed llama_decode returned without updating the scheduler,
+#    so the identical bad batch respun forever (880K+ error lines measured) and the
+#    CUDA VMM pool ballooned to a FULL CARD (94-96 GiB) -- the storm is also a leak.
+# Fixes: eager guarded finish() at update-time; idempotent teardown; pointer-checked
+# id_to_group erase; server cancels a failing batch instead of respinning it.
+#
+# == MAC GATE (arm-1 scenario, CPU, qwen3-4b, np2, 6 concurrent): PASS ==
+# 6/6 complete at full length; storm lines: 0; decode failures: 0.
+#
+# == BOX CUDA VERDICT: PENDING -- embargoed ==
+# My gate's pkill -x killed the DSpark regen server (incident owned, room #1993/#1995);
+# no ds4 process boots on the box until DSpark posts regen green. On green: full
+# p28_finale_gate re-run (both arms incl. evict/preempt swap witness) + Q5 fit check.
