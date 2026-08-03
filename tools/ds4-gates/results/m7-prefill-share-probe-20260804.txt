@@ -333,3 +333,19 @@
 # the 61.8% L1TEX stall; with occupancy now 3x higher, cp.async staging finally has
 # something to hide behind and is worth ONE wall -- it was correctly refuted at 5 warps/SM,
 # not refuted in general.
+#
+# GATE REQUIREMENT 4 -- P2-8 ARM SUITE ON THE GATE-MEETING TIP (b1b42e83): 3/3 PASS.
+#   ARM 1 queue-not-reject : 6/6 @96  | pos_dec=0 oob=0 deadlock=0 decode_fail=0
+#   ARM 2 recompute-preempt: 3/3 @400 | recompute=8 evictions=4, zero errors
+#   ARM 3 swap-preempt     : 3/3 @400 | max_swapped=2 swap_outs=4 swap_ins=4 drained
+#   witness: box /tmp/ds4gates/results/p28-cuda-regate-20260804-1027.txt
+# Prefill changes ride the same scheduler batches preemption uses, so this was a
+# requirement of the M7 gate, not a courtesy re-run. ALL FOUR REQUIREMENTS GREEN:
+#   (1) test-paged-banded green  (2) equivalence max_abs 4.067e-05  (3) >=5x prefill,
+#   no decode regression  (4) P2-8 3/3.
+#
+# ⚠ PROCESS NOTE: the first regate attempt exited silently after "== sync + build ==".
+# Cause: the box worktree was dirty from the scp'd kernel, so `git checkout fork/ds4-ports`
+# failed and `set -e` killed the run. The diff against the pushed tip was EMPTY (the scp'd
+# file was byte-identical to b1b42e83), so nothing was lost, but a gate script that dies on
+# a dirty tree looks exactly like a gate script that ran and found nothing. Reset first.
