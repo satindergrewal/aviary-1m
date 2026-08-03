@@ -1,0 +1,5 @@
+# 4d multi-request witness, 2026-08-04 ~04:25, tip 0aae294f, real 4B, Mac CPU paged reference
+# two CONCURRENT completions through one scheduler (np=2, --kv-paged):
+A: ' Paris. The population of Paris' (6 tokens, temp 0)
+B: ' 0°C and boils at' (6 tokens, temp 0)
+== both correct + coherent; dynamic admission + concurrent decode through the continuous-batching engine ==
