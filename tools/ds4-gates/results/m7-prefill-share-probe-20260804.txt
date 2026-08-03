@@ -148,3 +148,17 @@
 #   commit, and it is the last idea in this line that has a mechanism behind it.
 # PREFILL SCOREBOARD (all dark, baseline is what runs): baseline 43,726 · f32 tile 28,816
 #   (1.52x) · score-block 106,201 · fragment 1-warp 87,793 · fragment 4-warp 31,915.
+
+# == PER-WARP KEY TILES (ds4-ports 7171665a): 53,287 ms -- parallelism won, occupancy lost ==
+#   Each warp owns its own key-tile stream + softmax state, log-sum-exp merge (the split-K
+#   pattern applied to prefill). test-paged-banded ALL PASSED -- partition math right.
+#   SLOWER than the shared-accumulator 4-warp (31,915) because four private o_acc f32
+#   regions push smem to ~80 KB/block -> ~1 block/SM where the shared shape ran several.
+# ★ THE MECHANISM LINE IS NOW COMPLETE WITH DATA ON EVERY BRANCH:
+#   baseline 43,726 · f32 tile Q4 28,816 (best) · f32 Q8 31,272 · f32 Q16 218,100 (spill)
+#   score-block 106,201 (coalescing) · frag 1-warp 87,793 (occupancy) · frag 4-warp shared
+#   31,915 (warp0-only mma) · frag per-warp 53,287 (smem/occupancy).
+#   Gate <= 8,745. Static ~2,500. Remaining distance = PIPELINING ECONOMICS (cp.async
+#   double-buffering, fragment reuse across tiles = the fattn-mma-f16.cuh discipline), not
+#   another partition of the same work. That is a port-class effort with its own gate.
+# All shapes dark. Baseline is what runs, and that is measured (43,717 unflagged).
