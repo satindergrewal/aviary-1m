@@ -245,3 +245,64 @@
 #   model is banded and the paged path masks instead of skipping." Checked the
 #   serve log and the arch: qwen3-4b-dev has NO visibility window, both arms do
 #   the same full-causal work. The gate stands as a legitimate target.
+
+# ============================================================================
+# == PROFILE: THE KERNEL WAS STARVED, NOT SLOW (ncu, mma kernel live) ==
+# ============================================================================
+# Four levers had been priced by then -- KV-64 WORSE, smem overlay FLAT,
+# rescale-skip FLAT -- i.e. three consecutive results saying the thing being
+# reached for was not the thing that cost. Went to the profiler instead of
+# spending a fifth wall on a fifth guess.
+#
+# ncu (sudo for counter access; --launch-skip 700 so the sampled launches sit
+# mid-prefill at ~10K context rather than in the tiny early ubatches):
+#   grid                (32,1,8) = 256 blocks on ~188 SMs = 0.7 FULL WAVES
+#   achieved occupancy  11.33%  ->  5.44 active warps/SM
+#   theoretical occ.    16.67%, LIMITED BY REGISTERS
+#                       (block limit: regs 2, smem 5, warps 12, barriers 24)
+#   top stall           61.8% L1TEX memory dependency (7.2 of 11.65 cycles)
+#   DRAM throughput     0.44%   compute 11.1%   L2 2.2%
+#   duration            6.9 ms per launch
+#
+# THE ARITHMETIC THAT SETTLED IT: 256 blocks x 4 warps = 1024 warps / 188 SMs
+# = 5.44 warps per SM. The profiler measured 5.44. Not approximately -- exactly.
+# So the kernel had ~5 warps per SM to cover a ~500-cycle memory latency.
+#   - It killed the fix I was about to build (cp.async prefetch): prefetching
+#     hides latency BEHIND other work, and there was no other work.
+#   - It killed the repartition idea too: 4 blocks of 1 warp is still 5.44
+#     warps/SM. You cannot create warps by regrouping them.
+#   - DRAM at 0.44% means work DUPLICATION IS FREE here, three orders of
+#     magnitude from any bandwidth limit. That inverts the usual trade.
+#
+# == DIAGNOSTIC BEFORE BUILDING (zero code): same prefill at -ub 2048 ==
+#   paged mma kernel, ub 2048 :  8,356 ms
+#   paged BASELINE,   ub 2048 : 44,116 ms  (vs 43,726 at ub 512 -- baseline is
+#                               indifferent to ubatch, so this is not drift)
+#   ratio 5.28x  =>  ★★ GATE MET (>=5.00x, <=8,745 ms) ★★
+#   Predicted gain from the profile was 8/5.44 = 1.47x; measured 12,507 ->
+#   8,356 = 1.50x. The profile's arithmetic predicted the wall.
+#
+# NOT STOPPING THERE: -ub 2048 is a serving knob (his GLM config runs -ub 256
+# for unrelated reasons). A gate passed by turning a dial is a kernel that got
+# lucky about its workload. So the parallelism now comes from INSIDE the
+# kernel: split-K over the key range, partials folded by the same log-sum-exp
+# combine kernel the decode path already uses.
+#
+# MEASUREMENT BUGS FOUND AND FIXED ALONG THE WAY (all three mine, not the tool's):
+#   1. ERR_NVGPUCTRPERM -- counters are admin-restricted. The documented fix is
+#      a modprobe flag needing a module reload, which would hit the cards the
+#      regen lane holds. Did NOT do that; used sudo instead (no config change,
+#      no reboot, device 0 only).
+#   2. The run wrote NO report: my own cleanup `pkill -f "port 8967"` matched
+#      ncu's own command line, since the profiler's argv contains the server's
+#      --port. I killed the profiler before it flushed. Fixed by anchoring the
+#      pattern to the binary path. Same kill-scoping rule as the regen incident,
+#      broken again in a new place.
+#   3. ⚠ `sudo` STRIPS THE ENVIRONMENT, so DS4P_PAGED_QTILE=3 never reached the
+#      server: ncu profiled a run with my kernel switched OFF and reported "No
+#      kernels were profiled". Corroborated by that run's 51,689 ms prefill
+#      being baseline-shaped with no replay inflation. Had I read a profile out
+#      of it, I would have optimised the wrong kernel with total confidence.
+#      Fixed with `sudo -n env DS4P_PAGED_QTILE=3 ... ncu`. This is the
+#      fa-on-disables-the-guard class: a privilege boundary silently dropping an
+#      explicit flag.
