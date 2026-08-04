@@ -1,0 +1,47 @@
+=== test-paged-vs-cpu on the SHIPPED Metal split-K kernel ===
+8f2e761b metal: barrier-free simd_sum + split-K paged attention -- decode 3.80x, prefill 2.08x
+dispatch: nsg = n_tokens > 1 ? 2 : 8   -- this run exercises nsg > 1
+reference: CPU impl of the same op (no CUDA-only reference needed)
+
+ggml_metal_device_init: tensor API disabled for pre-M5 and pre-A19 devices
+ggml_metal_library_init: using embedded metal library
+ggml_metal_library_init: loaded in 7.706 sec
+ggml_metal_rsets_init: creating a residency set collection (keep_alive = 180 s)
+ggml_metal_device_init: GPU name:   MTL0 (Apple M3 Max)
+ggml_metal_device_init: GPU family: MTLGPUFamilyApple9  (1009)
+ggml_metal_device_init: GPU family: MTLGPUFamilyCommon3 (3003)
+ggml_metal_device_init: GPU family: MTLGPUFamilyMetal4  (5002)
+ggml_metal_device_init: simdgroup reduction   = true
+ggml_metal_device_init: simdgroup matrix mul. = true
+ggml_metal_device_init: has unified memory    = true
+ggml_metal_device_init: has bfloat            = true
+ggml_metal_device_init: has tensor            = false
+ggml_metal_device_init: use residency sets    = true
+ggml_metal_device_init: use shared buffers    = true
+ggml_metal_device_init: recommendedMaxWorkingSetSize  = 115448.73 MB
+ggml_metal_init: allocating
+ggml_metal_init: found device: Apple M3 Max
+ggml_metal_init: picking default device: Apple M3 Max
+ggml_metal_init: use fusion         = true
+ggml_metal_init: use concurrency    = true
+ggml_metal_init: use graph optimize = true
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_paged_attn_write_f32', name = 'kernel_paged_attn_write_f32'
+ggml_metal_library_compile_pipeline: loaded kernel_paged_attn_write_f32                   0x103076220 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_paged_attn_f32', name = 'kernel_paged_attn_f32'
+ggml_metal_library_compile_pipeline: loaded kernel_paged_attn_f32                         0x103076f00 | th_max = 1024 | th_width =   32
+ggml_compute_forward_paged_attn: running CPU reference implementation of paged attention. This is for correctness validation only and is not optimized. See docs/paged-attention.md for details.
+ggml_metal_free: deallocating
+backend: MTL0   reference: CPU
+D= 64 case A: with_rel=1 window=0 max_abs=4.470e-08 nmse=8.898e-15 PASS
+D= 64 case B: with_rel=1 window=8 max_abs=5.960e-08 nmse=9.120e-15 PASS
+D= 64 case C: with_rel=0 window=8 max_abs=4.470e-08 nmse=7.907e-15 PASS
+D= 96 case A: with_rel=1 window=0 max_abs=5.960e-08 nmse=8.992e-15 PASS
+D= 96 case B: with_rel=1 window=8 max_abs=5.960e-08 nmse=9.488e-15 PASS
+D= 96 case C: with_rel=0 window=8 max_abs=4.470e-08 nmse=8.052e-15 PASS
+D=128 case A: with_rel=1 window=0 max_abs=4.470e-08 nmse=7.842e-15 PASS
+D=128 case B: with_rel=1 window=8 max_abs=5.960e-08 nmse=8.571e-15 PASS
+D=128 case C: with_rel=0 window=8 max_abs=4.470e-08 nmse=7.343e-15 PASS
+D=192 case A: with_rel=1 window=0 max_abs=4.470e-08 nmse=8.507e-15 PASS
+D=192 case B: with_rel=1 window=8 max_abs=4.470e-08 nmse=8.206e-15 PASS
+D=192 case C: with_rel=0 window=8 max_abs=4.470e-08 nmse=7.490e-15 PASS
+test-paged-vs-cpu: ALL PASSED
