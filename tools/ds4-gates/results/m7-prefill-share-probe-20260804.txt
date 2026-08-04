@@ -1815,3 +1815,24 @@
 #   simdgroup_load(mk, pk + 8*i, NS10, 0, true) where NS10 is a PADDED row stride -- our
 #   staged tk uses stride D with NO padding; padding/bank-conflict stride is suspect #1.
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap unchanged 2.60x. Nothing claimed.
+
+# --- CHAMPION CALL-SITE READ: two things my mma got structurally wrong ---
+# 1. The champion's MAIN mqk loop loads K from **DEVICE** memory, not threadgroup:
+#      ggml-metal.metal ~:6950  device const k_t * pk = (device const k_t *)(k + ic*args.nb11);
+#      ggml-metal.metal ~:6951  threadgroup const q_t * pq = sq;      <- Q is threadgroup
+#      then: simdgroup_load(mk, pk + 8*i, NS10, 0, true);   simdgroup_load(mq, pq + 8*i, DK);
+#    i.e. Q from THREADGROUP, K straight from DEVICE with the tensor's own row stride.
+#    Mine loads BOTH from threadgroup staged tiles -- a different contract than the site I
+#    copied the call shape from.
+# 2. The champion DOES have a threadgroup transposed load, in its other branch:
+#      ~:7032  simdgroup_load(mk, sk + 16*k + 0*8, 4*16, 0, true); // transpose
+#    Tile is 16 wide but the stride passed is **4*16 = 64** -- a PADDED stride, not the
+#    natural row width. My staged tk is packed with stride exactly D, no padding.
+# ⇒ Both suspects are now grounded in the champion's own code rather than inferred:
+#   (a) threadgroup transposed loads there always carry a PADDED stride;
+#   (b) the device-vs-threadgroup source contract differs between its two branches.
+#   The stride-4 hit pattern in our dump (k=0,4 exact, rest zero) is exactly what a wrong
+#   stride argument on a transposed threadgroup load would produce.
+# NEXT ARM unchanged in shape, now better aimed: identity-in/identity-out, and vary the
+#   transposed-load STRIDE first (D -> padded), since the champion never passes a bare
+#   packed width to a threadgroup transposed load.
