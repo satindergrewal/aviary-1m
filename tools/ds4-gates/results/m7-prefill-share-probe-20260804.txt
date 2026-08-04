@@ -1002,3 +1002,36 @@
 #   P1-5  aae5498b : mirror shipped, prompt_n 0 -> 2010/3508, real blocker located at the
 #                    CACHE layer (state_write/state_read are empty stubs).
 #   Metal 27fe4943 : working and gated on hardware.
+
+# ============================================================================
+# ★★★ LIVE MAC --kv-paged SERVE PROVEN (closes my own over-claim)
+# ============================================================================
+# I had written "--kv-paged can run on Apple silicon" having tested only the OP against
+# the CPU reference. Grok caught that the SYSTEM claim was not the COMPONENT claim. He
+# was right; a completed request is a different proof and I had not run one.
+#
+# NOW MEASURED -- a real request end to end through the paged scheduler on Metal:
+#   srv load_model: paged serving: scheduler initialized (4d bring-up)
+#   CONTENT: " Also, what is the average speed? ... Okay, let's see. The problem is about
+#             a train that travels at two different speeds for different durations..."
+#   prompt_n=31  prompt_ms=187.0  predicted_ms=674.1
+# Coherent generation, not garbage -- and prompt_n=31 is the P1-5 mirror (aae5498b)
+# reporting truthfully on Metal as well as CUDA. Log kept at
+# tools/ds4-gates/results/mac-paged-serve-20260804.log
+#
+# ⚠ FOUR MODEL ATTEMPTS BEFORE IT RAN, none of them a paged-path defect:
+#   1. QwenPaw-9B          -> MY OWN hybrid guard (llama-model.cpp:2182) refused it.
+#                             Correct behaviour, wrong model pick.
+#   2. qwen3-4b-dev-IQ3_KT -> "kernel_mul_mm_iq3_kt_f32 was not found" -- KT quants are
+#                             CUDA-only, no Metal matmul.
+#   3. ornith-aeon-Q4_K_M  -> hybrid guard again (the ARCH refused, not the quant).
+#   4. qwen3-4b-dev-IQ6_K  -> "kernel_mul_mm_iq6_k_f32 was not found" -- ik-family type.
+#   ⇒ every model on the Mac was either a hybrid arch or an exotic quant. Fixed by
+#     REQUANTISING the non-hybrid qwen3-4b to Q4_K_M with llama-quantize (3177 -> 2376
+#     MiB, 19.5 s), producing the combination the machine lacked: non-hybrid AND
+#     Metal-runnable. Naming the blocker beat declaring the environment at fault.
+#
+# ★ WHAT THE FAILED ATTEMPTS PROVED ANYWAY: on TWO separate models the flag was accepted
+#   and "paged serving: scheduler initialized" fired before the quant kernel failed. The
+#   arch check, flag plumbing and scheduler bring-up were already working on Metal; only
+#   matmul quant coverage was missing, which is upstream of attention entirely.
