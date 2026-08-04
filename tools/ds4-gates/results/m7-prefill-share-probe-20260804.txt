@@ -1587,3 +1587,19 @@
 # test. The arm LEDGER stands as data; the INTERPRETATIONS from F/G/H/J are void. E's pass
 # and the champion transfer list stand.
 # Reverted, 12/12 PASS on rebuilt binary, dirty 0. Prefill unchanged 2.96x.
+
+# --- kargs-plumbing checks 1+2 run: BOTH CLEAN, which sharpens the question ---
+#   (1) NO second struct copy: ggml-metal.metal only *uses* ggml_metal_kargs_paged_attn
+#       (:2955, :2991); the definition lives solely in ggml-metal-impl.h, included at :8.
+#   (2) The embedded-metallib step DOES depend on impl.h: CMakeLists.txt:33 names it,
+#       :46 sed-inlines its CONTENTS into the embedded source, :53 lists it in DEPENDS.
+#   And .metal edits demonstrably reach the shader (the identity dump's 0-writes are my
+#   code executing). So the naive stale-header story has no visible mechanism EITHER.
+# ⇒ REMAINING QUESTION, now very narrow: host writes a 12-int32 + 3-uint64 struct; shader
+#   behaves as if nsg (the 12th int32) is 0. Next DECISIVE probe (one printf + one shader
+#   write): host prints sizeof(args) + offsetof(nsg); shader identity-dumps args.nsg and
+#   args.n_tokens_total instead of gtok. If shader nsg=0 while host offsetof says 44, the
+#   mismatch is in the set_bytes path or MSL packing of the CONSTANT address space -- and
+#   MSL constant-address packing rules for the trailing uint64 triple is the prime suspect
+#   left standing (host pads 36->40 originally; verify the widened layout on BOTH sides).
+#   ⚠ untested statement, marked as such: it is the last suspect, not a finding.
