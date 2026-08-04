@@ -2171,3 +2171,26 @@
 #   measured contract to build on: Q loads with pitch n_heads*D (NOT D -- q is interleaved
 #   by head), K from the staged tile with pitch D and transpose=true, store with its own
 #   stride. Wall stays 2,945 and the gap stays 2.60x until that lands and gates 12/12.
+
+# --- Q@K^T SINGLE-TILE CONTRACT: GATE PASS 9/9 (the law's "single-tile == ref" step) ---
+# tools/ds4-gates/sgload_probe/qk_gate.sh -- the REAL shapes the paged MMA path will use:
+# head-interleaved Q (pitch n_heads*D), K from a staged tile (pitch D, transpose=true),
+# score tile stored with its OWN independent stride. Checked against a CPU reference.
+#   D=64 head=0/3/7 | D=128 | D=256 | n_heads=32 | store pitch 8/32/40  -> TILE == REF
+#   q_pitch=D (the bug)                                                 -> MISMATCH (control)
+# Done standalone in SECONDS. No llama.cpp rebuild, no offline Metal toolchain.
+#
+# TWO MORE SELF-CAUGHT DEFECTS, both would have shipped a false result:
+#  (c) FALSE PASS: the gate printed "GATE PASS" with a MISMATCH row on screen. `fail=1` was
+#      set inside "$( ... )" -- a command substitution is a SUBSHELL, so the assignment was
+#      DISCARDED. Third member of the banked family (grep -c exit, pipe-tail status): the
+#      status must cross NO subshell boundary. Fixed; the gate then correctly printed FAIL.
+#  (d) D=256 failed at 2.449e-05 vs a float64 reference. Rather than loosen the threshold,
+#      added a SECOND reference accumulating in fp32 -- the same precision the GPU uses.
+#      Result: 0.000e+00, BIT-IDENTICAL. So D=256 was fp32 summation ORDER over 256 terms,
+#      not a contract break, and the bug arm still fails 1.844e+01 there. The gate now tests
+#      the CONTRACT (which elements were read, where they landed) instead of fp32 luck.
+#      Loosening the threshold would have "passed" while hiding a real large-D break.
+#
+# ⇒ The MMA contract is now fully measured end to end. What remains is WIRING it into
+#   kernel_paged_attn_f32, which today has no MMA path at all. Wall 2,945, gap 2.60x, OPEN.
