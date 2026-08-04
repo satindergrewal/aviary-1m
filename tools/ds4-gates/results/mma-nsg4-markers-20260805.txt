@@ -1,0 +1,9 @@
+tip: f607ca03 dirty=3 | wall mma-nsg4-20260805-0045.txt | source /tmp/il-MMA.log /tmp/il-LPK.log
+VERDICT: nsg=4 REACHED (KSTAGE=OFF smem=28928) AND wall MMA 2323 >= LPK 2054 → occupancy NOT binding
+MMA/LPK = 1.131x (+13.1%). nsg2→nsg4 absolute win 2727→2323 but still loses to LPK.
+NEXT forced: O-out-of-threadgroup / function-constant specialisation / champion shape. Zero-second.
+--- markers ---
+/tmp/il-MMA.log:0.01.057.969 I ggml_metal_op_paged_attn: DS4P-MMA ACTIVE  D=128 bs=32 sb=1 KT=32 nsg=4 QR=32 KSTAGE=OFF smem=28928(+pad 0)/32768
+/tmp/il-MMA.log:0.03.379.511 I ggml_metal_op_paged_attn: DS4P-MMA ACTIVE  D=128 bs=32 sb=1 KT=32 nsg=4 QR=32 KSTAGE=OFF smem=28928(+pad 0)/32768
+/tmp/il-LPK.log:0.01.057.514 I ggml_metal_op_paged_attn: DS4P-LPK ACTIVE (lane-per-key two-phase) D=128 bs=32 nsg=8 TKP=130 VSTAGE=on smem=21632/32768
+/tmp/il-LPK.log:0.03.088.152 I ggml_metal_op_paged_attn: DS4P-LPK ACTIVE (lane-per-key two-phase) D=128 bs=32 nsg=8 TKP=130 VSTAGE=on smem=21632/32768

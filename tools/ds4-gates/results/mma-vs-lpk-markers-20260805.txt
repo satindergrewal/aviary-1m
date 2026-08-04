@@ -1,0 +1,4 @@
+0.01.053.208 I ggml_metal_op_paged_attn: DS4P-MMA ACTIVE  D=128 bs=32 sb=1 KT=32 nsg=2 QR=16 smem=22656(+pad 0)/32768
+0.03.785.742 I ggml_metal_op_paged_attn: DS4P-MMA ACTIVE  D=128 bs=32 sb=1 KT=32 nsg=2 QR=16 smem=22656(+pad 0)/32768
+0.01.041.925 I ggml_metal_op_paged_attn: DS4P-LPK ACTIVE (lane-per-key two-phase) D=128 bs=32 nsg=8 TKP=130 VSTAGE=on smem=21632/32768
+0.03.065.098 I ggml_metal_op_paged_attn: DS4P-LPK ACTIVE (lane-per-key two-phase) D=128 bs=32 nsg=8 TKP=130 VSTAGE=on smem=21632/32768

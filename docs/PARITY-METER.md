@@ -525,3 +525,43 @@ named and measured, not guessed: cut MMA smem until nsg reaches 8 at D=128.**
 line-by-line transcription of a kernel with 213 specialisations.
 
 **METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
+
+## Milestone 2: occupancy is REAL and worth -14.8%, but NOT sufficient — and it reopens O-in-fragments
+
+K destaged from the MMA path (`DS4P_METAL_MMA_NOSTAGE_K=1`, requires `bs % 8 == 0` so an 8-row
+fragment never straddles two physical blocks). **nsg 2 -> 4 at D=128, smem 28,928 — the exact
+byte count predicted from arithmetic before the code was written.**
+
+| arm | mean |
+|---|---|
+| STATIC | 1,511 |
+| STATIC2 (repeat control) | 1,508 — **floor 0.20%** |
+| PAGED-LPK | 2,054 |
+| PAGED-MMA nsg=4 | **2,323** (was 2,727 at nsg=2) |
+
+**Occupancy priced: doubling nsg bought -14.8% on the MMA path.** Real, large, and the mechanism
+is confirmed. **But MMA still loses to LPK by 13%**, so by the pre-filed criterion this is a
+**PARTIAL**: occupancy is binding but not the whole cost. Priced and filed, not spun.
+
+**⚠ First attempt FAILED 12/12 at nmse 1e+13** — destaging K shifts every threadgroup pointer
+after `tk`, and I broke the "allocation and layout move together" invariant that I had *written
+in the comment directly above*. The gate caught it before any wall ran. That is the entire reason
+correctness runs first, and it is the second time today a marker/gate caught a silent-wrong path.
+
+### ★ The result reopens a design I killed EARLIER TODAY — because its condition expired
+
+I killed **O-in-fragments** this session with: *"champion has 213 template specialisations;
+**runtime D** ⇒ dynamic register-array indexing ⇒ spills"*. **That condition no longer holds.**
+`D` became a **compile-time function constant** (`FC_paged_attn_D`) in the specialisation work
+that paid -46.5% on the scalar path. **The blocker is gone.**
+
+And the arithmetic now points straight at it: at nsg=4, `so` (the O accumulator) is
+**16,384 of the 28,928 bytes** — the dominant term, and the only one still scaling with QR.
+Getting O out of threadgroup memory is both the champion's actual shape and the largest
+remaining smem term.
+
+**⇒ Milestone 3: O in fragments, unblocked by a condition that expired.** This is exactly why a
+negative must be filed WITH its condition ([[refuted-needs-its-condition]]) — filed bare, this
+design would have stayed dead and the port would have gone looking elsewhere.
+
+**METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**

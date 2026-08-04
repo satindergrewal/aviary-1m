@@ -1,0 +1,22 @@
+tip: f607ca03 dirty=3
+round1  STATIC   WALL=1478
+round1  LPK      WALL=2054
+round1  MMA      WALL=2319
+round1  STATIC2  WALL=1505
+round2  LPK      WALL=2031
+round2  MMA      WALL=2317
+round2  STATIC2  WALL=1480
+round2  STATIC   WALL=1466
+round3  MMA      WALL=2338
+round3  STATIC2  WALL=1480
+round3  STATIC   WALL=1521
+round3  LPK      WALL=2034
+round4  STATIC2  WALL=1570
+round4  STATIC   WALL=1581
+round4  LPK      WALL=2100
+round4  MMA      WALL=2318
+--- MEANS (interleaved, rotated) ---
+STATIC   1511 ms (n=4)
+LPK      2054 ms (n=4)
+MMA      2323 ms (n=4)
+STATIC2  1508 ms (n=4)
