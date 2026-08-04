@@ -1417,3 +1417,22 @@
 #   D strided nsg=8 ............................ PASS
 #   E q_parallel, nsg=2, no packing ............ PASS
 #   F q_parallel, nsg=2, packing, explicit nsg . FAIL nmse 0.494 (was 0.99)
+
+# --- ARM G: BLOCK packing also FAILS (nmse 0.683). THE PATTERN IS NOW SHARP. ---
+#   E  two simd groups, SAME row ......................... PASS
+#   F  two simd groups, DIFFERENT rows (interleaved) ..... FAIL 0.494
+#   G  two simd groups, DIFFERENT rows (block) ........... FAIL 0.683
+# ⇒ ★ IT IS NOT WHICH ROWS. It is that the two simd groups compute DIFFERENT rows AT ALL.
+#   Assignment is irrelevant; divergence between groups is what breaks it.
+#
+# WHAT DIFFERS THE MOMENT gtok DIFFERS PER GROUP, and this is the next arm, not a claim:
+#   different gtok -> different q_pos -> different n_tok -> **DIFFERENT LOOP TRIP COUNTS
+#   between the two simd groups in one threadgroup.** Every PASSING arm so far had a
+#   threadgroup-uniform loop bound: A/B/C/D split the KEY range for ONE row (same n_tok,
+#   different stride), and E gave both groups the SAME row. No passing arm has ever had two
+#   groups iterate a different NUMBER of times.
+#   NEXT ARM: pad the loop to a threadgroup-uniform upper bound (max n_tok over the packed
+#   rows) and mask the extra iterations to zero weight. If that passes, divergent trip
+#   counts across simd groups is the constraint and the fix is uniform bounds + masking.
+# NOT a diagnosis -- a hypothesis with the arm that would refute it, stated in that order
+# for once. Reverted to c6aebd6a, 12/12 PASS, dirty 0. Prefill unchanged 2.96x.
