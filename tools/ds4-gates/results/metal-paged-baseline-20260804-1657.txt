@@ -1,0 +1,9 @@
+=== METAL PAGED BASELINE (first perf number for the Apple-silicon paged path) ===
+354f006a metal: Q-block paged prefill -- K/V tiles staged once per block, shared by 8 rows; gap 2.91x -> 2.60x
+model: /tmp/qwen3-4b-metal-Q4_K_M.gguf   prompt: 1500 filler words   reps: 3
+
+--- ARM STATIC (tuned Metal FA, no --kv-paged) ---
+
+--- ARM PAGED (scalar paged kernel) ---
+
+--- answers must agree (a slow kernel is still allowed to be wrong) ---
