@@ -347,3 +347,38 @@ valid for effects larger than the positional swing.
 
 **METER (this session, forward run): Metal prefill STATIC 1,483 vs best paged 2,106 = 1.42×.**
 Not parity. LPK narrows it; the gap is not substantially the reduction count.
+
+## ★★ DRIFT REMOVED — the real numbers, and my "corroborated 1.41x" was also wrong
+
+Fix was not averaging over the drift, it was **removing** it: one warm + one measured request per
+**fresh server**, arms **interleaved** (every arm sampled every round) and the round order
+**rotated** so no arm owns the best slot. Tip `02a3b6d9`, 4 rounds.
+
+| arm | mean | spread |
+|---|---|---|
+| STATIC | **1,478** | 1,472-1,484 |
+| STATIC2 (repeat control) | **1,477** | 1,472-1,485 |
+| PAGED-SCALAR bs=32 | 2,013 | 2,009-2,018 |
+| **PAGED-LPK bs=32** | **1,947** | 1,942-1,950 |
+
+**Repeat control: 1,478 vs 1,477 — a 0.07% noise floor.** That is the first real noise floor this
+lane has had. Every arm's spread is non-overlapping.
+
+**Real results:** LPK beats scalar by **-3.3%** (2,013 → 1,947), solid. Parity **1.362x → 1.317x**.
+
+**★ AND THE CORRECTION THAT MATTERS MOST:** I posted that ~1.41x was "corroborated in both
+orders, same ratio to 0.6%". The drift-free value is **1.317x**. Both sequential runs were wrong
+in the same direction, and their agreement was not evidence.
+
+> **Two confounded measurements agreeing does not de-confound them.**
+
+Forward had STATIC in the best slot and LPK in a bad one (inflates the ratio); I then treated the
+reverse run's near-identical ratio as corroboration instead of asking why a reversal did not move
+it. Agreement between two runs sharing a confound is exactly what a confound produces.
+
+**Why the drift existed at all:** the old harness ran **5 back-to-back reps inside one server**,
+so heat accumulated within the burst and the later arm ate it. One measured request per fresh
+server, with the restart as a cooldown, removes it — the arms no longer share a thermal history.
+
+**METER (drift-free, tip 02a3b6d9): Metal prefill 1.317x · decode 1.16x · CUDA 1.21x STALE ·
+12/12 · noise floor 0.07% · NOT SHIPPED.**

@@ -1,0 +1,22 @@
+tip: 02a3b6d9 dirty=0
+round1  STATIC   WALL=1478
+round1  SCALAR   WALL=2009
+round1  LPK      WALL=1947
+round1  STATIC2  WALL=1472
+round2  SCALAR   WALL=2011
+round2  LPK      WALL=1942
+round2  STATIC2  WALL=1475
+round2  STATIC   WALL=1472
+round3  LPK      WALL=1949
+round3  STATIC2  WALL=1485
+round3  STATIC   WALL=1481
+round3  SCALAR   WALL=2018
+round4  STATIC2  WALL=1479
+round4  STATIC   WALL=1484
+round4  SCALAR   WALL=2017
+round4  LPK      WALL=1950
+--- MEANS (interleaved, rotated) ---
+STATIC   1478 ms (n=4)
+SCALAR   2013 ms (n=4)
+LPK      1947 ms (n=4)
+STATIC2  1477 ms (n=4)
