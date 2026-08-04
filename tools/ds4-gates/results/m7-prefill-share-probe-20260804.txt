@@ -1035,3 +1035,45 @@
 #   and "paged serving: scheduler initialized" fired before the quant kernel failed. The
 #   arch check, flag plumbing and scheduler bring-up were already working on Metal; only
 #   matmul quant coverage was missing, which is upstream of attention entirely.
+
+# ============================================================================
+# ★★★ P1-5: THE PAGED DISK KV BANK SPILLS (ds4-ports 89c2a47a)
+# ============================================================================
+# MEASURED (qwen3-4b IQ4_KT, --kv-paged, DS4P_REVALIDATE=1, 4 requests):
+#   state size ...... 0.000 MiB  ->  283.500 MiB
+#   cell_mismatch ... 5 -> 2 (remaining 2 = the generic idle-slot path, harmless)
+#   bank ............ 3 files / 851 MiB, "total spills = 3"
+#   admit ........... "kv-bank: admitted kvbk-...kv (lcp = 2010 of 2010 new tokens)"
+#                     -- the disk entry is FOUND by prefix match; only the restore refuses
+#   restore ......... refuses loudly, falls back to recompute
+#   server .......... SURVIVED ALL 4, every response non-empty
+#
+# SIX CODE CHANGES, FIVE OF WHICH FAILED TO CLOSE IT, each narrowing to a named line.
+# The chain of measured blockers, in order:
+#   1. slot.prompt.tokens EMPTY under paged        -> prompt_save bailed at line 1
+#   2. cache had no per-sequence BLOCK OWNERSHIP   -> nothing to enumerate (64801d1f)
+#   3. state_write was an empty stub               -> nothing serialised (5082ceb1)
+#   4. blocks FREED at finish before the save      -> "0.000 MiB / pos_max+1 = 0"
+#   5. slot->release() runs BEFORE finished_seqs   -> my first hook silently never fired
+#   6. record ran 2 AHEAD of the KV (2014 vs 2012) -> sampled tokens' KV lands on the
+#      NEXT decode. TRIMMED the record to pos_max+1 -- trim, never loosen the P0-2 guard;
+#      a record longer than its KV would restore tokens with no cells behind them.
+# NONE of that was findable by reading. Every step came from instrumenting and being
+# wrong out loud; the ones I "reasoned" (retention policy) were wrong.
+#
+# ⚠ SELF-CORRECTION OF MY OWN PRIOR COMMIT: state_read now THROWS instead of GGML_ABORT.
+# Aborting killed the server the instant a spilled entry was admitted -- and a spilled
+# entry is ALWAYS admitted eventually, so the abort turned a working server into a
+# crashing one. The throw is caught by llama_context::state_seq_set_data (returns 0), the
+# server's prompt_load treats it as a failed restore, prompt_clear() -> recompute.
+# Right principle (never silently wrong), wrong mechanism (fatal).
+#
+# ★ ALSO REFUTED, MY OWN DESIGN CALL FROM 20 MINUTES EARLIER: I had concluded P1-5 needed
+# a scheduler RETENTION POLICY. Reading the finish path properly showed on_finish_cb fires
+# BEFORE free_blocks, so save-at-finish works and retention is not merely unnecessary but
+# WRONG -- holding a finished sequence's blocks fights the entire point of paging, where
+# returning the scarce pool promptly IS the feature.
+#
+# STATUS -- deliberately NOT "shipped": SPILL WORKS, ADMIT DOES NOT. Separate halves, kept
+# separate. Restore needs state_read plus repopulating the live scheduler group's
+# block_table, which the cache cannot do alone.
