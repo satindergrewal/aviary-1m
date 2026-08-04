@@ -2558,3 +2558,35 @@
 #   not lose for want of compile-time bounds; it loses on its own merits at this shape.
 # FINAL STATE: fork c896eee8, dirty 0, 12/12 both paths, scalar+specialisation DEFAULT
 #   1,570 ms, GAP 1.39x. Ladder 6,950 -> 3,334 -> 3,300 -> 2,940 -> 1,570. NOT SHIPPED.
+
+# ======= ⚠⚠ THE PAGED DECODE "GAP" IS NOT A GAP -- IT IS INTERMITTENT STALLING =======
+# fork c896eee8. Decode had never been measured after specialisation, so I measured it.
+# IDENTICAL WORK EVERY REP: n=256 tokens, and the output sha is BIT-IDENTICAL across every
+# rep AND across both paths (596ba7f0) -- so this is purely a timing phenomenon, not a
+# correctness or workload difference.
+#   PAGED  predicted_ms: 2,856 | 3,801 | 5,298 | 6,244 | 10,321 | 12,770   (4.5x spread)
+#   STATIC predicted_ms: 2,377 | 2,416 | 2,438 | 2,448 | 2,454 | 2,528     (6% spread)
+# NOT warm-up and NOT state accumulation: the spread is just as large with a FRESH SERVER PER
+#   REP (8.79 .. 78.58 tok/s) as within one server lifetime (13.23 .. 68.51), and there is no
+#   trend inside a lifetime.
+# NOT the block-pool size: swept -c 2048/8192/16384/32768 and the FLOOR is ~2,100-2,500 ms at
+#   EVERY size, i.e. the same as static, while the ceiling stays erratic at every size.
+#   At ctx=2048 the best paged run (2,115 ms) is FASTER than static's best (2,377 ms).
+# ⇒ THE PAGED DECODE KERNEL IS NOT SLOW. Its floor matches or beats static. What it has is
+#   intermittent multi-second stalls on identical work.
+# ⇒ ⚠ RETRACTION: the recorded "decode 63.6 tok/s, 1.60x gap" is ONE SAMPLE from a 4.5x
+#   distribution. It was never a measurement of the kernel, and no decode conclusion that
+#   rests on it survives. Any future decode number MUST report the distribution, not a point.
+# ⇒ LEADING HYPOTHESIS, code-anchored, NOT yet tested: ggml-metal-device.m:584-640 runs a
+#   BACKGROUND DAEMON that calls requestResidency on every residency set every 5 ms, for
+#   keep_alive_s (default 180 s) worth of loops after activity, plus an explicit Apple
+#   workaround (ggml_metal_dummy_work) for "residency set memory not being released if no GPU
+#   operation occurs" (Apple forums 839089, llama.cpp #25937). If the paged block pool or the
+#   per-decode paged tensors are not kept wired -- or churn the set -- decode would page-fault
+#   intermittently, which is exactly this shape. The same subsystem already produced the
+#   GGML_ASSERT([rsets->data count] == 0) abort seen earlier today.
+# ⇒ NEXT ARM: determine whether the paged KV pool and the per-decode paged tensors
+#   (block_table, ctx_lens, batch_offsets, batch_lens) are allocated ONCE or per decode, and
+#   whether they enter the residency set. Per-decode allocation would explain both the stalls
+#   and the abort. This is worth more than any kernel tuning: the floor is already at parity,
+#   so removing the stalls IS the decode win.
