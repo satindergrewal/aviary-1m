@@ -63,7 +63,14 @@ run_arm() {  # $1 label  $2 server args  $3 env prefix
     local marker
     marker=$(grep -m1 "DS4P-MMA" "/tmp/mma-$1.log" 2>/dev/null || true)
     if [ -n "$marker" ]; then echo "              marker: ${marker#*: }" | tee -a "$OUT"
+    elif [ "$1" = "STATIC" ]; then echo "              marker: n/a (static never runs the paged op)" | tee -a "$OUT"
     else echo "              marker: *** ABSENT -- PATH UNPROVEN, ARM INVALID ***" | tee -a "$OUT"; fi
+
+    # ANSWER COMPARE -- restored from the old baseline. 12/12 covers the kernel, but this is
+    # the product-level check that a fast kernel is still RIGHT: a slow kernel is allowed to
+    # be wrong and so is a fast one. Text is captured per arm and diffed at the end.
+    printf '%s' "$resp" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("content","")[:72])' \
+        > "/tmp/mma-answer-$1.txt" 2>/dev/null || true
     pkill -f "$B" >/dev/null 2>&1
     sleep 2
 }
@@ -71,4 +78,15 @@ run_arm() {  # $1 label  $2 server args  $3 env prefix
 run_arm STATIC       ""            ""
 run_arm PAGED-MMA    "--kv-paged"  ""
 run_arm PAGED-SCALAR "--kv-paged"  "DS4P_METAL_NO_MMA=1"
+
+echo "--- answers must agree (a fast kernel is still allowed to be wrong) ---" | tee -a "$OUT"
+for a in STATIC PAGED-MMA PAGED-SCALAR; do
+    printf '  %-13s %s\n' "$a" "$(cat "/tmp/mma-answer-$a.txt" 2>/dev/null)" | tee -a "$OUT"
+done
+if cmp -s /tmp/mma-answer-STATIC.txt /tmp/mma-answer-PAGED-MMA.txt \
+   && cmp -s /tmp/mma-answer-STATIC.txt /tmp/mma-answer-PAGED-SCALAR.txt; then
+    echo "  -> IDENTICAL" | tee -a "$OUT"
+else
+    echo "  -> *** DIVERGED -- the wall number is meaningless until this is explained ***" | tee -a "$OUT"
+fi
 echo "=== done -> $OUT ==="
