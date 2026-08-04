@@ -1,0 +1,25 @@
+binary: $HOME/Documents/GitHub/llama.cpp-ds4ports/build-metal/bin/llama-server  mtime=2026-08-04 18:47:43
+tip:    b1af671c  dirty=2
+STATIC        rep1  WALL=1484    prompt_ms=1143.6   
+STATIC        rep2  WALL=1472    prompt_ms=1128.9   
+STATIC        rep3  WALL=1474    prompt_ms=1131.0   
+STATIC        rep4  WALL=1477    prompt_ms=1131.0   
+STATIC        rep5  WALL=1479    prompt_ms=1131.5   
+              marker: n/a (static never runs the paged op)
+PAGED-MMA     rep1  WALL=3065    prompt_ms=2531.4   
+PAGED-MMA     rep2  WALL=2641    prompt_ms=2092.4   
+PAGED-MMA     rep3  WALL=2636    prompt_ms=2103.5   
+PAGED-MMA     rep4  WALL=2733    prompt_ms=2125.7   
+PAGED-MMA     rep5  WALL=3775    prompt_ms=2862.9   
+              marker: DS4P-MMA ACTIVE  D=128 bs=16 nsg=2 QR=16 smem=21632/32768
+PAGED-SCALAR  rep1  WALL=6601    prompt_ms=5062.7   
+PAGED-SCALAR  rep2  WALL=11667   prompt_ms=4076.4   
+PAGED-SCALAR  rep3  WALL=9028    prompt_ms=3161.9   
+PAGED-SCALAR  rep4  WALL=7276    prompt_ms=4042.5   
+PAGED-SCALAR  rep5  WALL=6673    prompt_ms=4064.0   
+              marker: DS4P-MMA OFF (scalar path) D=128 bs=16 n_tokens=512
+--- answers must agree (a fast kernel is still allowed to be wrong) ---
+  STATIC         alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha
+  PAGED-MMA      alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha
+  PAGED-SCALAR   alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha
+  -> IDENTICAL
