@@ -1961,3 +1961,33 @@
 #   is the constraint and the fix is to source K from device (which also removes a staging
 #   step). Read Apple's element-mapping spec alongside -- not from memory.
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Cause OPEN, suspects down to two.
+
+# ============================================================================
+# ★★★ ARM (g): LOAD ISOLATED (no multiply at all) -- THE LOAD IS THE BUG, MAP EXACT
+# ============================================================================
+# src[i][d] = i*10 + d. simdgroup_load(f, src, D) then simdgroup_store(f, osh, 8) -- a pure
+# round trip, multiply removed entirely from the picture. A correct load must reproduce the
+# top-left 8x8. Measured:
+#      0  1  2  3  4  5  6  7      <- src row 0, EXACT
+#      0  0  0  0  0  0  0  0      <- ZERO
+#     20 21 22 23 24 25 26 27      <- src row 2, EXACT
+#      0  0  0  0  0  0  0  0
+#     40 41 42 43 44 45 46 47      <- src row 4
+#      0 ...
+#     60 61 62 63 64 65 66 67      <- src row 6
+#      0 ...
+# ⇒ **THE LOAD PUTS SOURCE ROW 2r INTO FRAGMENT ROW 2r AND LEAVES ODD FRAGMENT ROWS EMPTY.**
+#   Within a populated row every element is exact (0..7, 20..27) -- the COLUMN axis is
+#   perfect. Only the ROW axis is 2x-subsampled, and it happens in the LOAD, with no
+#   multiply and no transpose involved.
+#   (The earlier even-EVEN lattice = this row effect on BOTH operands: A contributes even i,
+#    B contributes even j, so the product survives only at even-even. One cause, both axes.)
+# ⇒ ROW-STRIDE CONTRACT: 8 fragment rows consumed 16 source rows' worth of address space at
+#   stride D ⇒ the load is advancing 2*D per fragment row. Test next: pass **D/2** as
+#   elements_per_row, or equivalently stage with a row pitch of D/2 -- ONE factor, and the
+#   round-trip harness above verifies it in isolation before any attention math returns.
+# ⚠ Also learned from a compile error en route: simdgroup_store REQUIRES matching element
+#   types (half fragment -> threadgroup half*, not float*), and its signature is
+#   `simdgroup_matrix<T, Cols, Rows>` with `elements_per_row = Cols` -- worth reading the
+#   header rather than assuming, which is what finally isolated this.
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. LOAD named; contract fix is next.
