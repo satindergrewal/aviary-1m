@@ -51,10 +51,13 @@ addresses so the new slot is usable immediately).
 
 ---
 
-## 2. ⛔ THOUGHT EXPERIMENT 1 — does their problem even exist in llama.cpp? **Largely NO.**
+## 2. THOUGHT EXPERIMENT 1 — does their problem exist in llama.cpp?
+### **Answer: YES on the static path, NO on the paged path — which we already ship.**
 
 This is the assumption that decides whether the whole paper is worth implementing, so it gets
-checked first rather than last.
+checked first rather than last. Below is the argument I made *before* measuring, kept verbatim
+because it was **half wrong** and the way it was wrong is instructive — followed by the
+measurement that corrected it.
 
 **Verified in our tree** — `src/llama-context.cpp:698`, `llama_context::sched_reserve()`:
 
@@ -66,15 +69,16 @@ const uint32_t n_tokens = std::min(cparams.n_ctx, cparams.n_ubatch);
 `-ub 512` that is **512 tokens regardless of whether `-c` is 8K or 1M**. vLLM reserves activation
 space sized to the *maximum context*; that difference is the entire fragmentation eLLM attacks.
 
-**Consequence, and it is decisive:**
+**Consequence I claimed at the time — SUPERSEDED, read §2's measurement before using any of it:**
 
 - Their borrowable pool is **30.8% of GPU memory** at 200K context. Ours is the compute buffer at
   ub=512 — hundreds of MB against a KV pool of tens of GB at long context, i.e. **order 1%**.
 - Inflation/deflation between activation and KV would therefore recover **~1% of memory, not
   ~30%**. The headline **20% throughput / 2.32×** rests on the large number.
 
-⇒ **eLLM's central mechanism does not transfer.** We do not have the disease it cures. Adopting
-the eTensor + inflation/deflation architecture would be ~4000 lines to chase a percent.
+⇒ *(Claimed then:)* eLLM's central mechanism does not transfer; we do not have the disease it
+cures. **The conclusion survives but the reasoning did not** — we DO have the disease, on the
+static path, and the paged path is the cure we already built. See immediately below.
 
 ### ✅ MEASURED — and my reasoning above was half wrong, in an interesting direction
 
