@@ -760,3 +760,45 @@ of the parallelism knob**, which is precisely the lever every one of our six eli
 find. **Transcribe.**
 
 **METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
+
+## M4b: paged champion DISPATCHES, output WRONG — causality is the real remaining work
+
+fork `71bbe442`. Host wiring complete and verified; the kernel runs and produces uncorrelated
+output (**12/12 FAIL, nmse ~0.998**).
+
+**Working:** pipeline factory specialised per (head_dim, nsg, **stride_token** — `ns10`/`ns20` are
+FCs that bake the row pitch, so the pipeline name must carry it); args mapping (`ne03=1` pins
+`ikv3=0` so `nb13`/`nb23` carry the **block stride**; `ne_12_2` carries `n_heads_kv` **and** the V
+head offset); dispatch geometry; smem 10,240 B asserted < 32 KiB; **refusal path prints
+`CHAMP-PAGED REFUSED (bs!=64)`** instead of falling back silently; **static + LPK unaffected,
+12/12 still PASS with CHAMP off.**
+
+**Root cause, diagnosed:** `has_mask=false` was pinned, but **the champion derives ALL causality
+from the mask buffer.** The paged op derives it per-row from `q_pos`, plus a banded visibility
+window and an optional rel bias. `nmse ~= 1` is exactly what "no causal mask" looks like.
+
+**⇒ The "only four addressing lines change" property of this port ENDS HERE.** Causality is not
+an addressing concern.
+
+### Decision: synthesise the mask on the HOST, do not hand-roll causal indexing into the kernel
+
+Two ways to fix it. Choosing the second, on risk grounds:
+
+1. **Per-row `q_pos` bound inside the ported loop** — avoids materialising a mask, and is closer
+   to what paging already means. **But** the score stage packs through `half2`/`SH`/`NL` with
+   `simd_max` reductions over that packing, so causal indexing must be derived *inside* that
+   layout. Getting it subtly wrong yields a kernel that runs, looks plausible, and is quietly
+   incorrect — the single worst failure mode in this lane, and I would be hand-rolling it into a
+   body I ported hours ago.
+2. **★ CHOSEN — host-synthesised mask buffer**, `has_mask=true`. Causality then runs through the
+   **champion's own tested masking code**, unchanged. Cost: an n_tokens x n_kv half mask
+   (~1.5 MB at 512x1536) built per ubatch.
+
+**Correctness through the kernel's own proven path first; removing the mask is an optimisation
+that can be measured later against a working baseline.** Reversing that order optimises something
+not yet known to be right.
+
+Next concrete step: host-side mask scratch + fill (causal, banded window, rel bias), flip
+`has_mask`, then 12/12. **No wall until 12/12 passes.**
+
+**METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · NOT SHIPPED.**
