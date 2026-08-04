@@ -1176,3 +1176,22 @@
 # was 25,452 separate 64 KiB device copies; state_read went 1.7 -> 7.6 GB/s. Necessary,
 # nowhere near sufficient -- which is how the economics were shown to be structural rather
 # than an implementation defect.
+
+# --- P1-5 ECONOMICS GATE: OPEN DEFECT, stated rather than papered over (tip 693f6cae) ---
+# The gate IS armed and IS deciding; it decides on a number that is too small.
+#   gate: restore_rate = 0.000 MiB/ms, prefill_rate = 0.1251 ms/tok  (NOT ARMED)   <- bootstrap
+#   gate: restore ~210 ms vs prefill ~253 ms for 2024 tokens -> admit
+#   wall clock for that same restore: ~482 ms.  ~270 ms is real and OUTSIDE the timed span
+#   (probe read -> state_seq_set_data -> entry free).  UNLOCATED.
+# ⇒ the gate is MISINFORMED, not permissive. NOT claimed as a safety net until that closes.
+# ⚠ RETRACTED, mine, one commit old: I blamed async CUDA H2D copies, committed a sync with
+#   that as the CAUSE (453310325), then measured restore_rate 1.713 -> 1.691 MiB/ms =
+#   UNCHANGED. Refuted by my own next run (693f6cae). The sync STAYS -- it removes a real
+#   unstated assumption (residency before first decode held only because copies shared a
+#   stream) -- but not for the reason I gave. Also retracts "state_read 1.7 -> 7.6 GB/s"
+#   from daa2ed5c: read off log timestamps, not defensible as a transfer rate.
+# ⚠ ALSO WITHDRAWN: the one witnessed DECLINE (~711 vs ~526 ms) fired on 90eb371f, whose
+#   restore-rate measurement I then REPLACED. There is NO decline witnessed on tip.
+# ★ INSTRUMENT THAT FOUND ALL OF IT: log what the gate BELIEVES on every probe, armed or
+#   not. A gate that never armed and a gate that chose to admit are INDISTINGUISHABLE in a
+#   log that only prints refusals.
