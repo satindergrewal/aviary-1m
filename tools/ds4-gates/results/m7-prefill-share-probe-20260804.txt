@@ -2456,3 +2456,32 @@
 #   Direct-Q was considered to free sq and REJECTED: the tail threadgroup would read q out of
 #   bounds, and every fix for that either reintroduces the staging buffer or breaks row
 #   ownership. Recorded so it is not re-derived.
+
+# --- ⇒ THE REMAINING GAP IS SUBSTANTIALLY A COMPILE-TIME SPECIALISATION GAP ---
+# I was about to write the O-in-fragments rewrite to reach nsg=8. Checked one thing first and
+# it killed the design before the build:
+#   The champion instantiates 213 SPECIALISATIONS with head_dim as a TEMPLATE PARAMETER:
+#     kernel_flash_attn_ext<FA_TYPES_F32, float4x4, 1, dequantize_f32, ..., 64, 64>
+#     ... dk32/dk40/dk48/dk64/dk72/dk80/dk96/dk128/dk192/dk256 x types x variants.
+#   kernel_paged_attn_f32 is ONE GENERIC kernel with runtime args.head_dim.
+# ⇒ WHY THAT BLOCKS THE REWRITE: keeping O in fragments needs `lo[D/8]` indexed by a loop
+#   variable. With D runtime, that is DYNAMIC INDEXING INTO A REGISTER ARRAY, which Metal
+#   must place in thread-private (device-backed) memory -- catastrophically slower than the
+#   threadgroup buffer it was meant to replace. The champion escapes this only because DK/DV
+#   are compile-time, so FOR_UNROLL fully unrolls and the accumulators STAY IN REGISTERS.
+# ⇒ SO: nsg=8 is not reachable by cutting buffers. It is reachable by SPECIALISING THE KERNEL
+#   PER HEAD_DIM (function constants or template instantiation + one pipeline per D), which
+#   simultaneously buys full unrolling and register-resident accumulators.
+# ⇒ AND IT REFRAMES THE REMAINING 1.79x: a meaningful part of it is not tiling at all, it is
+#   that the static path runs a kernel compiled for exactly this head_dim while the paged
+#   path runs one generic kernel for all of them. That is a KNOWN, BOUNDED piece of work with
+#   a proven reference implementation, not a mystery.
+# COST OF LEARNING THIS: one grep. The build, the 12/12 and the wall were never spent, and
+#   the design would have LOST for a reason no wall would have explained -- it would have
+#   shown "fragments are slower" and I would have blamed fragments.
+# ⇒ NEXT (specified, not started): specialise kernel_paged_attn_f32 per head_dim.
+#   1. head_dim (and ideally block_size) become function constants / template params.
+#   2. One pipeline per supported D, selected by ggml_metal_library_get_pipeline_paged_attn.
+#   3. THEN O-in-fragments becomes legal, which frees QR*D floats, which is what makes nsg=8
+#      fit -- and nsg is the largest measured lever (-29.7% per doubling at matched footprint).
+#   Order matters: specialise FIRST, fragments SECOND. Doing them in the other order fails.
