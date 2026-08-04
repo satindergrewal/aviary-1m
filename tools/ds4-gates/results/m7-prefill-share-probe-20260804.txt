@@ -962,3 +962,43 @@
 #   record it could not verify, LOUDLY, instead of silently caching something wrong. Had
 #   I shipped the mirror on a green build without arming it, I would have reported "P1-5
 #   fixed" on a path that still cannot spill a single byte.
+
+# ============================================================================
+# ★★★ METAL SCALAR PAGED ATTENTION SHIPPED (ds4-ports 27fe4943)
+#     --kv-paged runs on Apple silicon for the first time
+# ============================================================================
+# GATE: tests/test-paged-vs-cpu on MTL0 (M3 Max) vs the CPU implementation of the SAME
+# op -- 12 cases (D=64/96/128/192 x 3): ALL PASSED at ~1 ULP (4.47e-08), on two
+# consecutive runs. This is exactly why the harness was built FIRST: the old test's
+# reference (FLASH_ATTN_EXT_BANDED) is CUDA-only, so it could never have gated a Metal
+# port at all.
+#
+# Five pieces: MSL write + attend kernels, kargs struct, two pipeline getters, encoder +
+# GGML_OP_PAGED_ATTN dispatch, supports_op gate. Visibility window ported as a LOOP BOUND
+# rather than a mask -- carried across deliberately from the CUDA near-miss earlier today.
+#
+# ⚠ FOUR FAILURES ON THE WAY, EVERY ONE CAUGHT BY A GATE, NOT BY READING THE CODE:
+#  1. MSL requires all built-in position inputs to be all-scalar or all-vector of the
+#     SAME width. Mixing uint3 with uint failed the ENTIRE Metal library:
+#     "failed to create library" -> the backend does not come up AT ALL.
+#     ★ A bad shader DELETES Metal for every op in the process. That blast radius is much
+#       sharper than CUDA (where a bad kernel is contained to itself) and is the argument
+#       for gating Metal work from commit one rather than once it looks right.
+#  2. supports_op lives in ggml-metal-device.m, NOT the .cpp I patched. The op compiled,
+#     linked, and aborted at runtime with "unsupported op". My verification had PRINTED
+#     SUCCESS because it grepped a string that also appears in an assert() inside the
+#     pipeline getter. ★ Checking the wrong string is not checking -- second instance today.
+#  3. I ported only the ATTEND phase and omitted the WRITE phase. Cache stayed zeroed and
+#     all 12 cases returned nmse EXACTLY 1.000 -- the signature of an all-zero output
+#     (d = 0 - ref, so sum(d^2)/sum(ref^2) = 1). Worth recognising on sight.
+#  4. The final failure was a RACE, not arithmetic: ONE narrow case (D=64 case C at
+#     7.06e-03) failed while the other eleven sat at 1 ULP. Consecutive dispatches in a
+#     single Metal encoder may run CONCURRENTLY, so attend could read the cache before
+#     write finished. ggml_metal_encoder_memory_barrier between the passes fixed it.
+#     ★ A single odd failure among identically shaped cases is a CONCURRENCY smell, not a
+#       precision smell. That pattern is what pointed at the barrier.
+#
+# STATUS OF THE TWO ORDERED DEBTS -- both are now CODE, not sizing:
+#   P1-5  aae5498b : mirror shipped, prompt_n 0 -> 2010/3508, real blocker located at the
+#                    CACHE layer (state_write/state_read are empty stubs).
+#   Metal 27fe4943 : working and gated on hardware.
