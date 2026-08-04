@@ -2143,3 +2143,31 @@
 #   time COMMIT it -- a probe that cannot be re-run is a probe that must be rebuilt.
 # ALSO from the champion, not yet in my kernel: simdgroup_barrier(mem_flags::mem_none)
 #   wrapped BEFORE and AFTER every load group. Separate item, do not fold into the arm.
+
+# --- CONFIRMED BY MEASUREMENT: the 4-of-8 was a doubled LOAD pitch. GATE PASS 6/6 ---
+# tools/ds4-gates/sgload_probe/ (standalone Metal, runtime-compiled, no llama.cpp rebuild,
+# COMMITTED this time -- the previous harness was uncommitted and died with its revert).
+#   control  pitch==row stride : rows {0,1,2,3,4,5,6,7}  ROWS-0..7-EXACT
+#   the bug  pitch==2x stride  : rows {0,2,4,6,8,10,12,14} WRONG-ROWS
+#   store pitch 2x, load ok    : rows {0..7} EXACT  <-- load/store pitches INDEPENDENT
+#   head_dim=64 correct        : EXACT ; head_dim=64 with 2*D : WRONG-ROWS
+#   both pitches differ (64/32): EXACT
+# ⇒ HYPOTHESIS 93e8afb CONFIRMED. frag row f <- source row f*(LOAD_PITCH/stride). With
+#   LOAD_PITCH = 2*D that is source row 2f: inside an 8-row tile only rows 0,2,4,6 exist
+#   and the other four reads (8,10,12,14) fall PAST the tile into the next tile's bytes.
+#   "Four of eight rows, rest garbage" -- exactly the 15-arm symptom, reproduced on demand.
+# ⇒ AND THE TRADEOFF NEVER EXISTED. I had believed contiguous output REQUIRED pitch 2*D,
+#   so fixing input selection would break output placement. Arm 3 and arm 6 show load and
+#   store pitches are independent: correct input AND contiguous output simultaneously.
+#   Fifteen arms were spent inside a constraint I invented.
+# ⇒ TWO SELF-CAUGHT DEFECTS IN THE PROBE ITSELF, both fixed before the artifact was banked:
+#   (a) the verdict counted DISTINCT rows, so the failing arm printed "ALL-8" (it reaches
+#       eight distinct rows, half of them outside the tile). Gate is now "rows 0..7 EXACTLY".
+#   (b) `./probe ... | tail -2; $?` reported the PIPE's status -- rc=0 on a FAILING arm.
+#       Same family as the banked `grep -c` incident. run_gate.sh takes rc from the probe.
+#   Had either survived, this gate would have printed PASS for a broken contract.
+# NEXT (not done, not claimed): the paged kernel has NO MMA path at the tip -- it is scalar
+#   + Q-block staging (2,940 ms). Writing that path is the remaining work, and it now has a
+#   measured contract to build on: Q loads with pitch n_heads*D (NOT D -- q is interleaved
+#   by head), K from the staged tile with pitch D and transpose=true, store with its own
+#   stride. Wall stays 2,945 and the gap stays 2.60x until that lands and gates 12/12.
