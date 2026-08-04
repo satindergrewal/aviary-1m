@@ -2286,3 +2286,33 @@
 #     score tile (it is float and 2x QR*SH) would buy back a simd group.
 #   - simdgroup_barrier(mem_none) placement around load groups is copied from the champion but
 #     has never been swept here; some may be removable.
+
+# --- MY OWN NEXT-LEVER PREDICTION, REFUTED BY MEASUREMENT (fork 59887054) ---
+# I filed "staging TWO blocks per iteration is the single most likely remaining win" -- at
+# bs=16 the softmax stage spreads 16 columns over 32 lanes (half idle) and takes a barrier
+# every 16 keys, so a wider tile should fill the lanes and halve the barriers. Swept as
+# paired arms in ONE binary, fresh server per point, best of 5, marker verified per point:
+#   sb=1 KT=16 nsg=2 QR=16 -> 2,298 ms
+#   sb=2 KT=32 nsg=2 QR=16 -> 2,561 ms  (+11%)
+#   sb=3 KT=48 nsg=1 QR=8  -> 4,228 ms  (+84%)
+#   sb=4                   -> did not fit at D=128; marker correctly showed the SCALAR
+#                             fallback at 2,952, matching the known scalar 2,944
+# MONOTONICALLY WORSE. Likely cause: a wider tile computes more MASKED columns -- the Q@K^T
+# MMA evaluates the full KT width regardless of how much the causal mask discards, so
+# widening buys arithmetic that is thrown away. It also spends the smem a second simd group
+# needs, which is why sb=3 collapses (nsg 2 -> 1).
+# ⇒ The reasoning was sound and the answer was wrong. Cost: one build + one sweep, because
+#   the knob was built to sweep in ONE binary instead of one rebuild per point.
+# ⇒ The sb=4 point is also a live proof that the FALLBACK works and the marker reports it:
+#   an over-large tile silently becomes the scalar path, and the marker says so.
+#
+# KEPT: the in-place score/P merge (fork 4f65a534) -- perf-neutral (2,092 vs 2,099, noise),
+#   and it buys D=192 an nsg=2/QR=16 tile it could not previously afford:
+#   D=64 18,688 | D=96 26,880 | D=128 21,632 | D=192 31,872 bytes.
+# STATE: gap 1.86x, prefill 2,099 (best clean measurement). NOT SHIPPED.
+# REMAINING LEVERS, re-ranked by what the sb sweep taught:
+#   1. MASK-AWARE TILING -- skip the Q@K^T MMA entirely for key tiles wholly past q_pos.
+#      The sb result says wasted masked arithmetic is the dominant cost, so cutting it is
+#      now the FIRST lever, not tile widening.
+#   2. simdgroup_barrier(mem_none) placement sweep (copied from the champion, never measured).
+#   3. Occupancy: D=192 at 31,872/32,768 leaves no room for a second resident threadgroup.
