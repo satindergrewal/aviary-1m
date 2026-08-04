@@ -859,3 +859,29 @@ worth doing before writing 640 lines — it is what turned "is this even possibl
 satisfiable contract last time.
 
 **METER: prefill 1.192x · decode 1.171x (untouched) · CUDA 1.21x STALE · NOT SHIPPED.**
+
+### Decode champ port — contract MAPPED from source (mirrors prefill exactly)
+
+`kernel_flash_attn_ext_vec` (`:7947`-`:8515`) is **not** a dispatcher — the body is inline, unlike
+the MMA one which delegates to `_impl`. Port target is the kernel itself.
+
+**Addressing sites, same shape as prefill:**
+```cpp
+pk4 = (device const k4_t *) (k + ic*args.nb11);   ->  k + ptab[ic0]*args.nb13
+pv4 = (device const v4_t *) (v + ic*args.nb21);   ->  v + ptab[ic0]*args.nb23
+loop bound  ic >= args.ne11                       ->  ic >= plen[0]
+```
+`ic0` is again the **block index** because `C == bs`. Identical contract to the prefill port, so
+the same `ne03=1` / `nb13`-as-block-stride / `ne_12_2`-carries-V-head-offset rules apply
+unchanged.
+
+**⚠ ONE STRUCTURAL DIFFERENCE from prefill, and it is real work:** the vec path splits the KV
+range across **NWG workgroups** (`ic0 = iwg*NSG + sgitg; ic0 += NWG*NSG`) and combines partials
+with a **separate `kernel_flash_attn_ext_vec_reduce` dispatch**. So decode is a **two-kernel**
+scheme: the port needs both dispatches wired, not one. That does not change the addressing
+contract but it doubles the host wiring.
+
+**Status: contract mapped, not built.** Prefill went from "is this possible" to 12/12 in one
+session once the contract was named; this is the same starting point.
+
+**METER: prefill 1.192x · decode 1.171x · CUDA 1.21x STALE · NOT SHIPPED.**
