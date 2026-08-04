@@ -450,3 +450,41 @@ to amortise and the answer could invert.
 
 **METER: Metal prefill 1.354× (1,501 → 2,033) · decode 1.171× · CUDA 1.21× STALE · 12/12 ·
 floor 0.07% · NOT SHIPPED.**
+
+## ★★ BLOCK-TABLE PROBE: CONTIGUOUS — gather/indirection eliminated BY CONSTRUCTION
+
+`DS4P_DUMP_BT=1`, the benchmark request (1,500-token prefill, `-np 1`, bs=32):
+```
+DS4P-BT CONTIGUOUS  max_blocks=47  first16: 721 722 723 724 725 726 ... 736
+```
+Offset, but **perfectly sequential**. The pool hands out blocks in order for a single sequence.
+
+**Consequence, and it is large:** paged has been doing **near-identical memory access to static**
+in every wall this lane has ever run. So:
+- **`block_table` gather/indirection was never being tested** and cannot be the 535 ms. Eliminated
+  *by construction* — no timing arm needed, which is the cheapest elimination available.
+- The "scattered paged access is slow" intuition is **not applicable to any number on this board.**
+  It would become live only under fragmentation (multi-seq, eviction, long-running reuse), and
+  **that is the condition** ([[refuted-needs-its-condition]]) — the negative holds for `-np 1` on
+  a fresh pool, not in general.
+
+**Suspect list is now ONE.** Tile width (3 ways), reduction count (~3%), staging traffic (+1.2%
+wrong way), gather/indirection (contiguous by construction) — all eliminated with conditions.
+
+### What remains: our kernel vs THEIR kernel
+
+STATIC runs `kernel_flash_attn_ext` — **213 template specialisations, full MMA, years of upstream
+tuning.** Paged runs our hand-written scalar walk. Our own MMA attempt came in **slower** than our
+scalar. With paging itself now shown to be free in this configuration, **the 1.317x IS the
+implementation gap** and there is no paging-specific defect left to find.
+
+**⇒ The honest path to ≤1.0x is a paged variant OF THE CHAMPION KERNEL**, not further point fixes
+to ours. That is a large piece of work — the champion's specialisation machinery is the thing that
+made it fast, and matching it means adopting that machinery, not out-tuning it by hand.
+
+**This is a decision for the owner, not a task to start on my own authority:** big-kernel port vs
+the capability queue (attention-only pool filter, hybrid decode gate, other hybrids, SWA pool,
+capability-based fallback). Recorded here; not begun.
+
+**METER: Metal prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · floor 0.07% ·
+NOT SHIPPED.**
