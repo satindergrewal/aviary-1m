@@ -720,3 +720,43 @@ stand** — eligibility used `args.bs_fc` correctly; only the log line was corru
 corrupted presence marker is a gate failure in its own right ([[gate-plumbing-lies]], 6th).
 
 **METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
+
+## ★★ CHAMPION SMEM AT THE PORT CONFIG — GREEN, and it explains the whole parity gap
+
+Grok's pre-transcription discriminator, computed from the champion's OWN host formula
+(`ggml-metal-ops.cpp:2873`), not from our layout:
+```
+FATTN_SMEM(nsg) = PAD((nqptg*(ne00 + 2*PAD(ne20,64) + 2*(2*ncpsg)) + is_q*(16*32*nsg)) * 2, 16)
+nqptg = 8 (NQPSG)   ncpsg = 64 (NCPSG)   ne00 = ne20 = 128   is_q = 0 (our KV is f16)
+```
+| config | smem | fits 32 KiB |
+|---|---|---|
+| **champion, C=64, any nsg (f16 KV)** | **10,240** | ✅ 22 KiB spare |
+| champion, C=64, quantised KV nsg=8 | 18,432 | ✅ |
+| our LPK, bs=32, nsg=8 | 21,632 | |
+| our MMA, bs=32, nsg=4 | 28,928 | |
+
+**PORT IS VIABLE. bs=64 fits the champion layout with 22 KiB to spare.** The constraint that
+looked threatening is not binding on the kernel that actually has to satisfy it.
+
+### ★ And this is the answer to the parity question, not just a gate
+
+**For f16 KV the champion's smem does not scale with nsg at all** — the `nsg` term is multiplied
+by `is_q`. Ours scales with QR = 8·nsg in *every* layout: LPK through the padded K tile, MMA
+through the O accumulator. That is the whole story in one line:
+
+```
+champion   10,240 B   FLAT in nsg     -> occupancy limited by nothing we control
+our MMA    28,928 B   grows with nsg  -> capped at nsg=4, measured
+our LPK    21,632 B   grows with nsg  -> nsg=8, cannot reach bs=64 (38,144)
+```
+**We have been fighting an occupancy ceiling the champion does not have.** M2 priced occupancy at
+-14.8% by doubling nsg on a layout that fights it; the champion simply never pays. It also uses a
+different decomposition — **8 query rows per threadgroup**, many threadgroups — where we use
+8·nsg rows in few threadgroups.
+
+⇒ The port is not "copy a faster kernel". **It is adopting a layout whose footprint is independent
+of the parallelism knob**, which is precisely the lever every one of our six eliminations failed to
+find. **Transcribe.**
+
+**METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
