@@ -1375,3 +1375,20 @@
 #   disconfirming experiment and three times it was wrong. The next attempt starts with the
 #   one-factor arms (q_parallel on with nsg=1, so the mapping is identity), not a theory.
 # STATE: prefill 3,372 ms vs static 1,140 = 2.96x, UNCHANGED. Nothing shipped this rung.
+
+# --- RUNG 3 ATTEMPT 2: BISECTED BY ARMS. The q-parallel MECHANISM is sound. ---
+#   q_parallel=1, prefill nsg=1 (IDENTITY row mapping) .... 12/12 PASS
+#   q_parallel=1, prefill nsg=2 ........................... 12/12 FAIL
+#   q_parallel=1, prefill nsg=4 ........................... 12/12 FAIL
+#   q_parallel=1, prefill nsg=8 ........................... 12/12 FAIL
+# ⇒ the FLAG, the kargs plumbing, the whole-range key walk and the direct per-row dst write
+#   are ALL CORRECT -- nsg=1 exercises every one of them. The defect is ROW PACKING alone:
+#   gtok = tgpig[0]*nsg + sg. Nothing else changes between the passing and failing arms.
+# ★ FOUND BY ARMS, NOT BY A STORY. Yesterday's version of me would have posted a cause here;
+#   today the four one-factor arms cost three builds and localised it without one. Same
+#   method that exonerated the decode combine and then caught that the exoneration was
+#   overstated. The method is now the deliverable, not the diagnosis.
+# STILL NOT DIAGNOSED and deliberately unnamed. Next session starts INSIDE the packing:
+#   per-simd-group seq/i_local/q_pos/lo all derive from gtok and must be re-derived per
+#   group, which is the one place two rows in a threadgroup can disagree.
+# REVERTED to c6aebd6a, 12/12 PASS, tree clean. Prefill unchanged at 3,372 ms = 2.96x.
