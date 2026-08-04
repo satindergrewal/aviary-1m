@@ -1,0 +1,22 @@
+tip: e1ce9565 dirty=0
+round1  STATIC   WALL=1476
+round1  LPK      WALL=2021
+round1  LPK_BS64 WALL=2313
+round1  STATIC2  WALL=1476
+round2  LPK      WALL=2024
+round2  LPK_BS64 WALL=2313
+round2  STATIC2  WALL=1481
+round2  STATIC   WALL=1485
+round3  LPK_BS64 WALL=2318
+round3  STATIC2  WALL=1481
+round3  STATIC   WALL=1487
+round3  LPK      WALL=2040
+round4  STATIC2  WALL=1514
+round4  STATIC   WALL=1520
+round4  LPK      WALL=2033
+round4  LPK_BS64 WALL=2313
+--- MEANS (interleaved, rotated) ---
+STATIC   1492 ms (n=4)
+LPK      2029 ms (n=4)
+LPK_BS64 2314 ms (n=4)
+STATIC2  1488 ms (n=4)

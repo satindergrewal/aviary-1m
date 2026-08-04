@@ -681,3 +681,42 @@ work is a new pipeline + paged args wiring + the `:7326` substitution, then 12/1
 is transcription against named anchors rather than rediscovery.
 
 **METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
+
+## bs=64 precondition test — INVALID, and the marker caught it (third time tonight)
+
+Ran the port's precondition (bs=64) expecting a verdict. Got one that does not exist:
+
+| arm | mean | |
+|---|---|---|
+| STATIC | 1,492 | |
+| STATIC2 (repeat control) | 1,488 | floor 0.27% |
+| LPK bs=32 | 2,029 | |
+| "LPK" bs=64 | 2,314 | **+14% — NOT a bs=64 verdict** |
+
+**Marker: `lpk=off(smem)`. LPK never ran at bs=64.** The arm measured *scalar at bs=64* against
+*LPK at bs=32* — two variables, so it says nothing about block size. Without the marker this was
+a clean-looking "bs=64 costs 14%" that would have killed the port on a false result.
+
+**Arithmetic confirms the fallback:** `smem_lpk(bs=64, D=128, nsg=8) = 64*(130+128)*2 + 5,120 =
+38,144 > 32,768`. **LPK cannot fit at bs=64. It is not a tuning question.**
+
+**⇒ This does NOT block the champion port.** The port uses the *champion's* layout, which is
+designed for C=64 — not LPK's padded-tile layout. What it does establish: **bs=64 and LPK are
+mutually exclusive**, so the champion port **replaces** LPK rather than coexisting with it. That
+is a real architectural fact the port has to be built around, discovered before writing it.
+
+**⇒ The bs=64 precondition remains genuinely UNTESTED.** It can only be answered by the ported
+kernel itself, whose smem budget differs from LPK's. Not a null; an unanswerable-until-built.
+
+### ⚠ Marker format bug (mine, from M3) — found and fixed
+
+The M3 edit added a `BSFC` argument without adding its `%s`, misaligning every later argument:
+```
+smem=4306240254/21632      <-- garbage, and the budget printed where the usage belongs
+```
+**The marker I rely on to prove path presence was itself lying**, and it took a *different* arm to
+expose it. Fixed and verified: `TKP=130 VSTAGE=on BSFC=on smem=21632/32768`. **M3's wall numbers
+stand** — eligibility used `args.bs_fc` correctly; only the log line was corrupted. But a
+corrupted presence marker is a gate failure in its own right ([[gate-plumbing-lies]], 6th).
+
+**METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
