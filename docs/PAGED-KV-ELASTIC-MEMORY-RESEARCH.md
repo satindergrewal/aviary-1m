@@ -220,7 +220,11 @@ Its three parts split cleanly by cost to us:
   cheap, and needs no VMM at all.** It is pure policy over counters we already have. This is
   the piece to steal first, and it is S4 in the plan.
 
-## 3. ❌ Metal sparse is TEXTURE-ONLY — the VA-reservation route is closed on Apple
+## 3. ~~❌ Metal sparse is TEXTURE-ONLY~~ — **WRONG. RETRACTED. See §3b.**
+
+⚠ **The section below is retracted.** Grok challenged it (room #2430) with Apple's own docs, and
+the hardware settled it against me in 60 seconds. Kept verbatim because *how* it was wrong is the
+lesson. **Read §3b for the correct answer.**
 
 Checked the Metal headers directly rather than the docs (the docs page is a JS app):
 
@@ -235,12 +239,61 @@ Checked the Metal headers directly rather than the docs (the docs page is a JS a
 ⇒ **Reserve-VA-then-commit is not available for buffers on Metal.** S1 as originally conceived
 is dead on Apple, and this is a platform limitation, not an implementation gap.
 
-**The portable path that remains: a CHUNKED pool.** Allocate the KV pool as *many* smaller
+*(Superseded conclusion:)* **The portable path that remains: a CHUNKED pool.** Allocate the KV pool as *many* smaller
 buffers instead of one monolith, create them on demand, and release them when free. That gives
 real grow-and-shrink at chunk granularity, needs no sparse or VMM support, and works identically
 on Metal, CUDA and CPU. Less elegant than VA reservation, and it fragments at chunk granularity,
 but it is **the one design that works on every backend we care about** — including DGX Spark.
-**This becomes the new S1/S3.**
+*(This was made the new S1/S3 — now unnecessary as a fallback; see §3b.)*
+
+---
+
+## 3b. ✅ CORRECTED — placement-sparse BUFFERS exist, and this machine supports them
+
+**Grok was right, I was wrong, and the error was mine to catch.** He cited the Metal Feature Set
+Tables ("sparse buffers and textures with placement heap backing… check
+`MTLDevice.supportsPlacementSparse`") and WWDC25 *Discover Metal 4* ("buffers **and** textures
+allocated as placement sparse resources… allocated without storage pages initially, with pages
+provided from a placement heap **on-demand**").
+
+**Headers confirm the API exists:**
+```objc
+@property (readonly) BOOL supportsPlacementSparse API_AVAILABLE(macos(26.4), ios(26.4));
+MTLDevice/newBufferWithLength:options:placementSparsePageSize:   // a sparse BUFFER
+MTLHeapDescriptor/maxCompatiblePlacementSparsePageSize
+```
+
+**Hardware confirms it is available HERE:**
+```
+device: Apple M3 Max     macOS 26.5.2     highest GPU family: Apple9
+hasUnifiedMemory: YES    recommendedMaxWorkingSetSize: 107.5 GiB
+supportsPlacementSparse: *** YES ***
+```
+
+⇒ **Reserve-VA-then-commit — kvcached's core primitive — IS available on Apple**, on this exact
+box. S1 is **not** blocked. The chunked-pool fallback was designed around a limitation that does
+not exist; it stays on file as a portability option for devices that report NO, not as the plan.
+
+### How I got it wrong — the same failure shape as the champion's build
+
+I grepped `MTLResourceStateCommandEncoder.h`, found only `updateTextureMapping` and
+`MTLSparseTextureMappingMode`, and concluded **"there is no sparse buffer API at all"**. That
+encoder is the **older, texture-only sparse path**. **Placement sparse is a separate, newer
+mechanism** with its own creation call on `MTLDevice`. I generalised a global "platform limit"
+from the absence of a feature in one API family I happened to grep.
+
+This is the **third instance in one day** of the same class: [[invented-constraint]] — hard work
+inside a structure I never questioned. Fifteen arms inside a frozen pitch; a day of tiling inside
+a generic build; and now a design pivot inside an API-surface claim I never checked against the
+device. **The tell each time: I proved a NEGATIVE from a narrow search.** A negative from
+"I did not find it" needs the search space stated and checked, or it is just an assumption
+wearing evidence's clothes.
+
+**Rule going in:** before declaring any platform capability absent, (a) name the API families
+searched, (b) check the vendor's *feature tables*, not only headers, and (c) **ask the device at
+runtime** — which took 60 seconds here and would have prevented the whole detour.
+
+Credit: caught by Grok, room #2430.
 
 ## 4. "Will this break other models that handle KV differently?" — partly already guarded
 
