@@ -802,3 +802,34 @@ Next concrete step: host-side mask scratch + fill (causal, banded window, rel bi
 `has_mask`, then 12/12. **No wall until 12/12 passes.**
 
 **METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · NOT SHIPPED.**
+
+## ★★★ CHAMPION PAGED PORT LANDS — prefill 1.317x → 1.192x, the largest single gain of the lane
+
+fork `2547c718`. 12/12 ALL PASSED (nmse ~8e-10) BEFORE any timing. Interleaved, rotated, fresh
+server per sample, repeat control.
+
+| arm | mean |
+|---|---|
+| STATIC | **1,475** |
+| STATIC2 (repeat control) | 1,476 — **floor 0.07%** |
+| PAGED-LPK bs=32 | 2,020 |
+| **PAGED-CHAMPION bs=64** | **1,758** |
+
+**CHAMP beats LPK by 13.0%. Parity 1.317x → 1.192x.** Marker proves the path:
+`CHAMP-PAGED ACTIVE D=128 bs=64 nsg=4 Q=8 C=64 smem=10240/32768` — **10,240 B exactly as the
+arithmetic predicted**, and `CHAMP-PAGED REFUSED (decode)` on the decode dispatch, which correctly
+takes the other path.
+
+**The thesis is confirmed by measurement.** Six hand-tuned eliminations bought between -3% and
++1% each because every one was inside a layout whose footprint couples to `nsg`. Adopting a layout
+whose footprint is **flat in nsg** bought 13% in one move. The constraint was the layout, not any
+line inside it.
+
+**Immediate next lever, and it is free by construction:** `nsg` is hardcoded to 4 in the dispatch.
+Champion smem does not scale with nsg for f16 KV (10,240 B at any nsg), so **nsg=8 costs nothing**
+and doubles the simd groups. That is the one knob our own layouts could never turn.
+
+**STILL NOT SHIPPED: 1.192x > 1.0x.** Decode unchanged at 1.171x (champion port is prefill-only).
+CUDA 1.21x STALE.
+
+**METER: Metal prefill 1.192x · decode 1.171x · CUDA 1.21x STALE · 12/12 · floor 0.07%.**

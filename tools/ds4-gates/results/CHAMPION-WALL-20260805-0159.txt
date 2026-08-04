@@ -1,0 +1,22 @@
+tip: 2547c718 dirty=0
+round1  STATIC   WALL=1473
+round1  LPK      WALL=2013
+round1  CHAMP    WALL=1754
+round1  STATIC2  WALL=1475
+round2  LPK      WALL=2020
+round2  CHAMP    WALL=1755
+round2  STATIC2  WALL=1476
+round2  STATIC   WALL=1477
+round3  CHAMP    WALL=1760
+round3  STATIC2  WALL=1478
+round3  STATIC   WALL=1479
+round3  LPK      WALL=2024
+round4  STATIC2  WALL=1477
+round4  STATIC   WALL=1474
+round4  LPK      WALL=2024
+round4  CHAMP    WALL=1763
+--- MEANS (interleaved, rotated) ---
+STATIC   1475 ms (n=4)
+LPK      2020 ms (n=4)
+CHAMP    1758 ms (n=4)
+STATIC2  1476 ms (n=4)
