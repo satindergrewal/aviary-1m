@@ -1,0 +1,6 @@
+=== KARGS PROBE v3 (base c6aebd6a, REAL anchor, fresh binary verified) ===
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+D= 64 case A: with_rel=1 window=0 max_abs=1.235e+04 nmse=2.994e+08 FAIL
+D= 64 case B: with_rel=1 window=8 max_abs=1.235e+04 nmse=1.873e+08 FAIL
+D= 64 case C: with_rel=0 window=8 max_abs=1.235e+04 nmse=2.195e+08 FAIL
