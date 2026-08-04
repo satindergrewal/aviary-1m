@@ -1033,3 +1033,33 @@ the paths diverge, then identical *content*. **An "identical to static" result i
 once the marker proves the paged op ran** — that is precisely the tautology finding 5 caught.
 
 **Status: mapped, not built.**
+
+### AUDIT #2245 FINDING 6 — the unified-memory guard rests on a heuristic that FAILED where we tested it
+
+```cpp
+#if defined(__APPLE__)
+    const bool unified = true;                                              // hardcoded
+#else
+    const bool unified = phys_ram > 0 && total_vram >= 0.7 * phys_ram;      // ratio heuristic
+#endif
+```
+**Correcting my own first read:** the non-Apple path is not blind — a DGX Spark (shared memory,
+`total_vram` ~ `phys_ram`) should evaluate to `unified = true`. So this is **not a confirmed bug**
+and I am not filing it as one.
+
+**The real finding is the provenance of that heuristic.** The `__APPLE__` hardcode exists *because
+the ratio inference FAILED on a Mac* — that is recorded in this very lane. So the guard that
+prevents the pool from eating the whole machine (measured: 88.79 GB RSS, system at 5% free)
+depends, on every non-Apple platform, on **the one inference we tested and had to work around.**
+
+**Severity: risk, not defect. Condition: untested on the hardware it now protects.** the owner runs
+a **DGX Spark cluster** and told this lane directly that *unified memory is NOT niche — DGX Spark,
+DGX Station, Windows-ARM*. If the ratio misreads there, the failure mode is the machine-killer
+this policy was written to stop.
+
+**Cheap close (not yet run, needs box access):** log the three inputs (`phys_ram`, `total_vram`,
+resulting `unified`) at policy time. That is one line, turns an assumption into a measurement on
+any machine it runs on, and matches finding 4's rule — **a marker that prints on the good path too
+is the only kind that can prove anything.**
+
+**Filed as: RISK, untested, one-line probe pending box access.**
