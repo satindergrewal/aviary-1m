@@ -1354,3 +1354,24 @@
 # ⇒ decode is 7.07x the original scalar kernel and 11.4x -> 1.60x off the tuned static path.
 #   Prefill untouched by this commit and now the WEAKER axis -- the next rung is prefill,
 #   which is the reverse of where this climb started.
+
+# --- METAL RUNG 3 (PREFILL) ATTEMPT 1: q-parallel. WRITTEN, GATED, FAILED, REVERTED. ---
+# THE DESIGN, which I still believe is the right one and am recording so it is not re-derived:
+#   prefill and decode want OPPOSITE parallelism. Prefill has ~1,500 INDEPENDENT query rows,
+#   so give each simd group its OWN row: no cross-group reduction, no combine, no threadgroup
+#   memory, no barrier at all, and neighbouring rows walk overlapping key ranges so the K/V
+#   they share is served by cache instead of re-read per threadgroup. Decode has exactly ONE
+#   query row, so its only parallelism is splitting the KEY range -- which is what needs the
+#   combine. Same kernel, opposite axis, selected by a q_parallel flag; grid.x shrinks by nsg
+#   for prefill and stays (1, n_heads) for decode.
+# IMPLEMENTED: kargs q_parallel + n_tokens_total, per-simd-group gtok, walk-whole-range when
+#   q_parallel, direct per-row dst write bypassing the combine, dispatch grid.x /= nsg.
+# RESULT: test-paged-vs-cpu 12/12 FAIL, max_abs 2.4e-01, nmse ~0.99 -- near-total error, so
+#   structurally wrong rather than subtly wrong. RULED OUT: positional kargs order (verified
+#   struct vs initializer field by field -- these are POSITIONAL initialisers with comment
+#   labels, so a mis-ordered insert would silently shift every field after it).
+# NOT DIAGNOSED. REVERTED to c6aebd6a, 12/12 PASS re-confirmed, tree clean.
+# ⇒ I am NOT naming a fourth cause today. Three times I announced one before running the
+#   disconfirming experiment and three times it was wrong. The next attempt starts with the
+#   one-factor arms (q_parallel on with nsg=1, so the mapping is identity), not a theory.
+# STATE: prefill 3,372 ms vs static 1,140 = 2.96x, UNCHANGED. Nothing shipped this rung.
