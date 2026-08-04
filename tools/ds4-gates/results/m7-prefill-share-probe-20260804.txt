@@ -1713,3 +1713,23 @@
 # live-sourced (agent board): simdgroup_matrix mma on the staged tiles (MLX steel/MFA tile
 # shapes) for prefill; FlashInfer/ik-#370 GQA head-packing + MLX sdpa_vector 2-pass
 # split-K + vLLM use_v1 heuristic for decode; matiaslin kernel diff for CUDA 1.21x.
+
+# --- MMA SLICE ATTEMPT 1: CRASHED THE GATE. Reverted. Cause named, fix specified. ---
+# Wrote the champion's mqk loop (make_filled_simdgroup_matrix / simdgroup_load transposed /
+# simdgroup_multiply_accumulate / simdgroup_store) onto the staged tk tile: 8 keys per mma
+# over D/8 half fragments. COMPILED CLEAN, then the correctness gate CRASHED (test binary
+# stack trace, not a FAIL row).
+# CAUSE (named, not guessed -- it is arithmetic): I placed the score strip `ssq` and the
+# staged-Q area `sq8` at (tv + bs*D) and beyond, but NEVER grew the threadgroup allocation
+# in ggml-metal-ops.cpp, which still sizes smem for K+V tiles only. Writes ran past the
+# allocation ⇒ crash. The dispatch's smem_stage term must add nsg*64 floats (score strips)
+# + nsg*8*D halves (staged Q) BEFORE this path can run at all.
+# ⚠ ALSO TRUE AND WORTH RECORDING: even fixed, that slice was DEAD COMPUTE -- the mma wrote
+# scores nothing consumed while the scalar loop stayed authoritative. A neutral-or-slower
+# wall was the honest expectation. Wiring it means each simd group owning 8 QUERY ROWS
+# (champion NQ=Q/NSG) instead of one, which is the real restructure; the score strip and
+# staged Q are prerequisites for that, not decorations.
+# ⇒ NEXT SLICE, ordered: (1) grow smem in ops.cpp by both terms; (2) stage Q rows into sq8
+# cooperatively; (3) flip the simd group from 1 row to 8 rows and consume ssq in place of
+# the simd_sum; (4) 12/12 THEN wall vs 2,945 ms (slower = regression, fix or revert).
+# Reverted to 354f006a, 12/12 PASS on rebuilt binary, dirty 0. Gap unchanged 2.60x.
