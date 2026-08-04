@@ -1536,3 +1536,21 @@
 #   re-add it whenever a paged kernel fails; a global nmse CANNOT distinguish failure
 #   shapes and I have now mis-read it twice.
 # Reverted (kernel + harness), 12/12 PASS, dirty 0. Prefill unchanged 2.96x.
+
+# --- ARM J: F's formula + grid.x UNCHANGED -> ALL ROWS STILL WRONG. GRID EXONERATED. ---
+#   J  gtok = tgpig[0]*nsg + sg, grid.x = n_tokens (excess tgs early-return, every row
+#      still computed exactly once) -> 12/12 FAIL, all 24 tokens bad, nmse ~0.48-0.50.
+# ⇒ ★★ E vs J IS NOW A ONE-FACTOR PAIR: same grid, same loop, same writes -- ONLY the gtok
+#   expression differs (tgpig[0] vs tgpig[0]*nsg + sg). The formula, or per-sg state that
+#   is a pure function of it, is guilty. Grid width is exonerated.
+# ⇒ AND A PARADOX THAT THE NEXT PROBE MUST RESOLVE: sg0's gtok in J is tgpig[0]*2 -- for
+#   tgpig[0]=0 that IS 0, identical to E's row 0 computation in every derived value. Yet
+#   row 0 is WRONG in J and RIGHT in E. A pure function of identical inputs giving
+#   different outputs means something NON-PURE is involved -- the two sgs' presence with
+#   different gtok values is perturbing each other through state I believe is private.
+#   (Candidates the identity dump will separate: qv/accv register arrays, or a compiler
+#   transform on the divergent early-return; NOT named as cause -- the dump decides.)
+# NEXT PROBE (definitive, and the per-token map makes it readable): write gtok itself into
+#   dst -- every row then reports WHICH writer produced it. Identity in, identity out.
+# ARM LEDGER: A-E PASS · F 0.494 all-rows · G 0.683 · H 0.494 · J 0.48-0.50 all-rows.
+# Reverted, 12/12 PASS, dirty 0. Prefill unchanged 2.96x.
