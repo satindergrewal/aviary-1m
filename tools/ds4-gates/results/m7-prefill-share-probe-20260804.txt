@@ -1866,3 +1866,21 @@
 #   The champion's threadgroup transposed load passing 4*16 for a 16-wide tile is
 #   consistent with (a): its stride carries a granularity factor, ours does not.
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap unchanged 2.60x. Nothing claimed.
+
+# --- ARM (b) REFUTES MY OWN "ELEMENT-GRANULARITY" ROOT CAUSE. RETRACTED. ---
+# Staged Q and K as FLOAT with simdgroup_float8x8 fragments (element type == buffer type,
+# no possible 16/32-bit mismatch). Identity I/O result: **BIT-IDENTICAL even diagonal**
+#   (0,0)(2,2)(4,4)(6,6) nonzero, everything else zero -- exactly the half-buffer result.
+# ⇒ THE CAUSE IS INDEPENDENT OF ELEMENT TYPE. My 2x-granularity derivation in the previous
+#   entry is WRONG and is RETRACTED, along with the claim posted to the room as "ROOT CAUSE
+#   CLASS CONFIRMED". The derivation was arithmetically tidy (even-d contraction reproduces
+#   the pattern exactly) and still false -- a tidy derivation that FITS the data is not the
+#   same as the cause, which is the day's lesson arriving one more time in a new costume.
+# ⇒ WHAT SURVIVES AS FACT: the even-diagonal pattern itself, reproducible across BOTH
+#   element types, with the instrument proven installed (marker=4242) in both arms.
+# ⇒ WHAT IS STILL UNTESTED (next, one factor each): (c) load K from DEVICE with the
+#   tensor's own stride, exactly as the champion's main loop does (~:6950) -- the ONE
+#   structural difference between our call and its; and the possibility that
+#   simdgroup_multiply_accumulate requires the accumulator to be distinct from both
+#   operands, or that `origin`/transpose semantics differ from my reading.
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap unchanged 2.60x. Nothing claimed.
