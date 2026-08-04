@@ -134,3 +134,47 @@ barrier placement (swept, free). Those are closed. What remains unexamined on th
 whether it is doing **more work per key than static** — block-table indirection per key, masking
 applied per token rather than per tile, and the per-row `simd_sum` reduction chain. That is the
 next place to look, and it has not been measured.
+
+### NEXT ARM (designed, NOT implemented): lane-per-KEY instead of lane-per-head-dim
+
+The arithmetic of the current scalar inner loop, per key per query row at D=128, 32 lanes:
+
+```
+part += qv[i] * tk[t*D + d2];   // NPT = D/32 = 4 MACs per lane
+sc = simd_sum(part) * scale;    // a full 32-lane reduction -- ~5 shuffle steps
+```
+
+So per 32 keys, each lane performs **~128 MACs and ~160 shuffle-equivalents**. The reduction is
+executed **once per (query row, key) pair** and it dominates. This is the cost the champion
+avoids entirely by expressing Q@K^T as a matrix op — and it is why widening the *tile* never
+helped: the tile was never the bottleneck, the **reduction count** is.
+
+**The proposed inversion: give each lane its own KEY rather than its own slice of head_dim.**
+
+- Lane `l` computes the **complete** dot product for key `t0 + l`: D serial MACs, reading the
+  staged tile row for that key.
+- Q is identical across lanes for a given query row ⇒ held in registers, broadcast-free.
+- **`simd_sum` disappears from the key loop entirely.** 32 keys are scored per iteration with
+  **zero cross-lane traffic**.
+
+Per 32 keys the arithmetic becomes **~128 MACs and 0 shuffles**, against ~128 MACs and ~160
+shuffle-equivalents today — same multiply-accumulate count, the reduction chain removed.
+
+**Why this is worth an arm rather than a guess:** it is the one structural difference from static
+that the three refuted tile-width experiments could never have addressed, and it explains their
+failure rather than merely surviving it.
+
+**Risks to measure, not assume:**
+1. **Memory pattern.** Lanes now read *different rows* of the staged K tile instead of adjacent
+   elements of one row. Threadgroup-memory bank conflicts are the obvious hazard; the tile is
+   already staged so this is a pattern change, not extra traffic.
+2. **Register pressure.** Q must be held per-lane across the whole key loop (D/1 values, not
+   D/32) — that is the real cost, and at D=256 it may not fit.
+3. **Tail handling.** Key counts not a multiple of 32 need masking that must not reintroduce a
+   reduction.
+4. The V accumulation still needs a per-lane→per-head-dim redistribution; the win is only real if
+   that does not simply move the reduction rather than remove it. **Check this first — it is the
+   most likely way the idea fails.**
+
+Nothing here is implemented. It is written down so the next session starts from the arithmetic
+rather than re-deriving it.
