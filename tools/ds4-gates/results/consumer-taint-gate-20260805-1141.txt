@@ -1,0 +1,8 @@
+tip: 78a397d1 dirty=2
+binary: 11:40:51
+=== SELF-VALIDATION on qwen3-4b (paged KNOWN to work) ===
+PAGED-clean        sha=7942f8fc360b  taint_marker=0
+0
+PAGED-tainted      sha=d5583d693699  taint_marker=1
+---
+GATE VALID: taint CHANGED output (7942f8fc360b -> d5583d693699) => the probe can detect a real consumer
