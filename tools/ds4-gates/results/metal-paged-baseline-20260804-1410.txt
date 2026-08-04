@@ -1,0 +1,18 @@
+=== METAL PAGED BASELINE (first perf number for the Apple-silicon paged path) ===
+3b5ac2f9 P1-5: b702f1bb did NOT fix the prompt_n anomaly -- measured, reported, still open
+model: /tmp/qwen3-4b-metal-Q4_K_M.gguf   prompt: 1500 filler words   reps: 3
+
+--- ARM STATIC (tuned Metal FA, no --kv-paged) ---
+  static rep1  WALL=  1488 ms  prompt_ms=  1143.4  prompt_n=  1523  gen=  309.3 ms  103.45 tok/s
+  static rep2  WALL=  1466 ms  prompt_ms=  1129.1  prompt_n=  1523  gen=  306.6 ms  104.38 tok/s
+  static rep3  WALL=  1475 ms  prompt_ms=  1129.5  prompt_n=  1523  gen=  317.7 ms  100.73 tok/s
+
+--- ARM PAGED (scalar paged kernel) ---
+  paged  rep1  WALL=  8714 ms  prompt_ms=  3415.6  prompt_n=  1523  gen= 5265.4 ms    6.08 tok/s
+  paged  rep2  WALL=  8725 ms  prompt_ms=  3419.7  prompt_n=  1011  gen= 5272.8 ms    6.07 tok/s
+  paged  rep3  WALL=  8736 ms  prompt_ms=  3414.3  prompt_n=  1011  gen= 5292.8 ms    6.05 tok/s
+
+--- answers must agree (a slow kernel is still allowed to be wrong) ---
+  static: " alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alp"
+  paged : " alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alp"
+  -> IDENTICAL

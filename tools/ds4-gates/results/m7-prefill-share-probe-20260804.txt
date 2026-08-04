@@ -1235,3 +1235,37 @@
 # launch. It does not affect the timings above (WALL and prompt_ms are stable to ~0.3%),
 # but it is a second defect in the same counter I already fixed once, so the fix was
 # incomplete. OPEN.
+
+# --- METAL DECODE CLIMB: ATTEMPT 1, MEASURED, NOT SHIPPED (tree reverted to 3b5ac2f9) ---
+# WHAT THE PROFILE ACTUALLY SAID (by reading the kernel, not guessing): the inner loop
+# reduced the q.k dot product through THREADGROUP MEMORY with a tree reduction -- log2(nth)
+# barriers plus two more, PER KV TOKEN. At 1,523 tokens x 128 threads that is ~13,700
+# threadgroup barriers per (token, head). Barriers, not bandwidth, not arithmetic.
+#
+# STEP 1 -- one simd group per head, dot product via simd_sum(), zero barriers in the loop:
+#   prefill 6,950 -> 3,415 ms   = 2.04x FASTER
+#   decode    9.0 ->   6.07 tok/s = 1.48x SLOWER
+#   correctness 12/12 PASS (incl. D=96 and D=192, which the CUDA path still cannot do)
+# ⇒ ★ THE TRADE I DID NOT SEE COMING: decode has ONE query token, so its grid is only
+#   (1, n_heads) threadgroups. Cutting 128 threads to 32 removed 4x of the parallelism on
+#   the ONE shape that was ALREADY STARVED. Barrier cost was real AND thread count was real;
+#   the change bought the first by selling the second. My stated plan ("the Metal climb
+#   starts at decode") named the right target and the first move made that target worse.
+#
+# STEP 2 -- split-K INSIDE the threadgroup (nsg simd groups, strided key slices, one
+# log-sum-exp combine at the end) to get the threads back without the barriers:
+#   nsg = 1  -> 12/12 PASS
+#   nsg > 1  -> 12/12 FAIL (max_abs 6.6e-03, nmse 6.3e-04)
+#   ⇒ the COMBINE is wrong. Isolated by forcing nsg=1, which is the cheap experiment that
+#     distinguishes "striding is wrong" from "merge is wrong" -- it is the merge.
+#     NOT DIAGNOSED. I am not writing a third story today about a cause I have not found.
+#
+# DECISION: REVERTED the whole kernel change. Shipping nsg=1 would trade a 2.04x prefill win
+# for a 1.48x decode regression, and shipping nsg>1 would ship a wrong kernel. Tree is back
+# at the correct scalar kernel, 12/12 PASS re-confirmed after the revert.
+# ⇒ The 6.1x/11.4x baseline in this file STANDS as the Metal number. Nothing improved yet.
+#
+# ★ WHAT IS BANKED (this is why the attempt was not wasted): the cost is NAMED and PRICED.
+# Barriers are worth ~2x on prefill. The decode fix must ADD parallelism, not just remove
+# barriers -- same currency as the CUDA split-K that bought decode 3.16x. Next attempt fixes
+# the combine first and gates it at nsg>1 BEFORE any timing is taken.
