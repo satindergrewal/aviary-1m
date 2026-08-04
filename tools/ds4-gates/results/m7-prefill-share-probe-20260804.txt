@@ -1733,3 +1733,29 @@
 # cooperatively; (3) flip the simd group from 1 row to 8 rows and consume ssq in place of
 # the simd_sum; (4) 12/12 THEN wall vs 2,945 ms (slower = regression, fix or revert).
 # Reverted to 354f006a, 12/12 PASS on rebuilt binary, dirty 0. Gap unchanged 2.60x.
+
+# --- THE OWNER #2353/#2354 ANSWERED WITH gh api FACTS (not links) ---
+# matiaslin/llama.cpp, ALL 5 branches:
+#   paged_attention           2026-04-08  "paged KV cache and attention"   <- what we vendored
+#   paged_attention_phase2    2026-04-30  "APC for paged KV + prefix-sharing"  ★ 3 WEEKS NEWER
+#                                          than the draft PR and NOT in it
+#   protect_parallel          2024-09-27  batch guard      stale/irrelevant
+#   link_with_cublasLt_static 2025-08-27  cuBLAS linking   stale/irrelevant
+#   master                    upstream fork
+# phase2 delta vs phase1: ~+1,900 lines / ~25 files, substance = APC / PREFIX SHARING
+#   (llama-block-manager +159, llama-graph.cpp +159, llama-context +67, llama.h +73,
+#    examples/continuous-batch/continuous-batch.cpp +369).
+# ⇒ CHECKED, so it is fact not hope:
+#   - Metal files on phase2: ZERO. Still CUDA+CPU. **Our Metal paged kernel remains the
+#     only one on any of these branches.**
+#   - his pagedattn.cu (phase2): paged_attention_decode_kernel, n_heads=gridDim.x,
+#     head_dim=blockDim.x -- ONE THREAD PER HEAD-DIM ELEMENT, no mma/wmma, no cp.async.
+#     That is the scalar shape our CUDA left behind at M7. NOTHING to copy into our CUDA.
+#   - COPY-TRANSFERABLE NOW: his APC/prefix-sharing layer (block-manager + graph level),
+#     which is our P1-6/P1-5 territory solved at a DIFFERENT layer than ours (cache+
+#     scheduler). Diff it when the prefix lane reopens; NOT a prefill-kernel lever.
+# #21961 unpaid on OUR tip 354f006a: his bar is paged within ~3% of unified (479 vs 496
+#   tok/s A10G); we are CUDA 1.21x = 21% off ⇒ ~18 points of headroom that his kernel
+#   CANNOT supply (his is scalar, ours is mma). Named gaps in order: MMA on Metal (in
+#   flight) · GQA head-packing (absent both backends) · split-K partition heuristic
+#   (vLLM use_v1, absent) · APC/prefix-sharing at his layer (absent).
