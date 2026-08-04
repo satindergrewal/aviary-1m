@@ -1120,3 +1120,59 @@
 # bank" when the scheduler cannot know whether the bytes came off disk or out of RAM.
 # Fixed to "cached state" (8223388c). Same class as the accepted-absurdity scar -- a line
 # that announces more than it knows turns a passing gate into a lie nobody had to tell.
+
+# ============================================================================
+# ★★★ P1-5 ADMIT -- THE HONEST NUMBER (ds4-ports ae81ed5f) -- IT IS A WASH
+# ============================================================================
+# FAIR A/B, n=4 paired, 11K-token prompt, qwen3-4b IQ4_KT, --kv-paged, box CUDA.
+# Each timed request is the FIRST on a FRESH server with an EMPTY prompt cache, so no
+# eviction and no spill can land inside a timed window. Bank ON vs bank OFF, nothing else.
+#   warm (restored) ... 1642 · 1503 · 1745 · 1562 ms    median ~1602
+#   cold (prefilled) .. 1690 · 1616 · 1685 · 1602 ms    median ~1651
+#   output ............ IDENTICAL in all four reps
+#   prompt_ms ......... warm ~23 vs cold ~1250 (the prefill really is skipped)
+# ⇒ ~2% apart with ~240 ms of spread inside the warm arm alone. A WASH. Not a win.
+#
+# ★★ THREE NUMBERS, ONE FEATURE, AND THE FIRST TWO WERE BOTH MEASUREMENT ARTIFACTS:
+#   "21.6x FASTER"  from prompt_ms. WRONG: the bank read happens inside prompt_load, BEFORE
+#                   the server starts its prompt timer, so prompt_ms structurally EXCLUDES
+#                   the cost of the feature it is being used to praise.
+#   "1.64x SLOWER"  from wall clock on the 3-request gate. ALSO WRONG: the cold arm was the
+#                   FIRST request (empty cache) and the warm arm was the LAST (full cache),
+#                   so the warm arm alone paid an eviction that SPILLED 1.6 GiB to disk.
+#   "a wash"        fair A/B, n=4. The arms differ in exactly one thing.
+# ⇒ THE LESSON, and it is the same one three times: the metric and the arms have to be
+#   chosen so that the ONLY difference is the thing under test. Both wrong answers were
+#   internally consistent and reproducible, which is exactly why neither felt wrong.
+#
+# WHY A WASH IS THE EXPECTED ANSWER HERE, not a disappointment:
+#   KV state is ~0.144 MiB/token, fixed by the architecture. Prefill cost per token scales
+#   with the MODEL. On a 4B model at 4 bits, prefill is ~0.113 ms/token and restoring the
+#   state costs ~0.11 ms/token -- there is nothing to win, and this is the WORST CASE for a
+#   KV bank. The same machinery on a 600B model faces prefill costs orders of magnitude
+#   higher against KV per token that is no larger (and for MLA archs, much smaller).
+#   ⇒ P1-5's value is NOT measurable on the model I have been testing it with.
+#
+# WHAT SHIPS REGARDLESS: the bank now DECLINES restores it estimates to be uneconomic,
+# comparing two MEASURED rates (restore MiB/ms from real admits, prefill ms/token from real
+# COLD prefills only). Witnessed firing: "DECLINING ... restoring costs ~711 ms but
+# prefilling those 11024 tokens costs ~526 ms". So the feature cannot be a net harm on a
+# model where it does not pay, and needs no constant to be re-tuned per model.
+#
+# ★ TWO REAL DEFECTS FELL OUT OF THE GATE'S OWN ARITHMETIC, neither findable by reading:
+#   1. slot.n_prompt_tokens_processed IS NEVER RESET ON THE PAGED PATH -- a 2,023-token
+#      request followed by a 4,023-token one reported prompt_n = 6,046. EVERY paged response
+#      after the first has been quoting a prompt-eval rate over a token count that includes
+#      previous tasks. I fixed the identical bug for n_decoded at that same site during 4d
+#      and never looked for its sibling.
+#   2. the gate's restore rate timed only the fread: 711 ms for a restore that cost ~2,485 ms
+#      once the 1.6 GB entry rebuild and the state upload were counted. A confidently wrong
+#      gate is worse than one that admits and learns.
+#   Both surfaced because an ESTIMATE disagreed with a WALL CLOCK. The estimate was the
+#   instrument, which is an argument for building the estimator even when the feature is a
+#   wash.
+#
+# ALSO LANDED: state serdes coalesced into contiguous block runs (daa2ed5c). An 11K restore
+# was 25,452 separate 64 KiB device copies; state_read went 1.7 -> 7.6 GB/s. Necessary,
+# nowhere near sufficient -- which is how the economics were shown to be structural rather
+# than an implementation defect.
