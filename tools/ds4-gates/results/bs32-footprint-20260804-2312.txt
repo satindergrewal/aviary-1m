@@ -1,0 +1,11 @@
+tip: da4c628a dirty=0
+binary mtime: 2026-08-04 22:37:21
+bs=16   RSS=6.65 GB  sysfree=64.7%  n_gpu_blocks=1536
+bs=32   RSS=6.66 GB  sysfree=64.7%  n_gpu_blocks=768
+--- pool-sizing lines ---
+0.00.363.992 I common_fit_paged_kv_blocks: free_vram=107719.6 MiB, bytes_per_block=4718592, n_gpu_blocks=768, n_cpu_blocks=192
+0.00.363.994 I common_fit_paged_kv_blocks: pool sized for n_ctx=16384 x 1 seq (512 blocks x 1.50 headroom = 768); VRAM would have allowed 20267 blocks (89.1 GiB)
+0.00.364.789 I init: initializing paged KV cache. n_gpu_blocks=768, n_cpu_blocks=192, block_size=32, watermark=0.05
+0.00.369.168 I common_fit_paged_kv_blocks: free_vram=107721.9 MiB, bytes_per_block=2359296, n_gpu_blocks=1536, n_cpu_blocks=384
+0.00.369.169 I common_fit_paged_kv_blocks: pool sized for n_ctx=16384 x 1 seq (1024 blocks x 1.50 headroom = 1536); VRAM would have allowed 40536 blocks (89.1 GiB)
+0.00.369.973 I init: initializing paged KV cache. n_gpu_blocks=1536, n_cpu_blocks=384, block_size=16, watermark=0.05

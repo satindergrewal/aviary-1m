@@ -277,3 +277,28 @@ block accounting, though not total pool bytes — `bytes_per_block` scales with 
 `n_gpu_blocks` shrinks proportionally under the n_ctx-bounded sizing landed today. Verify that
 the memory policy still reports the same footprint at bs=32 before treating it as free in
 practice as well as in latency.
+
+### bs=32 precondition — CONFIRMED on the memory axis too (not just latency)
+
+The lane-per-key design needs `bs >= 32` or half the lanes idle. Latency already showed bs=32
+free (1,559.7 vs 1,568.5, noise floor). That was only **one** axis — a design that bought speed
+by doubling the pool would be no design at all, and this lane has already had one pool eat the
+machine. Measured at tip `da4c628a`, one request served per arm so the pool is touched and not
+merely allocated:
+
+| bs | blocks | bytes/block | pool | RSS | sysfree |
+|---|---|---|---|---|---|
+| 16 | 1536 | 2,359,296 | **3.46 GiB** | 6.65 GB | 64.7% |
+| 32 |  768 | 4,718,592 | **3.46 GiB** | 6.66 GB | 64.7% |
+
+Identical, and the sizing line says why: `blocks_per_seq = ceil(n_ctx/bs)`, so
+`ceil(n_ctx/bs) * bs * bytes_per_token * headroom` has **bs cancelling** whenever bs divides
+n_ctx. This was derivable from the arithmetic — it was measured anyway, because "the fix is
+obvious" has been wrong three separate times in this lane today.
+
+**Precondition paid on both axes. bs=32 is free.**
+
+⚠ Both arms hit `Abort trap: 6` at shutdown — the known **residency-set teardown assert**
+(Grok reproduced 2/2). It fires on `pkill`, *after* RSS is sampled, identically in both arms,
+so it does not touch this result. Stays on the open list; noted here so a later reader does not
+mistake this run for the reproducer.
