@@ -871,3 +871,17 @@
 #           /tmp/m7-pgd-r{1,2,3}.log and /tmp/m7-durable-static-r{1,2,3}.log on the box.
 # The paged mean (2,984) sits within 0.4% of the 2,972 previously claimed, so the claim
 # stands -- but it now stands on artifacts instead of on my word, which is the point.
+#
+# ⚠ THIRD CORRECTION, FROM THE DURABLE RUNS THEMSELVES -- MY HEADLINE WAS THE FAST END.
+# Six paged runs at sha 4327c521 (all logged separately, all greppable on the box):
+#   2,960 / 2,999 / 2,993 / 2,996 / 2,980 / 3,160   -> median ~2,995, mean ~3,015
+# I published "2,972" from the best three (2,998/2,972/2,972). That number is INSIDE the
+# distribution but sits at its fast end; the honest figure is ~2,990. Static over the same
+# window: 2,455 / 2,440 / 2,494 -> ~2,463.
+#   ⇒ ratio 1.21x, UNCHANGED. The conclusion does not move and neither does the ranking
+#     (128 q rows still clearly beats the 64-row control at 3,139/3,113) -- but the
+#     headline figure should be the median of six, not the best of three, and n=3 was
+#     enough to establish the WIN while not being enough to pin the VALUE.
+#   The 3,160 outlier is most likely regen-lane contention on the shared card; noted, not
+#   excluded -- dropping the inconvenient sample is how the fast end became a headline in
+#   the first place.
