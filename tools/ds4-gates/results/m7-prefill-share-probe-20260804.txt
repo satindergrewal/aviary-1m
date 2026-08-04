@@ -2542,3 +2542,19 @@
 #   whose body is already large. Unrolling the hot inner loop is what paid.
 # ⇒ Nice property worth reusing: a wrong function constant would produce WRONG RESULTS, not
 #   just slower ones, so the 12/12 gate validates the constant plumbing itself.
+
+# --- SCOPING CORRECTION I CAUGHT ON MYSELF, then closed by measurement ---
+# I posted the block_size negative as if it settled the question. It did NOT: that run had
+# MMA OFF, so it measured the SCALAR path only. The MMA path's cc-tile loop and softmax
+# column loop are bounded by bs, so it could have benefited where scalar did not.
+# MEASURED, MMA path, bs specialised: 2,003.2 / 1,971.2 (min 1,971.2)
+#                     bs NOT specialised: 1,959.0 / 1,959.8 / 1,960.1
+#   scalar reference in the same run: 1,570.5 (stable across every run today)
+# ⇒ Slightly WORSE, within noise. block_size specialisation helps NEITHER path. Reverted for
+#   good, and the negative is now properly scoped instead of over-claimed.
+# ⇒ ALSO SETTLES THE STANDING QUESTION: MMA already HAS compile-time D (the constant applies
+#   to the whole kernel) and gained only 3.1% from it. With bs added it gains nothing more.
+#   MMA is ~1,960 against scalar 1,570 with every specialisation available to both. It does
+#   not lose for want of compile-time bounds; it loses on its own merits at this shape.
+# FINAL STATE: fork c896eee8, dirty 0, 12/12 both paths, scalar+specialisation DEFAULT
+#   1,570 ms, GAP 1.39x. Ladder 6,950 -> 3,334 -> 3,300 -> 2,940 -> 1,570. NOT SHIPPED.
