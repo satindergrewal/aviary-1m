@@ -2590,3 +2590,21 @@
 #   whether they enter the residency set. Per-decode allocation would explain both the stalls
 #   and the abort. This is worth more than any kernel tuning: the floor is already at parity,
 #   so removing the stalls IS the decode win.
+
+# --- DECODE STALL: THE DISTRIBUTION, n=20 per arm (128-token generations) ---
+#   PAGED   min 1,406  med 1,829  max 8,664   17/20 in the 1-2x band, 2 in 2-3x, 1 at 6-7x
+#   STATIC  min 1,214  med 1,221  max 1,252   20/20 in the 1-2x band, spread 1.0x
+# ⇒ THE REAL PAGED DECODE KERNEL GAP IS 1.16x (floor 1,406 vs floor 1,214). Everything above
+#   that is stalling. The TYPICAL experience is 1.50x (median vs median) purely because of a
+#   heavy tail.
+# ⇒ The shape is MOSTLY-AT-FLOOR WITH RARE LARGE EXCURSIONS -- the signature of a discrete
+#   stall event, not of continuous contention (which would shift the whole distribution and
+#   would also have moved STATIC, measured in the same session and dead flat at 1.0x).
+# ⇒ So the previously recorded 1.60x decode gap landed near the MEDIAN of a distribution
+#   nobody had characterised. It was neither the kernel's speed (1.16x) nor an outlier -- it
+#   was a typical sample of an uncharacterised mixture, quoted as if it were a kernel property.
+#   THE LESSON: when a number is quoted as a property of code, at least sample it enough to
+#   know whether the code HAS one number. STATIC does. PAGED does not.
+# ⇒ PRIORITY: the stall is now worth far more than kernel tuning. Removing it takes decode
+#   from 1.50x typical to 1.16x, and 1.16x is a far smaller kernel problem than the prefill
+#   1.39x that has consumed the day.
