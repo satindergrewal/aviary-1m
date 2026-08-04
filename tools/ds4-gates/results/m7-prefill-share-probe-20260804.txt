@@ -1906,3 +1906,36 @@
 # STILL UNTESTED: (c) K from DEVICE with the tensor's own stride (champion's contract);
 #   transpose/origin semantics against the Metal spec rather than memory.
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Cause OPEN, pattern FACT.
+
+# ============================================================================
+# ★★★ ARM (e) POSITION-ENCODED PROBE: THE MAP IS NOW EXACT (marker=4242, D=128)
+# ============================================================================
+# A[i][d] = (d==0) ? (i+1) : 0     B[j][d] = (d==0) ? (j+1)*10 : 0
+# correct result(i,j) = (i+1)*(j+1)*10 -- a DISTINCT value per cell, non-symmetric, so a
+# permutation or a skip decodes straight out of the number. Measured:
+#     10    0   30    0   50    0   70    0
+#      0    0    0    0    0    0    0    0
+#     30    0   90    0  150    0  210    0
+#      0    0    0    0    0    0    0    0
+#     50    0  150    0  250    0  350    0
+#      0    0    0    0    0    0    0    0
+#     70    0  210    0  350    0  490    0
+#      0    0    0    0    0    0    0    0
+# ★★ THE RULE, read directly off the numbers: **every surviving cell holds EXACTLY its own
+#   correct value ((i+1)(j+1)*10 -- 30 at (0,2), 90 at (2,2), 350 at (4,6), all exact), and
+#   a cell survives IFF i is EVEN **AND** j is EVEN.** Nothing is permuted, nothing is
+#   shifted, nothing is mis-scaled: the arithmetic is RIGHT wherever it lands.
+#   ⇒ NOT a transpose bug (values would move), NOT a stride/offset bug (values would shift
+#     or alias), NOT precision, NOT type, NOT aliasing. It is a pure 2x SUBSAMPLING of the
+#     result lattice in BOTH dimensions: only the even-even quadrant of the 8x8 fragment is
+#     populated -- effectively a 4x4 result occupying an 8x8 footprint.
+# ⇒ The identity probe could only ever show the diagonal of this (hence "even diagonal");
+#   the position-encoded probe shows the whole lattice. Same bug, 4x more information, and
+#   the difference was one line of probe design.
+# NEXT (one factor each, informed by the lattice): the 2x-in-both-dims signature points at
+#   the FRAGMENT SHAPE CONTRACT -- i.e. whether these loads/stores are operating on an
+#   8x8-of-pairs (16x16-equivalent) footprint while I address it as a dense 8x8. Read
+#   Apple's simdgroup_matrix load/store spec on element mapping (NOT from memory), and
+#   compare against the champion's `4*16` stride on a 16-wide tile, which is exactly a 2x
+#   factor of the same kind. Then (c) K from DEVICE with the tensor's own stride.
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Cause OPEN, MAP now exact.
