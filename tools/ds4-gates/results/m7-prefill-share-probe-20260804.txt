@@ -2316,3 +2316,26 @@
 #      now the FIRST lever, not tile widening.
 #   2. simdgroup_barrier(mem_none) placement sweep (copied from the champion, never measured).
 #   3. Occupancy: D=192 at 31,872/32,768 leaves no room for a second resident threadgroup.
+
+# --- CORRECTION to the re-ranking I posted one message earlier ---
+# I said the sb refutation makes MASK-AWARE TILING the first lever, on the theory that wasted
+# masked arithmetic dominates. I then did the arithmetic instead of trusting the story:
+#   a threadgroup owns rows [qbase, qbase+QR-1] and walks nblk = ceil((q_hi+1)/bs) blocks.
+#   work = nblk*bs*QR ;  useful ~ QR*(qbase + QR/2) ;  waste fraction ~ (QR/2)/(qbase + QR).
+#   QR=16: 50% for the FIRST threadgroup, ~1% by qbase=750. Over a 1,523-token prefill the
+#   average is a few percent -- NOT dominant, and the scalar path pays the same triangle.
+# ⇒ MASK-AWARE TILING IS DEMOTED. It is worth a few percent, not a lever.
+# ⇒ So the sb loss is NOT explained by masked arithmetic either. That hypothesis is withdrawn
+#   as the cause; it stays only as an unverified possibility among others. The measurement
+#   (monotonic loss) STANDS -- only my explanation for it does not.
+# ⇒ Live candidates for the remaining 1.86x, none measured, ranked by how much structure they
+#   would change rather than by how good the story sounds:
+#   1. OCCUPANCY / TILE SHAPE. The champion runs C=64 keys per pass with 8 simd groups; we run
+#      KT=16 with nsg=2 because bs=16 sets the staging granularity. Decoupling the score-tile
+#      width from the PAGED BLOCK SIZE -- staging N blocks but keeping smem flat by narrowing
+#      something else -- is the structural difference, and note sb=2 raised smem 21,632 ->
+#      30,848 while widening, so it tested "wider AND heavier", not "wider" alone.
+#      ⚠ That makes the sb sweep a TWO-FACTOR arm by construction. Whatever it proves about
+#      sb=2, it does not isolate width from occupancy. Flagged rather than glossed.
+#   2. simdgroup_barrier(mem_none) placement -- copied from the champion, never measured here.
+#   3. D=192 sits at 31,872/32,768: no room for a second resident threadgroup.
