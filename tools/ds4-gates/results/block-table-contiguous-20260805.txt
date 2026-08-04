@@ -1,0 +1,2 @@
+0.01.082.750 I ggml_metal_op_paged_attn: DS4P-BT CONTIGUOUS  max_blocks=47  first16: 721 722 723 724 725 726 727 728 729 730 731 732 733 734 735 736 
+tip: f607ca03 dirty=0 | -np 1, fresh pool, 1500-tok prefill, bs=32 | CONDITION: fragmentation (multi-seq/eviction/long reuse) would revive gather

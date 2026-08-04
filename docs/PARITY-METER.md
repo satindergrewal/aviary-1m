@@ -488,3 +488,40 @@ capability-based fallback). Recorded here; not begun.
 
 **METER: Metal prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · floor 0.07% ·
 NOT SHIPPED.**
+
+## Milestone 1 of the champion path: MMA kill RE-CONFIRMED on the honest harness — and it names the defect
+
+The MMA-is-slower verdict (scalar 1,570 vs MMA 1,960) was measured on the **sequential** harness —
+the one since shown to drift 29%. A path killed on unreliable evidence had to be re-asked before
+rebuilding it from scratch. 12/12 first with `DS4P-MMA ACTIVE` printed per config.
+
+| arm | mean |
+|---|---|
+| STATIC | 1,483 |
+| STATIC2 (repeat control) | 1,479 — **floor 0.27%** |
+| PAGED-LPK | **2,019** |
+| PAGED-MMA | **2,727** |
+
+**Pre-filed: >5% worse ⇒ kill CONFIRMED. Measured +35%.** The MMA path is genuinely slower; the
+old verdict was right even though the harness under it was not. Re-asking cost 12 minutes and
+converted a suspect result into a solid one.
+
+### ★ And the marker names the defect, which is the actual deliverable here
+
+```
+D=128  MMA: nsg=2  QR=16  smem=22,656/32,768
+D=128  LPK: nsg=8         smem=21,632/32,768
+```
+**Our MMA is smem-limited to nsg=2 at D=128 — one quarter of LPK's 8 simd groups.** It is not
+losing on math, it is losing on **occupancy**: the staged tile is too fat to keep simd groups
+resident. At D=192 it collapses further, to nsg=1/QR=8.
+
+**That is exactly what the champion's specialisation machinery buys** — compile-time `D` ⇒ tighter
+smem ⇒ more simd groups resident. It is the same lever that paid **-46.5%** when applied to our
+scalar path (head_dim as a function constant). **The champion port's first target is therefore
+named and measured, not guessed: cut MMA smem until nsg reaches 8 at D=128.**
+
+⇒ Port proceeds **from our MMA path**, not from zero — with occupancy as milestone 2, not a
+line-by-line transcription of a kernel with 213 specialisations.
+
+**METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**

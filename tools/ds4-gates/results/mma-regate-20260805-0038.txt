@@ -1,0 +1,22 @@
+tip: f607ca03 dirty=0
+round1  STATIC   WALL=1470
+round1  LPK      WALL=2018
+round1  MMA      WALL=2726
+round1  STATIC2  WALL=1475
+round2  LPK      WALL=2021
+round2  MMA      WALL=2731
+round2  STATIC2  WALL=1479
+round2  STATIC   WALL=1474
+round3  MMA      WALL=2730
+round3  STATIC2  WALL=1474
+round3  STATIC   WALL=1480
+round3  LPK      WALL=2019
+round4  STATIC2  WALL=1488
+round4  STATIC   WALL=1509
+round4  LPK      WALL=2021
+round4  MMA      WALL=2724
+--- MEANS (interleaved, rotated) ---
+STATIC   1483 ms (n=4)
+LPK      2019 ms (n=4)
+MMA      2727 ms (n=4)
+STATIC2  1479 ms (n=4)
