@@ -1092,3 +1092,44 @@ which is the arch-allow-list problem in a different costume.
 
 ⇒ **The right order is: capability-based generic consumer FIRST, then per-arch verification** —
 not qwen35, then jamba, then nemotron-h one at a time.
+
+## ★★ ORNITH PAGED CONSUMER — full chain diagnosed, blocker sized correctly
+
+Ran the self-validated consumer gate (`DS4P_PAGED_TAINT`, logprob observable) against Ornith-9B.
+Every link verified individually rather than inferred:
+
+```
+pool built                 YES   n_gpu_blocks=192, block_size=32
+scheduler init             YES   "using the hybrid wrapper's paged attention pool"
+consumer wired + REACHED   YES   its WARN fired 16x pre-fix, 0 post-fix
+predicate admits layers    YES   16 refusals -> 0 after the head-dim fix
+batch info driven          NO    <-- THE ONLY REMAINING LINK
+```
+
+**Third allow-list removed on the way (`c505c5d8`).** `paged_layer_supported()` hardcoded
+`head_dim == 64 || head_dim == 128`, inherited from inkling. **Ornith-9B is head_dim=256.** The
+kernel's real contract is `NPT=(D+31)/32` over `float qv[8]` ⇒ **D<=256, D%32==0**. Verified before
+widening: `test-paged-vs-cpu` now covers D=256 and passes vs CPU at **nmse ~8e-15**.
+⚠ Adding 256 exposed `for (int di = 0; di < 4; ++di)` beside a sized array — the new case **never
+ran** while the suite printed ALL PASSED. Bound now derives from `sizeof(dims)`.
+
+### The last link, and it is SMALLER than it first looks
+
+`set_paged_batch_info()` is called from exactly one place: `llama_paged_scheduler_impl::step()`.
+llama-server never calls it — it runs its own slot loop. That is the DONE-ledger note *"server
+never drives the scheduler, only examples/paged does"*, now pinned rather than suspected.
+
+**But the allocator is NOT the scheduler's.** `llama_kv_cache_paged` owns `block_manager` and
+exposes **`allocate(int32_t num_tokens, llama_sequence_group & group)`** (`llama-kv-cache-paged.h:42`)
+plus `free_blocks`. The scheduler only *orchestrates* it.
+
+⇒ **Driving a single sequence does NOT require the P2-8 continuous-batching rewrite.** The server
+can call `allocate()` itself and fill `llama_paged_batch_info` directly — every field is derivable
+for `n_seq=1`: `write_slots` and `block_table` from the allocation, `context_lens`/`batch_offsets`/
+`batch_lens`/`prefill_pending` trivially.
+
+**Correct sizing: a bounded bridge for the single-sequence path, NOT a phase-scale item.** Full
+multi-seq admission/eviction remains P2-8.
+
+**NEXT (literal):** build that bridge, then re-run the consumer gate on Ornith. **Divergence =
+consumption proven.** Until that run, Ornith does NOT consume paged and nothing here claims it does.
