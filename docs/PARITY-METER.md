@@ -89,3 +89,48 @@ that paid on Metal, and it targets **CUDA decode**, which is on the parity table
 3. Instantiation cost: Metal's function constants build one pipeline per D lazily; CUDA templates
    are compiled ahead of time and multiply build time and binary size. Bound the instantiation
    list to head dims that actually ship.
+
+---
+
+## Metal prefill levers — `--kv-block-size` swept, REFUTED (2026-08-04)
+
+I predicted bs=16 was the constraint: the champion runs **C=64 keys per pass** while paged has
+been on 16 all day, so widening the paged block should close ground. Swept on the specialised
+scalar path, one binary, fresh server per point, best of 5:
+
+| config | prompt_ms | vs static |
+|---|---|---|
+| STATIC | **1,128.1** | — |
+| paged bs=16 (default) | 1,568.5 | 1.39x |
+| paged bs=32 | 1,559.7 | 1.38x (−8.8 ms, at the ~5 ms noise floor) |
+| paged bs=64 | 1,682.4 | worse |
+| paged bs=128 | 2,166.8 | much worse |
+
+Output sha identical at every block size (`3f50cc30`), so correctness is unaffected — this is
+purely a performance knob and it does not pay. **bs=32 is not a win**; it sits at the noise floor
+and would be a change with no measured benefit.
+
+**⇒ THIRD independent refutation of the same idea.** Multi-block staging (`sb`), the MMA tile
+width, and now the paged block size have each said the same thing: **our paged kernel does not
+benefit from wider key tiles.** That is no longer a hypothesis worth re-testing from a new angle;
+it is a property of this kernel.
+
+### So where does the remaining 1.39x actually live?
+
+Not in tile width. The honest structural read of what static does that paged does not:
+
+- Static `kernel_flash_attn_ext` computes Q@K^T as a **matrix op** — 8 query rows x 8 keys per
+  instruction, across 213 hand-tuned specialisations.
+- Paged scalar computes **one query row at a time**, per-thread dot products reduced with
+  `simd_sum`.
+
+That is the difference a wider tile cannot fix. Closing it means the **MMA path has to become
+competitive**, and today it is not: 1,960 vs the scalar's 1,570. For MMA to reach static's 1,131
+it needs roughly **−42%** from where it stands.
+
+**⚠ Do not read this as "the gap is unclosable."** It is a statement of where it is NOT: it is
+not in staging width, not in block size, not in nsg (swept, default already optimal), and not in
+barrier placement (swept, free). Those are closed. What remains unexamined on the scalar path is
+whether it is doing **more work per key than static** — block-table indirection per key, masking
+applied per token rather than per tile, and the per-row `simd_sum` reduction chain. That is the
+next place to look, and it has not been measured.
