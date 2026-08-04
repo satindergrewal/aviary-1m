@@ -2485,3 +2485,33 @@
 #   3. THEN O-in-fragments becomes legal, which frees QR*D floats, which is what makes nsg=8
 #      fit -- and nsg is the largest measured lever (-29.7% per doubling at matched footprint).
 #   Order matters: specialise FIRST, fragments SECOND. Doing them in the other order fails.
+
+# ======= SPECIALISATION LANDS, AND IT BEATS THE MMA PATH I BUILT ALL DAY =======
+# fork c896eee8. head_dim is now a FUNCTION CONSTANT (FC_PAGED_ATTN + 0), one pipeline per D,
+# mirroring the champion's 213 template instantiations.
+#   scalar 2,944 -> 1,570 ms  (-46.5%)        MMA 2,023 -> 1,960 ms  (-3.1%)
+# ⇒ THE SPECIALISED SCALAR KERNEL BEATS THE MMA KERNEL BY 1.25x at D=128/bs=16.
+#   Confirmed on TWO independent runs: scalar 1,569.4 and 1,568.2 vs MMA 1,959.0.
+#   Noise floor ~5 ms (three repeats of one config: 1,964.5 / 1,960.1 / 1,965.6).
+#   Wall, 3 arms, marker proven, answers IDENTICAL:
+#     STATIC 1,131.0 | PAGED-SCALAR 1,570.3 | PAGED-MMA 1,959.8
+#   GAP TO STATIC: 1.39x  (was 1.79x an hour ago, 2.60x this morning)
+#   LADDER (scalar): 6,950 -> 3,334 -> 3,300 -> 2,940 -> 1,570.
+# WHY: the scalar hot loop is the NPT walk over head_dim and compile-time D unrolls it
+#   completely; the MMA inner work was already in fragments and had far less to gain.
+# ⇒ MMA IS NOW OFF BY DEFAULT, opt-in behind DS4P_METAL_MMA=1. It stays in the tree, correct,
+#   12/12 in both states, and it must BEAT the specialised scalar path to come back. Shipping
+#   the slower path because it is the one I spent the day on would be the wrong call.
+#
+# ⇒ HONEST RE-RANKING OF EVERYTHING MEASURED TODAY. Occupancy (18.4%), parallelism (-29.7%
+#   per nsg doubling), tile width, multi-block staging, barrier placement -- every one of
+#   those was a clean matched comparison and every one was measured on the MMA kernel, which
+#   is no longer the path that ships. They are NOT void; they are SCOPED. I spent the day
+#   tuning tiles inside a kernel whose single largest deficiency was that it was compiled
+#   generically, and the fix for that was ~30 lines.
+# ⇒ THE LESSON, and it is the same shape as the fifteen-arm pitch bug: I optimised hard
+#   INSIDE a structure I never questioned. The pitch was frozen by a finding; the generic
+#   compilation was frozen by never being compared to the champion's BUILD, only to its CODE.
+#   Read how the reference is BUILT, not just what it computes.
+# NEXT: the scalar path is now the subject. Re-measure ITS levers (it has never been swept
+#   post-specialisation -- and the old nsg sweep is void anyway, see the desync above).
