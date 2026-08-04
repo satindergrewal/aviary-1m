@@ -1,0 +1,15 @@
+binary: $HOME/Documents/GitHub/llama.cpp-ds4ports/build-metal/bin/llama-server  mtime=2026-08-04 19:46:25
+tip:    c896eee8
+STATIC         rep1  decode=104.31   tok/s
+STATIC         rep2  decode=102.99   tok/s
+STATIC         rep3  decode=104.84   tok/s
+STATIC         rep4  decode=102.83   tok/s
+STATIC         BEST=104.84   tok/s   crashed=0
+0
+PAGED          rep1  decode=30.98    tok/s
+PAGED          rep2  decode=69.06    tok/s
+PAGED          rep3  decode=45.73    tok/s
+PAGED          rep4  decode=16.19    tok/s
+PAGED          BEST=69.06    tok/s   crashed=0
+0
+=== done -> $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/metal-decode-wall-20260804-1947.txt ===
