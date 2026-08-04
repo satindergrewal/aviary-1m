@@ -1554,3 +1554,36 @@
 #   dst -- every row then reports WHICH writer produced it. Identity in, identity out.
 # ARM LEDGER: A-E PASS · F 0.494 all-rows · G 0.683 · H 0.494 · J 0.48-0.50 all-rows.
 # Reverted, 12/12 PASS, dirty 0. Prefill unchanged 2.96x.
+
+# ============================================================================
+# ★★★ IDENTITY DUMP NAMES THE DEFECT -- BY DATA, NOT THEORY (results/metal-identity-dump-*)
+# ============================================================================
+#   row->writer: 0:0 1:0 2:0 3:0 ... 23:0   (with -0 garbage on varying rows per run)
+# EVERY row reads 0 ⇒ EVERY threadgroup computed gtok = 0 ⇒ tgpig[0]*args.nsg == 0 for all
+# tgpig ⇒ **args.nsg READS AS 0 IN THE SHADER while the host initializer set 2.**
+# The appended kargs fields (q_parallel / n_tokens_total / nsg) are NOT reaching the kernel
+# with their host values -- a host/shader kargs disagreement on the NEW fields.
+#
+# ★★ ELEVEN ARMS COLLAPSE INTO ONE PLUMBING DEFECT:
+#   - F/G/H/J never tested packing AT ALL: gtok=0 everywhere, so every threadgroup RACED to
+#     write row 0 (last-writer-wins of different outputs = row 0 wrong too) and rows 1-23
+#     were STALE MEMORY (the -0 entries, varying run to run = uninitialized, and the reason
+#     nmse sat near 0.5 whatever the "algorithm" was).
+#   - E passed because gtok = tgpig[0] never touches args.nsg. A/B/C/D never read new fields.
+#   - The H "uniform bounds changed nothing" result and the F==H residual identity are now
+#     EXPECTED: the loop-structure changes were downstream of a gtok that was always 0.
+#   - The "non-pure state" paradox DISSOLVES: row 0 in J was overwritten by 12 racing
+#     threadgroups, not perturbed by its sibling sg.
+# ⇒ The packing DESIGN is untested rather than broken. The defect is kargs PLUMBING.
+# WHY the shader sees 0 = the ONE open question. First checks next session (cheap, ordered):
+#   (1) grep for a SECOND struct copy: the .metal source may carry its own
+#       ggml_metal_kargs_paged_attn definition that my impl.h edit did not touch -- the
+#       embedded-library path compiles the .metal with its own header snapshot;
+#   (2) whether the embedded metallib re-embeds ggml-metal-impl.h on cmake build or only
+#       ggml-metal.metal (stale-dependency class);
+#   (3) set_bytes size/alignment on the widened struct (uint64_t stride_token moved 36->48).
+# ⚠ AND THE SESSION'S ARM CONCLUSIONS ARE PARTLY RETRACTED: "grid width exonerated" and
+# "formula guilty" were conclusions about arms that were not testing what they claimed to
+# test. The arm LEDGER stands as data; the INTERPRETATIONS from F/G/H/J are void. E's pass
+# and the champion transfer list stand.
+# Reverted, 12/12 PASS on rebuilt binary, dirty 0. Prefill unchanged 2.96x.
