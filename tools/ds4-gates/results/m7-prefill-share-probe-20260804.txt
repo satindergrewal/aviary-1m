@@ -1836,3 +1836,33 @@
 # NEXT ARM unchanged in shape, now better aimed: identity-in/identity-out, and vary the
 #   transposed-load STRIDE first (D -> padded), since the champion never passes a bare
 #   packed width to a threadgroup transposed load.
+
+# ============================================================================
+# ★★★ IDENTITY I/O NAMES THE MMA BUG EXACTLY (marker=4242, D=128)
+# ============================================================================
+# Q = I, K = I  =>  a correct 8x8 tile MUST be the identity. Measured:
+#     1 0 0 0 0 0 0 0
+#     0 0 0 0 0 0 0 0
+#     0 0 1 0 0 0 0 0
+#     0 0 0 0 0 0 0 0
+#     0 0 0 0 1 0 0 0      nonzero ONLY at (0,0)(2,2)(4,4)(6,6)
+#     0 0 0 0 0 0 0 0      = THE EVEN DIAGONAL. Odd rows and cols entirely zero.
+#     0 0 0 0 0 0 1 0
+#     0 0 0 0 0 0 0 0
+# ★ DERIVATION (arithmetic, not guess): result(i,j) = SUM_d A[i][d]*B[j][d]. With identity
+#   inputs A[i][d]=[i==d], B[j][d]=[j==d], the observed [i==j AND i even] can ONLY arise if
+#   the sum runs over EVEN d ONLY -- i.e. **the contraction axis is stepping by 2, reading
+#   every other element within a row.**
+# ⇒ ROOT CAUSE CLASS CONFIRMED = Grok's suspect #2: a 2x ELEMENT-GRANULARITY mismatch --
+#   the loads are addressing the 16-bit (half) staged buffers with 32-bit granularity.
+#   NOT padding, NOT bank conflicts, NOT precision, NOT row-mapping.
+#   It also explains the earlier real-data dump: row0 exact at k=0,4 (stride-4 survivors)
+#   with zeros between, and other rows reading unrelated regions.
+# ⇒ FIX DIRECTION (test in this order, one factor each):
+#   (a) express the transposed/normal load strides in the fragment's element units, or
+#   (b) stage K/V/Q as FLOAT (matching simdgroup_float8x8) instead of half, or
+#   (c) follow the champion exactly: load K from DEVICE with the tensor's own stride
+#       (~:6950) rather than from a packed threadgroup tile.
+#   The champion's threadgroup transposed load passing 4*16 for a 16-wide tile is
+#   consistent with (a): its stride carries a granularity factor, ours does not.
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap unchanged 2.60x. Nothing claimed.
