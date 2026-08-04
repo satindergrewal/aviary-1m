@@ -189,3 +189,60 @@ lines, not four thousand.**
 
 Credit: Xu, Xiong, Zhang, Guo, Liu, Zhou, Hu, Wu, Li, Zhao, Guo, Zhu, Zhou, Leng — eLLM,
 arXiv 2506.15155, DAC '26.
+
+---
+
+# Addendum — the parity gap Satinder called out (2026-08-04)
+
+**His objection, and he is right:** "for these models, without kv-paged I'll not have the same
+experience I want which we get in vLLM/SGLang with multi-agent work. **That means the parity is
+broken!**"
+
+Correct. The hybrid guard prevents a *lie*; it does not deliver *parity*. I presented a
+limitation as though it were a feature. And the gap widens over time rather than closing —
+Qwen3.5-MoE linear attention, Jamba, Nemotron-Mamba, MiniMax and Ornith itself are all hybrids.
+**Hybrid paged support is a headline capability, not a footnote.**
+
+## Measured state of hybrid paged support
+
+Scaffolding already exists (`DS4P_PAGED_HYBRID=1`, "3b development"), and the in-code note says
+*"graph branch + scheduler discovery landed 2026-08-04; hybrid DECODE gate pending"*. Layer
+filters are written for FALCON_H1 / INKLING, NEMOTRON_H(+MOE), and QWEN35(+MOE).
+
+**Tested on Ornith-9B (`qwen35`, 32 layers, Q8_0) with the dev flag:**
+
+- Gets **past** the architecture assert.
+- Fails one level deeper, at `llama_paged_scheduler_init`:
+  *"context does not have a paged KV cache … SWA architectures (gemma3, llama4, etc.) are not
+  yet supported."*
+
+**⚠ That error message is MISLEADING and cost me a wrong first diagnosis.** The log shows
+`n_swa = 0`, `is_swa_any = 0` — **Ornith has no SWA whatsoever.** SWA is not why it failed.
+
+**Actual cause:** the paged-pool bring-up under `DS4P_PAGED_HYBRID` sits *inside the hybrid-**iswa**
+branch* (`if (hparams.swa_type != LLAMA_SWA_TYPE_NONE)`). Ornith is hybrid **without** SWA, so it
+takes the plain `llama_memory_hybrid` branch, where **no paged pool is constructed at all** — and
+the scheduler then correctly reports it cannot find one, while blaming the wrong cause.
+
+## What this means for the work
+
+The gap is **narrower and more concrete** than "hybrid is not supported":
+
+1. **Mirror the pool bring-up into the non-SWA hybrid branch.** The SWA branch already shows the
+   shape; this is wiring, not design.
+2. **Fix the misleading error text** so it reports what is actually missing. It sent me down an
+   SWA path on a model with `n_swa = 0`; it will do the same to anyone else.
+3. **Hybrid decode gate** — the piece the in-code note already flags as pending.
+4. Then the attn-only pool filter (today the pool "spans all layers", which over-allocates for a
+   hybrid where only a minority of layers hold KV — safe but wasteful, and it interacts well with
+   the new n_ctx-bounded sizing).
+
+## Consequence for the eLLM ranking above
+
+Satinder: *"We intend to get rid of slots (`-np 1`) on final stages, right?"* — taken as the
+intent that `-np 1` is a **current workaround for long context, not the destination**.
+
+⇒ If the target is **full context AND concurrency**, then eLLM's **SLO-aware scheduler moves up**
+from "near-worthless at -np 1" to genuinely relevant, because there will be concurrent requests
+to schedule. Its rank in §6 is therefore **conditional on the multi-slot goal**, and should be
+re-raised when multi-slot-at-long-context becomes the target rather than a limitation.
