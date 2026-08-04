@@ -565,3 +565,41 @@ negative must be filed WITH its condition ([[refuted-needs-its-condition]]) — 
 design would have stayed dead and the port would have gone looking elsewhere.
 
 **METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
+
+## ★★ M3 PREMISE KILLED BEFORE CODING — the champion keeps O in threadgroup memory
+
+I asserted twice that O-in-fragments "is the champion's actual shape". **It is not**, and my OWN
+comment at `ggml-metal.metal:3036-3039` says so:
+
+> *"the O accumulator lives in threadgroup memory and is rescaled by scalar threads, **because
+> there is no per-row scale on a simdgroup_matrix**."*
+
+Champion source agrees: `:7495` `o8x8_t lo[NO]` is **loaded from threadgroup `sot`** at `:7501` —
+fragments are transient working copies inside a block iteration, not the durable home.
+
+**⇒ The expired condition reopened LESS than claimed.** Function-constant `D` removes the
+*register-indexing* blocker. It does **not** remove the *rescale* blocker — the online softmax
+needs a per-row multiply and a simdgroup_matrix has none. **Two independent blockers, and I
+conflated them.** One grep away, twice.
+
+**⇒ `so` cannot be eliminated. nsg=8 on the MMA path is permanently unreachable**, not merely
+unreachable at this layout.
+
+### The conclusion two milestones actually bought
+
+```
+MMA  nsg=4  smem 28,928  wall 2,323   <-- capped at 4 by so = QR*512, STRUCTURALLY
+LPK  nsg=8  smem 21,632  wall 2,054   <-- already at 8, already 13% faster
+```
+**LPK is structurally better on the very axis M2 proved matters, and already wins. MMA is the
+wrong substrate for the port.** Established with numbers across M1 (kill re-confirmed +35%) and
+M2 (occupancy priced -14.8%, ceiling proven), not assumed.
+
+**⇒ REVISED M3: specialise LPK, not MMA.** Function constants for the LPK loop bounds so the
+D-loop and NPT unroll fully — the same lever that paid **-46.5%** on the scalar path, applied to
+the path that already leads. No re-derivation needed to resume.
+
+**BAR CORRECTION (Grok, accepted):** clean-tip bar is **STATIC 1,483**, not the 1,511 from the
+dirty-tree wall. Board prefill stays **1.317x**.
+
+**METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
