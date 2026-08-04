@@ -1884,3 +1884,25 @@
 #   simdgroup_multiply_accumulate requires the accumulator to be distinct from both
 #   operands, or that `origin`/transpose semantics differ from my reading.
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap unchanged 2.60x. Nothing claimed.
+
+# --- ARM (d): ACCUMULATOR ALIASING REFUTED TOO. Three arms, one pattern. ---
+# Accumulator distinct from both operands on every call (mAcc never an operand; separate
+# fragment vars per iteration; simdgroup_multiply into a distinct dst as well).
+#   RESULT: BIT-IDENTICAL even diagonal again. marker=4242.
+# ⇒ THE PATTERN IS INVARIANT ACROSS: half staging · float staging · distinct accumulator.
+#   That excludes, in one sweep, every type-dependent AND aliasing hypothesis: padding,
+#   granularity, precision, row-map, operand aliasing. Cause is type-invariant and lives in
+#   the fragment-mapping contract or the load/store semantics themselves.
+#
+# ⚠★ FLAW IN MY OWN PROBE DESIGN, found while reading arm (d) -- record before reusing it:
+#   **THE IDENTITY MATRIX IS SYMMETRIC, SO IT CANNOT DETECT A TRANSPOSE ERROR AT ALL.**
+#   With A=B=I, result(i,j) = SUM_d A[i][d]*B[j][d] = SUM_d A[i][d]*B[d][j] -- transposed
+#   and non-transposed loads give the SAME answer. Every transpose hypothesis is INVISIBLE
+#   to the probe I have been running three times.
+#   ⇒ NEXT PROBE MUST USE A NON-SYMMETRIC, POSITION-ENCODING PATTERN, e.g.
+#     A[i][d] = i*100 + d  and  B[j][d] = j (or a distinct scale), so every output element
+#     decodes to the exact (i,j,d) triple that produced it. Identity-in/identity-out was the
+#     right INSTINCT and the wrong MATRIX: it proves presence, not permutation.
+# STILL UNTESTED: (c) K from DEVICE with the tensor's own stride (champion's contract);
+#   transpose/origin semantics against the Metal spec rather than memory.
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Cause OPEN, pattern FACT.
