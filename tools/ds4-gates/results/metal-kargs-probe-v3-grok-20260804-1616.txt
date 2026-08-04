@@ -1,0 +1,80 @@
+=== GROK independent re-run of dirty probe binary 16:16:50 ===
+ggml_metal_device_init: tensor API disabled for pre-M5 and pre-A19 devices
+ggml_metal_library_init: using embedded metal library
+ggml_metal_library_init: loaded in 0.009 sec
+ggml_metal_rsets_init: creating a residency set collection (keep_alive = 180 s)
+ggml_metal_device_init: GPU name:   MTL0 (Apple M3 Max)
+ggml_metal_device_init: GPU family: MTLGPUFamilyApple9  (1009)
+ggml_metal_device_init: GPU family: MTLGPUFamilyCommon3 (3003)
+ggml_metal_device_init: GPU family: MTLGPUFamilyMetal4  (5002)
+ggml_metal_device_init: simdgroup reduction   = true
+ggml_metal_device_init: simdgroup matrix mul. = true
+ggml_metal_device_init: has unified memory    = true
+ggml_metal_device_init: has bfloat            = true
+ggml_metal_device_init: has tensor            = false
+ggml_metal_device_init: use residency sets    = true
+ggml_metal_device_init: use shared buffers    = true
+ggml_metal_device_init: recommendedMaxWorkingSetSize  = 115448.73 MB
+ggml_metal_init: allocating
+ggml_metal_init: found device: Apple M3 Max
+ggml_metal_init: picking default device: Apple M3 Max
+ggml_metal_init: use fusion         = true
+ggml_metal_init: use concurrency    = true
+ggml_metal_init: use graph optimize = true
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_paged_attn_write_f32', name = 'kernel_paged_attn_write_f32'
+ggml_metal_library_compile_pipeline: loaded kernel_paged_attn_write_f32                   0x102cb8a90 | th_max = 1024 | th_width =   32
+ggml_metal_library_compile_pipeline: compiling pipeline: base = 'kernel_paged_attn_f32', name = 'kernel_paged_attn_f32'
+ggml_metal_library_compile_pipeline: loaded kernel_paged_attn_f32                         0x102cb9310 | th_max = 1024 | th_width =   32
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+ggml_compute_forward_paged_attn: running CPU reference implementation of paged attention. This is for correctness validation only and is not optimized. See docs/paged-attention.md for details.
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+HOSTPROBE sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24
+ggml_metal_free: deallocating
+backend: MTL0   reference: CPU
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D= 64 case A: with_rel=1 window=0 max_abs=1.235e+04 nmse=2.994e+08 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D= 64 case B: with_rel=1 window=8 max_abs=1.235e+04 nmse=1.873e+08 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D= 64 case C: with_rel=0 window=8 max_abs=1.235e+04 nmse=2.195e+08 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D= 96 case A: with_rel=1 window=0 max_abs=1.235e+04 nmse=1.957e+08 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D= 96 case B: with_rel=1 window=8 max_abs=1.235e+04 nmse=1.232e+08 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D= 96 case C: with_rel=0 window=8 max_abs=1.235e+04 nmse=1.438e+08 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D=128 case A: with_rel=1 window=0 max_abs=1.235e+04 nmse=1.484e+08 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D=128 case B: with_rel=1 window=8 max_abs=1.235e+04 nmse=9.181e+07 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D=128 case C: with_rel=0 window=8 max_abs=1.235e+04 nmse=1.071e+08 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D=192 case A: with_rel=1 window=0 max_abs=1.235e+04 nmse=9.843e+07 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D=192 case B: with_rel=1 window=8 max_abs=1.235e+04 nmse=6.127e+07 FAIL
+    SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345
+    SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+D=192 case C: with_rel=0 window=8 max_abs=1.235e+04 nmse=7.221e+07 FAIL
+test-paged-vs-cpu: 12 FAILED
+exit=1

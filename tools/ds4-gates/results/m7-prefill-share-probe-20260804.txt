@@ -1657,3 +1657,29 @@
 #   arm is the REAL first packing experiment -- q_parallel block at the TRUE anchor
 #   ("threadgroup float * sh_m   = shmem;"), asserted, marker included, freshness-gated.
 # Reverted, 12/12 PASS on fresh-verified binary, dirty 0.
+
+# ============================================================================
+# ★★★ THE REAL PACKING ARM: 12/12 PASS FIRST TRY -- and the wall says WASH
+# ============================================================================
+# With verbatim-asserted anchors and a fresh-verified binary, the q-parallel packed
+# prefill (nsg=2, one simd group per row, no combine, no barrier) that "failed" through
+# eleven arms PASSES EVERY CASE at ~1 ULP on its first properly-installed run
+# (results/metal-real-packing-arm-20260804-1620.txt). THE DESIGN WAS NEVER BROKEN.
+# EVERY prior "packing failure" was my patches -- the invented anchor, silent no-ops.
+#
+# WALL (results/metal-paged-baseline-20260804-1620.txt, n=3, fresh binary):
+#   prefill 3,408-3,413 ms vs rung-2's 3,372     = WASH (within the ±40 ms spread)
+#   decode  63.4-63.7 tok/s                       = unchanged, no regression
+#   answers IDENTICAL
+# ⇒ Removing the combine buys ~nothing, and the transfer list PREDICTED this: one barrier
+#   pair per row amortized over a 1,523-iteration key loop is noise. The champion's actual
+#   prefill win is SHARED K/V TILES across a Q-block (~8x bandwidth) + simdgroup_matrix --
+#   neither is in this arm. The 2.96x prefill gap is a BANDWIDTH/COMPUTE story, not a
+#   synchronization story.
+# DECISION: REVERTED -- correct-but-neutral complexity does not ship; the Q-block port
+#   restructures this loop anyway. What the arm BANKED: the q_parallel scaffold (kargs,
+#   per-sg gtok, whole-range walk, direct write) is PROVEN CORRECT end to end and is the
+#   substrate the Q-block port builds on with zero unknowns left in the plumbing.
+# ⇒ NEXT (unchanged, now fully de-risked): the Q-block port from main FA :6592/:6619/:6716
+#   -- shared KV tiles + NQ=Q/NSG row split + uniform loop + mask. Copy allowed, credited.
+# Reverted, 12/12 PASS fresh-verified, dirty 0. Prefill 2.96x / decode 1.60x stand.
