@@ -2653,3 +2653,43 @@
 #   STASHING my change and rebuilding: it fails identically on the clean baseline, so it is
 #   NOT caused by this work. It does mean the lane currently has no working end-to-end paged
 #   gate -- test-paged-vs-cpu (12/12) covers the kernel, not the model path. Worth its own arm.
+
+# ═══════ ⚠⚠⚠ THE DECODE STALL WAS THE PAGED POOL EATING THE MACHINE ═══════
+# SATINDER SPOTTED IT, NOT ME. He asked why a 2.3 GB model made the machine nearly fill up
+# and glitch. I had been measuring the resulting decode variance FOR HOURS -- profiling it,
+# ruling out warm-up, pool size, contention, residency, graph reuse -- and never once asked
+# whether the FOOTPRINT was reasonable. Second time this exact class has cost me (see the
+# DL-crawl night in [[accepted-absurdity-check]]).
+#
+# ROOT CAUSE, common/common.cpp:1287:   n_gpu_blocks = available_vram / bytes_per_block
+#   n_ctx NEVER ENTERED THE CALCULATION. Correct on a DISCRETE GPU (it is what vLLM does --
+#   the block pool owns the card's private memory) and catastrophic on UNIFIED MEMORY, where
+#   "free VRAM" IS the machine's RAM.
+#   MEASURED, 128 GB Mac, 2.3 GB model:
+#     ctx=16384   static 4.91 GB / 87% free      paged  88.79 GB / 5% free
+#     ctx=32768   static 7.27 GB / 84% free      paged 112.39 GB / 6% free
+#   ~46,000 blocks for a 16K request -- about 45x the context asked for.
+#
+# FIX (fork 9f7006b9): cap by what the context needs,
+#   ceil(n_ctx/block_size) * n_seq * headroom (default 1.5x), VRAM kept as the HARD CEILING
+#   and still logged so the discrete-GPU sizing stays visible. LLAMA_PAGED_POOL_HEADROOM
+#   overrides; a large value restores the old fill-all behaviour where that is right.
+#     ctx=16384   paged 88.79 -> 6.97 GB   system 5% -> 86% free
+#     ctx=32768   paged 112.39 -> 11.40 GB system 6% -> 83% free
+#
+# ⇒ AND IT ELIMINATED THE DECODE STALL OUTRIGHT. 20 reps per arm, 128-token generations:
+#     BEFORE  paged min 1,406  med 1,829  max 8,664   spread 6.2x
+#     AFTER   paged min 1,408  med 1,421  max 1,459   spread 1.04x
+#   Static is 1.06x on the same run, so paged is now AS STABLE AS STATIC. Mechanism: at 5%
+#   free the process page-faults, which is exactly why the stall was HOST-SIDE and why host
+#   CPU rose with stall length -- both things I measured correctly and then explained wrongly.
+# ⇒ DECODE GAP IS NOW A CLEAN, STABLE 1.16x (1,421 vs 1,225). The old "1.60x" was the median
+#   of a mixture created by this bug.
+# ⇒ PREFILL UNAFFECTED: 1,575 vs 1,570 before, answers IDENTICAL across all three arms.
+# ⇒ 12/12 PASS.
+#
+# WHAT I SHOULD HAVE DONE: the very first decode measurement showed a 4.5x spread on
+#   bit-identical work. That is already absurd. The next question after "is this reproducible"
+#   should have been "is the RESOURCE FOOTPRINT of this configuration sane" -- one `ps` away
+#   for hours. Every hypothesis I chased (residency daemon, graph reuse, allocation churn) was
+#   downstream of a number I never looked at.
