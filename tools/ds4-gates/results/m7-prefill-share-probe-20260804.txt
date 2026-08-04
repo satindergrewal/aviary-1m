@@ -1499,3 +1499,21 @@
 # The K/V-amortisation diagnosis and the transfer table's substance STAND; the anchors and
 # the over-strong "never" are corrected here. A witness citing wrong lines is a false
 # record regardless of how right the conclusion felt.
+
+# --- ARM H: UNIFORM TRIP COUNTS + MASK. FAILS AT EXACTLY ARM F'S RESIDUAL. ---
+#   H  rows differ per sg, loop bound THREADGROUP-UNIFORM (pack-max n_tok), masked
+#      iterations (in-bounds clamped reads, sc=-INF, pv guarded against exp(-INF - -INF)
+#      = NaN -- that guard was needed and is a keeper for any masked-FA port)
+#      -> 12/12 FAIL, nmse 0.494 / 0.502 -- IDENTICAL to ARM F's 0.494.
+# ⇒ ★★ THE DIVERGENCE HYPOTHESIS IS REFUTED, by the arm designed to refute it, BEFORE it
+#   was ever announced as a cause. Fifth hypothesis to die today; first to die correctly.
+#   Uniform bounds changed NOTHING, so trip-count divergence is NOT the constraint.
+# ⇒ WHAT THE LEDGER NOW SAYS (observation, not cause): E (same row per sg) passes; F/G/H
+#   (different rows per sg) all fail at ~half wrong, INVARIANT to assignment AND to loop
+#   structure. The E-vs-F/G/H delta therefore isolates to PER-SG ROW STATE -- the seq/
+#   i_local scan, q_off, or the dst write path when gtok differs per sg -- not to how the
+#   key loop iterates. Next probe: write gtok/q_pos/seq into dst per row (the instrumented
+#   arm from the resume block) and READ BACK which half is wrong and what those rows
+#   actually computed. Data, then cause.
+# ARM LEDGER: A PASS · B PASS · C PASS · D PASS · E PASS · F 0.494 · G 0.683 · H 0.494.
+# Reverted to c6aebd6a, 12/12 PASS, dirty 0. Prefill unchanged 2.96x. Nothing shipped.
