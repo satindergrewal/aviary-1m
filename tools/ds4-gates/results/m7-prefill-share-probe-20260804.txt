@@ -2194,3 +2194,49 @@
 #
 # ⇒ The MMA contract is now fully measured end to end. What remains is WIRING it into
 #   kernel_paged_attn_f32, which today has no MMA path at all. Wall 2,945, gap 2.60x, OPEN.
+
+# --- PAGED FLASH-ATTENTION MMA PROTOTYPE: GATE PASS 12/12 (1 skipped, smem) ---
+# tools/ds4-gates/sgload_probe/fa_gate.sh -- the COMPLETE inner loop standalone: paged block
+# table, K/V staging, Q@K^T by MMA, online softmax with causal mask, P@V by MMA, online
+# rescale of the O accumulator. Validated against a CPU reference at ~4e-06..8e-06.
+#   1 tile/1 block | 1 block | 4 sg | 2 blocks | 3 blocks | ragged tail (n_tok=100)
+#   head 0/3/7 | n_heads=32 | D=8 | D=128 (tile resized) | bs=16 | 8 sg -> SKIP smem
+# Iterated in SECONDS per arm. Zero llama.cpp rebuilds, no offline Metal toolchain.
+#
+# THREE MEASURED DESIGN FACTS (each found by a failing arm, none guessed):
+#  1. simdgroup_load requires the fragment element type to MATCH the source pointer type --
+#     a float8x8 CANNOT read half*. Staged operands (K,V,Q) are therefore half.
+#  2. ACCUMULATORS MUST BE FLOAT. multiply_accumulate takes four independent floating-point
+#     type params (dst,a,b,acc), so float-acc with half inputs is legal. Accumulating Q.K in
+#     half cost 2.4e-02 at D=64, and it SCALED WITH D (4.6e-03 at D=8) -- the tell that it
+#     was accumulation, not rounding.
+#  3. P MUST BE FLOAT TOO. Half P sat at 1.5e-04 for 1-2 blocks but 2.0e-03 at 3+ blocks:
+#     the kernel quantizes P against the RUNNING max, so error compounds as the online
+#     rescale chain lengthens. Promoting P to float dropped every config to ~1e-05 vs the
+#     precision-matched reference. A one-factor test, not a tolerance change.
+#
+# FOUR MORE SELF-CAUGHT DEFECTS (running total for this probe: eight):
+#  (e) FAKE SWEEP: `for cfg in "64 8 3 8 32 1"; do ./p $cfg` -- zsh does NOT word-split an
+#      unquoted parameter expansion, so only the FIRST token applied and six rows were the
+#      SAME config. It printed a tidy table showing "error independent of n_tok", which is
+#      false. Caught because a row claimed worst-case tok=23 for an 8-token run. Gates now
+#      run under bash and pass args as "$@".
+#  (f) MISLABELLED REFERENCE: adding Q-as-half quantization to the shared `logits` variable
+#      silently made the "vs exact" column not exact. The two columns then agreed trivially
+#      and the agreement LOOKED like evidence. Now two genuinely separate references, and
+#      the exact column stays visible so the half-staging cost (~4e-04) is never hidden.
+#  (g) WEAK BLOCK TABLE: (i*7+3) % max_blocks maps logical block 0 -> PHYSICAL 0 whenever
+#      max_blocks is 1 or 3 -- so the early tokens, exactly the ones the causal mask confines
+#      to block 0, never exercised remapping. Three configs reported an identical worst case.
+#      Reversed the mapping; the rows then diverged, proving paging is now under test.
+#  (h) D=128 printed NOTHING and I nearly moved on. It was exiting 77 (smem 47,360 > 32,768)
+#      and my grep filtered the line away. A silent config is not a passing config -- the
+#      gate now prints SKIP explicitly and counts it separately from PASS.
+#
+# SMEM IS A REAL DESIGN CONSTRAINT, NOT A NUISANCE: (2*bs*D + QR*D)*2 + (2*QR*SH + QR*PV +
+#   2*QR)*4 bytes. D=64/bs=32/nsg=4 = 28,928 fits; nsg=8 = 49,664 does NOT. The tile config
+#   MUST adapt to head_dim (D=128 needs bs=16/nsg=2). The in-tree wiring has to choose these
+#   per model, and layout + dispatch allocation must change together.
+#
+# STILL NOT CLAIMED: this is a standalone prototype. kernel_paged_attn_f32 is untouched.
+#   Wall 2,945, gap 2.60x. Nothing lands until it is wired, marked, gated 12/12 and walled.
