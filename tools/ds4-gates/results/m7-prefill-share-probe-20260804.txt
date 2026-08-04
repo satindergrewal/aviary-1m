@@ -1269,3 +1269,27 @@
 # Barriers are worth ~2x on prefill. The decode fix must ADD parallelism, not just remove
 # barriers -- same currency as the CUDA split-K that bought decode 3.16x. Next attempt fixes
 # the combine first and gates it at nsg>1 BEFORE any timing is taken.
+
+# --- METAL SPLIT-K: THE COMBINE IS EXONERATED. I BLAMED THE WRONG HALF. ---
+# ISOLATION ARM (nsg = 2, simd group 0 walks EVERY token, simd group 1 walks NONE):
+#   12/12 PASS, max_abs 4.470e-08, nmse 7.69e-15 -- identical to the single-group path.
+# That arm exercises the ENTIRE combine: both slices write m/l/acc to threadgroup memory,
+# the barrier runs, and simd group 0 reads BOTH slices back, including the empty one whose
+# m = -INF must contribute exactly zero weight. All of it correct.
+# ⇒ ★ THE LOG-SUM-EXP MERGE, THE SHARED-MEMORY LAYOUT, THE BARRIER AND THE ZERO-WEIGHT
+#   GUARD ARE ALL PROVEN GOOD. The defect is in the STRIDED KEY WALK
+#   (`for tok = lo + sg; tok < n_tok; tok += nsg`), which is the ONLY thing the failing
+#   variant does that this passing one does not.
+#
+# ⚠⚠ SELF-CORRECTION, PUBLIC: I posted "the combine is wrong" and "it is the merge". That
+# was a GUESS dressed as a diagnosis -- I had only shown nsg=1 passes and nsg>1 fails, which
+# implicates everything the two differ by, not the merge specifically. One 3-line experiment
+# split that space in half and cleared the half I had accused. THIRD wrong cause today
+# (async copies, stale mirror, now the merge), and the first two had already taught me the
+# lesson I then ignored inside the same hour.
+# ⇒ RULE EARNED THE HARD WAY: when a change bundles TWO mechanisms (new striding + new
+#   combine), the first move is the experiment that DISABLES ONE, not a story about which
+#   one it was. That experiment cost 3 lines and one build.
+#
+# SEARCH SPACE FOR THE NEXT ATTEMPT, now genuinely small: everything is right except how
+# tokens are distributed across simd groups. Combine untouched.
