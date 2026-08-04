@@ -118,12 +118,23 @@ Pool sized from `n_ctx`, not free VRAM. Reserve is an absolute floor on unified 
 0.8 GiB on a 16 GB one. When the request cannot fit: refuse and **name the largest `n_ctx` that
 would**, matching how the static path behaves, with `--paged-pool-clamp` to shrink instead.
 
-**S1 — verify commit-on-demand. ⚠ Measure before designing.**
-The 88.79 GB figure was **RSS**, i.e. *resident*, which means something is touching the whole
-pool at startup rather than leaving it lazily committed. If true, this is the single cheapest
-win available: an over-large pool becomes harmless, because untouched blocks cost address space
-rather than RAM. This is kvcached's core idea, and on unified memory we may get most of it free
-from the OS's own lazy commit. **Not yet measured — do this first.**
+**S1 — commit-on-demand. ❌ MEASURED AND REFUTED as a cheap win (fork `a391331c`).**
+The pool *is* eagerly resident: RSS 58.67 GB before any request on a 20x-headroom pool, 58.70
+after 3000 tokens. But `ggml_backend_buffer_clear` is **not** the cause — skipping it entirely
+gives 58.67 vs 58.68 GB, i.e. no change. **The residency path wires it**: `rset addAllocation`
++ `requestResidency` in `ggml-metal-device.m` make the buffer resident whether or not anything
+touches it. So there is no free lazy commit here; S1 requires **sparse or placement `MTLHeap`**,
+which remains unresearched and is now the gating question for this whole direction.
+
+**What S1 did establish, and it is worth having:** a poison probe (`DS4P_KV_POISON`, fills every
+pool with NaN) proves **nothing ever reads an unwritten KV block** — output sha bit-identical to
+the zeroed control, markers confirming the fill ran. The scalar path bounds its token loop
+instead of reading-then-masking. **Every lazy-allocation or reclaim scheme depends on exactly
+this property**, and it is now tested rather than assumed.
+
+⚠ Also learned: **`test-paged-vs-cpu` never constructs a paged KV cache at all.** It is a kernel
+gate. It cannot answer allocation questions in principle, and three separate "ALL PASSED"
+results from it were meaningless before a marker exposed that.
 
 **S2 — pressure-driven reclaim.** Subscribe to `DISPATCH_SOURCE_TYPE_MEMORYPRESSURE` (macOS)
 and cgroup PSI (Linux). warn ⇒ stop growing + spill cold blocks to the CPU pool we already
