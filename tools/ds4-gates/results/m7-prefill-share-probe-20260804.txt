@@ -1392,3 +1392,28 @@
 #   per-simd-group seq/i_local/q_pos/lo all derive from gtok and must be re-derived per
 #   group, which is the one place two rows in a threadgroup can disagree.
 # REVERTED to c6aebd6a, 12/12 PASS, tree clean. Prefill unchanged at 3,372 ms = 2.96x.
+
+# --- RUNG 3 ARMS E + F: THE ERROR HALVED, AND THAT NUMBER IS THE CLUE ---
+#   E  q_parallel=1, nsg=2, NO packing (grid.x = n_tokens, both sgs compute the SAME row)
+#      → 12/12 PASS.  ⇒ MULTIPLE SIMD GROUPS PER ROW IS FINE. Not the defect.
+#   F  q_parallel=1, nsg=2, packing ON, but nsg passed EXPLICITLY in kargs instead of being
+#      derived from the threads_per_threadgroup builtin (ntg3[0]/32)
+#      → 12/12 FAIL but nmse 0.494, DOWN FROM 0.99.
+# ★★ THE ERROR HALVED. That is not noise and it is not cosmetic: deriving nsg from the
+#    builtin was GENUINELY WRONG, and fixing it recovered exactly half the output. The
+#    residual is now ~half the rows wrong at nsg=2, which points at ONE of the two simd
+#    groups' rows rather than at the mapping arithmetic as a whole.
+# ⇒ PRINCIPLE WORTH KEEPING REGARDLESS OF THE BUG: never derive a LAUNCH PARAMETER from a
+#   runtime builtin when the launcher can pass it. ntg3[0]/32 is a dependency on how the
+#   runtime reports the launch; args.nsg is a fact the dispatcher already knows.
+# NEXT ARM (do this first, do not theorise): dump gtok and q_pos into dst at nsg=2 and read
+#   back which rows are wrong. Even vs odd rows answers it immediately -- sg=0 vs sg=1.
+# STILL NOT DIAGNOSED. Reverted to c6aebd6a, 12/12 PASS, dirty 0. Prefill unchanged 2.96x.
+#
+# ARM LEDGER FOR THIS BUG (6 arms, 5 builds, ZERO causes guessed):
+#   A full/empty split ......................... PASS
+#   B contiguous halves ........................ PASS
+#   C strided nsg=2 ............................ PASS
+#   D strided nsg=8 ............................ PASS
+#   E q_parallel, nsg=2, no packing ............ PASS
+#   F q_parallel, nsg=2, packing, explicit nsg . FAIL nmse 0.494 (was 0.99)
