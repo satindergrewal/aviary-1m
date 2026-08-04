@@ -410,3 +410,43 @@ gates are far less exposed than expensive-rep ones.
 
 **METER (both re-gated, drift-free): Metal prefill 1.317x · Metal decode 1.171x · CUDA 1.21x
 STALE · 12/12 · floors 0.07%/0.36% · fork `02a3b6d9` dirty=0 · NOT SHIPPED.**
+
+## ★ STAGING-TRAFFIC SUSPECT — REFUTED (pre-registered criterion, fork dirty=3 → committed)
+
+The standing suspect for the prefill gap was device→threadgroup staging traffic. Arm: stop
+staging V, read it straight from device (champion shape). **One variable** — K staging, tile
+geometry, bs, nsg, LPK all held. Gated 12/12 both arms with `VSTAGE=OFF` printed; smem drops
+21,632 → 13,440 at D=128, so the traffic really was removed.
+
+| arm | mean | |
+|---|---|---|
+| STATIC | 1,501 | |
+| STATIC2 (repeat control) | 1,500 | **floor 0.07%** |
+| LPK, V staged | **2,033** | |
+| LPK, V from device | **2,057** | **+1.2% — WRONG DIRECTION** |
+
+**Pre-registered in chat #2455/#2464 before the run: CONFIRMS at ≥5%, REFUTES at <1%.**
+Result is **+1.2% the wrong way ⇒ REFUTED.** Device→threadgroup staging traffic is not the
+bottleneck, and this arm is filed as a negative, not spun.
+
+**Why it is slightly WORSE, which is the useful part:** all 8 simd groups share one K/V tile but
+own different query rows. A staged V is read 8× from threadgroup memory; an unstaged V is read 8×
+from **device**. Staging *amortises* across simd groups — it was never pure overhead. **The
+condition this negative needs:** V staging pays whenever `nsg > 1`; at `nsg == 1` there is nothing
+to amortise and the answer could invert.
+
+### Suspects remaining for the 1.35× prefill gap, ranked
+
+1. **The honest one: our kernel vs their kernel.** STATIC runs the champion
+   `kernel_flash_attn_ext` — heavily tuned, 213 template specialisations, full MMA. Paged runs
+   our hand-written scalar walk. Our own MMA attempt came in *slower* than our scalar. The gap
+   may substantially be that, not any single line.
+2. `block_table` indirection per block (never isolated).
+3. Per-block `threadgroup_barrier` structure (barriers measured free earlier, but not at bs=32
+   with the LPK layout).
+
+**Three eliminations now stand, each with its condition:** tile width (3 ways), reduction count
+(~3%), staging traffic (+1.2% wrong way). That is the search space genuinely narrowing.
+
+**METER: Metal prefill 1.354× (1,501 → 2,033) · decode 1.171× · CUDA 1.21× STALE · 12/12 ·
+floor 0.07% · NOT SHIPPED.**
