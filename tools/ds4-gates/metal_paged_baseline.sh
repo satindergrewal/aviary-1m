@@ -37,8 +37,14 @@ run_arm() {  # $1 = label, $2 = extra server args
     # shellcheck disable=SC2086
     nohup "$B" -m "$M" -ngl 99 -c 16384 -np 1 -b 512 -ub 512 \
         --port "$P" --no-warmup -lv 2 $2 > "/tmp/metal-$1.log" 2>&1 &
-    for _ in $(seq 1 90); do
-        curl -s "http://127.0.0.1:$P/health" >/dev/null 2>&1 && break
+    # ⚠ READINESS MUST CHECK THE STATE, NOT THAT SOMETHING ANSWERED. /health replies 503
+    # "Loading model" while the model loads, and `curl -s ... >/dev/null` exits 0 on a 503 --
+    # so the old loop broke immediately and fired requests into a loading server, which is
+    # exactly how the STATIC arm produced WALL=27ms with timings of -1 and no error anywhere.
+    # Poll the STATUS CODE until it is 200.
+    for _ in $(seq 1 120); do
+        code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$P/health" 2>/dev/null)
+        [ "$code" = "200" ] && break
         sleep 2
     done
 

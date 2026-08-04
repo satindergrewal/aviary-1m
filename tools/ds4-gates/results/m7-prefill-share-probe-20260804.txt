@@ -1293,3 +1293,41 @@
 #
 # SEARCH SPACE FOR THE NEXT ATTEMPT, now genuinely small: everything is right except how
 # tokens are distributed across simd groups. Combine untouched.
+
+# ============================================================================
+# ★★★ METAL PAGED CLIMB SHIPPED (ds4-ports 8f2e761b) -- decode 3.80x, prefill 2.08x
+# ============================================================================
+#              scalar (was)   this        gap to tuned static
+#   prefill    6,950 ms       3,334 ms    6.1x  -> 2.95x
+#   decode       9.0 tok/s     34.2 tok/s 11.4x -> 2.98x
+#   answers    BYTE-IDENTICAL to static; test-paged-vs-cpu 12/12 incl D=96 and D=192
+#   n=3 per arm, one binary, one model, arms differ in ONE flag. Gate ran BEFORE the wall.
+#
+# TWO CHANGES AND EACH ALONE WAS A REGRESSION -- the pair is the fix:
+#   1. simd_sum() replaces a threadgroup-memory tree reduction that ran ONCE PER KV TOKEN
+#      (~13,700 barriers per (token,head)). Alone: prefill 2.04x, decode 1.48x WORSE.
+#   2. split-K over the key range inside the threadgroup (nsg=8 decode / 2 prefill) puts the
+#      threads back: barriers O(n_kv) -> O(1) while thread COUNT rises. Decode has one query
+#      token so its grid is (1, n_heads) -- parallelism can only come from simd groups.
+#
+# ★★ THE BUG THAT COST FOUR WRONG DIAGNOSES WAS AN INCOMPLETE REFACTOR, not a design fault.
+# Splitting lanes from threads, I renamed tpitg -> lane in the q-load and the V-accumulate
+# and LEFT IT in the K dot product. At one simd group tpitg == lane so everything passed; at
+# nsg>1, lanes in group s read dims 32s.. and multiplied them by the wrong q elements.
+# Error ~0.6% -- small enough to read as precision.
+# I announced THREE causes before finding it (the merge, the strided walk, nsg), each from a
+# pass/fail pair that differed by several mechanisms at once.
+# ⇒ WHAT ACTUALLY FOUND IT: four arms each changing exactly ONE thing --
+#      A full/empty split .... PASS  (combine works, degenerate case only)
+#      B contiguous halves ... PASS  (merge of two REAL slices works)
+#      C strided at nsg=2 .... PASS  (striding works)
+#      D strided at nsg=8 .... PASS  (nsg works)
+#   All four passing is what proved the DESIGN was sound and the defect was in code already
+#   written. A theory would never have produced that; the arms did.
+#
+# ⚠ GATE BUG FIXED IN THE SAME PASS: the readiness loop polled /health and broke on ANY
+# response, but /health answers 503 "Loading model" while loading and `curl -s >/dev/null`
+# exits 0 on a 503. The STATIC arm was firing into a loading server -- WALL=27 ms, timings
+# -1, and NO error printed anywhere. Now polls until the STATUS CODE is 200.
+# ⇒ same class as everything else today: a readiness check that accepted an ANNOUNCEMENT
+#   instead of the STATE.
