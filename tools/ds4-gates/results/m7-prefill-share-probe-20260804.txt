@@ -2106,3 +2106,40 @@
 #   writes it) accumulated into one fragment; verify all 8 source rows land via the same
 #   round-trip harness. Rules 1+2 predict the offsets, so it confirms or breaks them.
 # SESSION END STATE: tip 354f006a, 12/12, dirty 0, wall 2,945, gap 2.60x, nothing claimed.
+
+# --- CANDIDATE (2) ALSO REFUTED, AND THE COUNT IS EXPLAINED (hypothesis, not yet measured) ---
+# Read the champion (ggml-metal.metal:6961-7000). The paired load is NOT a row-fill trick:
+#   for (i < DK8/2) { load(mq[0], pq + 0*8 + 16*i, DK); load(mq[1], pq + 1*8 + 16*i, DK); ... }
+# `16*i` with `+0*8`/`+1*8` = two ADJACENT 8-wide slices of the HEAD DIM, both accumulated
+# into one mqk because matmul sums over K. It is a K-dimension unroll. And line 6971-6972
+# shows the plain single-load form covering a full tile by itself:
+#   simdgroup_load(mk, pk + 8*i, NS10, 0, true);  simdgroup_load(mq, pq + 8*i, DK);
+# ⇒ one load DOES cover 8 rows. Candidate (2) dead. Both candidates dead without an arm.
+#
+# THE COUNT, from the champion's actual contract:
+#   pitch = the SOURCE row stride in elements. Champion loads Q with pitch DK and K with
+#   pitch NS10, then STORES with pitch SH -- three different pitches, load and store
+#   INDEPENDENT.
+#   My kernel used ONE pitch for both, and I set it to 2*D because that is what made the
+#   OUTPUT contiguous (recorded as "output placement: solved, pitch 2D").
+#   Apply my two MEASURED rules to P = 2D:
+#     Rule 1: frag row f <- element offset f*P = f*2D  =>  source row 2f
+#     f = 0..7 reaches source rows 0,2,4,6,(8,10,12,14 = past the tile)
+#     => exactly FOUR of the eight source rows land. THE RESIDUAL COUNT.
+#   And the even-even lattice (#2376) is the same fact seen in the dump's index space.
+#
+# ⇒ This is the arms-must-differ trap in its purest form: I turned ONE knob (pitch) to fix
+#   the OUTPUT symptom, and it broke the INPUT selection. One pitch cannot serve two
+#   strides. The champion never had this bug because load-pitch and store-pitch are
+#   separate arguments and it passes the correct one to each.
+#
+# STATUS: HYPOTHESIS. It fits all four measured points AND explains the one residual
+#   quantity, derived from the champion's code rather than invented. It is NOT measured.
+# CONFIRMING ARM (one factor, next session): split the pitch -- load with D (true source
+#   row stride), store with the destination stride -- and re-run the round-trip dump.
+#   Predicts: all 8 source rows land, contiguous output preserved. If both hold, wire it,
+#   12/12 with marker, then WALL vs 2,945.
+#   NOTE: the harness was uncommitted and went with the revert; rebuild it FIRST, and this
+#   time COMMIT it -- a probe that cannot be re-run is a probe that must be rebuilt.
+# ALSO from the champion, not yet in my kernel: simdgroup_barrier(mem_flags::mem_none)
+#   wrapped BEFORE and AFTER every load group. Separate item, do not fold into the arm.
