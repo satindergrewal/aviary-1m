@@ -44,9 +44,10 @@ so a hybrid *without* SWA takes the plain `llama_memory_hybrid` branch where no 
 
 ## The work, ordered so that each step makes the next cheaper
 
-1. **Mirror the pool bring-up into the non-SWA hybrid branch.** Wiring, not design — the ISWA
-   branch is the template. **Unblocks Ornith, Jamba, Nemotron-H, Kimi-Linear, LFM2, PLaMo2 in one
-   move**, since they share the plain-hybrid path.
+1. **Mirror the pool bring-up into the non-SWA hybrid branch.** Mechanical rather than novel —
+   the ISWA branch is the template — but it spans **five files**, not one line (see the
+   implementation map at the end of this document). **Unblocks Ornith, Jamba, Nemotron-H,
+   Kimi-Linear, LFM2, PLaMo2 in one move**, since they share the plain-hybrid path.
 2. **Fix the misleading scheduler error.** It sent me down an SWA path on a model with `n_swa=0`
    and will do it to the next person. Report *which* precondition actually failed.
 3. **Attention-only pool filter.** Today the pool "spans all layers" (in-code note), which
