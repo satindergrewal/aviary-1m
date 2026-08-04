@@ -2529,3 +2529,16 @@
 #   reached by a broken instrument is still a broken instrument. It is established now.
 # STATE: fork c896eee8, scalar+specialisation DEFAULT at 1,570 ms, gap 1.39x, 12/12 both
 #   paths, dirty 0. MMA opt-in behind DS4P_METAL_MMA=1 and must beat 1,570 to return.
+
+# --- block_size AS A SECOND FUNCTION CONSTANT: NEUTRAL, so REVERTED ---
+#   with bs specialised: 1,579.1 / 1,563.5 / 1,566.4   (three repeats)
+#   D-only, previously:  1,569.4 / 1,568.2 / 1,568.9
+#   Delta ~2-5 ms against a ~5 ms noise floor => NO MEASURED BENEFIT. 12/12 PASSED both ways.
+# ⇒ REVERTED rather than kept. An unmeasured-benefit change that stays in the tree becomes
+#   load-bearing later with nobody knowing why it is there. Recorded so it is not re-tried
+#   blindly: head_dim specialisation is worth -46.5%, block_size specialisation is worth ~0.
+# ⇒ WHY THE DIFFERENCE (hypothesis, unverified): head_dim bounds the INNER per-thread loop
+#   (NPT over the head vector, executed for every key) while block_size bounds an OUTER loop
+#   whose body is already large. Unrolling the hot inner loop is what paid.
+# ⇒ Nice property worth reusing: a wrong function constant would produce WRONG RESULTS, not
+#   just slower ones, so the 12/12 gate validates the constant plumbing itself.
