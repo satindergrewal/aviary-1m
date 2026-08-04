@@ -149,7 +149,37 @@ executed **once per (query row, key) pair** and it dominates. This is the cost t
 avoids entirely by expressing Q@K^T as a matrix op — and it is why widening the *tile* never
 helped: the tile was never the bottleneck, the **reduction count** is.
 
-**The proposed inversion: give each lane its own KEY rather than its own slice of head_dim.**
+### ⚠ CHECKED FIRST, as flagged — and the pure inversion IS dead. A two-phase form survives.
+
+I said the V accumulation was the most likely way this fails and to check it before building.
+Doing so: **it does reintroduce a reduction, and my "simd_sum leaves the key loop entirely" claim
+was wrong.**
+
+With lane-per-key, lane `l` holds the probability for key `t0+l`, but the output accumulator
+`accv[i]` is indexed by **head-dim element** (`lane + i*32`, matching the final `dst` write).
+Computing `acc[d] += sum_k p_k * V[k][d]` from that layout needs a cross-lane scatter — **a
+reduction per `d`**, which is strictly worse than today.
+
+**What survives is a TWO-PHASE loop, not an inversion:**
+
+- **Phase A — lane-per-KEY.** Lane `l` computes the complete dot for key `t0+l`: D serial MACs.
+  Then **two** reductions for the whole group of 32: one `simd_max` for the running max, one
+  `simd_sum` for the running denominator.
+- **Phase B — lane-per-head-dim (unchanged layout).** Scores are broadcast via threadgroup memory,
+  and the V accumulation proceeds exactly as it does today: `accv[i] += p_k * V[k][d]`, no
+  reduction, output layout untouched.
+
+**Arithmetic per 32 keys per lane:**
+
+| | MACs (scores) | MACs (V) | reductions |
+|---|---|---|---|
+| today | 128 | 128 | **32** |
+| two-phase | 128 | 128 | **2** |
+
+**Identical multiply-accumulate count; reductions cut 16x.** The win is real but it is a 16x cut
+in cross-lane traffic, **not** its elimination — the corrected claim.
+
+**The proposed structure: two phases, lane-per-KEY for scoring then lane-per-head-dim for V.**
 
 - Lane `l` computes the **complete** dot product for key `t0 + l`: D serial MACs, reading the
   staged tile row for that key.
@@ -172,9 +202,10 @@ failure rather than merely surviving it.
    D/32) — that is the real cost, and at D=256 it may not fit.
 3. **Tail handling.** Key counts not a multiple of 32 need masking that must not reintroduce a
    reduction.
-4. The V accumulation still needs a per-lane→per-head-dim redistribution; the win is only real if
-   that does not simply move the reduction rather than remove it. **Check this first — it is the
-   most likely way the idea fails.**
+4. ~~The V accumulation redistribution~~ — **CHECKED, see above.** It does reintroduce a
+   reduction, which kills the pure inversion; the two-phase form avoids it by returning to the
+   existing lane-per-head-dim layout for V, at the cost of broadcasting 32 scores through
+   threadgroup memory (one extra barrier per 32 keys — cheap, and barriers measured free here).
 
 Nothing here is implemented. It is written down so the next session starts from the arithmetic
 rather than re-deriving it.
