@@ -1517,3 +1517,22 @@
 #   actually computed. Data, then cause.
 # ARM LEDGER: A PASS · B PASS · C PASS · D PASS · E PASS · F 0.494 · G 0.683 · H 0.494.
 # Reverted to c6aebd6a, 12/12 PASS, dirty 0. Prefill unchanged 2.96x. Nothing shipped.
+
+# --- INSTRUMENTED PROBE (per-token error map added to the harness): ALL ROWS ARE WRONG ---
+# ARM F kernel + harness printing per-token max_abs on failure:
+#   bad tokens: 0 1 2 3 ... 23   -- EVERY token, EVERY case, EVERY head_dim.
+# ⇒ ⚠⚠ MY "HALF THE ROWS WRONG" CLAIM IS DEAD. It was arithmetic read off nmse ~0.494
+#   ("about half the energy wrong" -> "about half the rows"), never a measured map. SIXTH
+#   over-read number today. nmse ~0.5 with ALL rows wrong means every row is ~a mix, which
+#   is a completely different failure shape than half-right-half-wrong.
+# ⇒ WHAT THE LEDGER NOW ISOLATES: E vs F differ in exactly TWO launcher-visible things --
+#   (a) the gtok formula, (b) grid.x (n_tokens vs n_tokens/nsg). Corruption being GLOBAL
+#   (all rows, both sgs' rows) implicates something shared, and grid.x is the shared thing
+#   that changed. NEXT ARM, one factor: keep the F gtok formula but leave grid.x =
+#   n_tokens (odd rows computed twice/garbage is fine -- read ONLY the even rows). If even
+#   rows come back CORRECT, the formula is exonerated and the defect follows grid.x. If
+#   they are wrong, the formula (or per-sg state derived from it) is guilty at last.
+# HARNESS KEEPER: the per-token map is 12 lines in test-paged-vs-cpu.cpp (NT=24 local) --
+#   re-add it whenever a paged kernel fails; a global nmse CANNOT distinguish failure
+#   shapes and I have now mis-read it twice.
+# Reverted (kernel + harness), 12/12 PASS, dirty 0. Prefill unchanged 2.96x.
