@@ -2061,3 +2061,28 @@
 #   untouched parameter and the natural candidate for a half-tile row window; vary it and
 #   confirm against RULE 1/RULE 2, which now predict the offsets precisely.
 # Deduction from measured points + one confirmation arm -- not a fifth guess.
+
+# --- ARM (j): matrix_origin SWEPT (the ulong2 untouched in 13 prior arms) ---
+# Four loads from the same src at origins (0,0) (0,8) (8,0) (4,0), stored to four strips:
+#   origin(0,0) -> frag rows 0,2 <- src rows 0,2      (the familiar spacing-2 pattern)
+#   origin(8,0) -> IDENTICAL to (0,0)                 <- first component inert at 8
+#   origin(0,8) -> nothing written (row 0 still -1)
+#   origin(4,0) -> nothing written (row 0 still -1)
+# ⇒ matrix_origin DOES have an effect (two of four origins produce no data at all), but it
+#   **does NOT explain the 4-of-8 row count**: origin (0,0) still yields spacing 2, exactly
+#   as Rules 1+2 already described. So the residual survives this arm.
+# ⇒ Also learned: the header's impl is instantiated with
+#   `__METAL_SIMDGROUP_LOAD_STORE_BOUNDS_CHECK_NONE__` -- with bounds checking OFF, origins
+#   that walk past the tile give undefined/no writes rather than clamped reads, which is
+#   consistent with (0,8) and (4,0) producing nothing. Origin is therefore a WINDOW selector
+#   with no safety, not a fix for the count.
+# STATE at session end: Rules 1+2 stand (frag row f <- offset f*P; spacing = 2*D/P, P alone).
+#   ONE unexplained quantity remains: why only 4 fragment rows are ever populated where 8
+#   fit. Every other factor is measured out across 14 arms.
+# NEXT: the count is the last thing between here and a working mma tile. Candidates NOT yet
+#   tested, in order: (1) whether simdgroup_half8x8 on this GPU family is genuinely 8x8 or a
+#   4x8/8x4 storage type (check `_simdgroup_matrix_storage_type_t` in the same header);
+#   (2) whether two loads at complementary origins must be COMBINED to fill 8 rows -- which
+#   the (8,0)==(0,0) result argues against, but which the champion's paired
+#   `simdgroup_load(mq[0]...)/(mq[1]...)` call shape hints at.
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x, wall 2,945. Nothing claimed.
