@@ -242,3 +242,38 @@ Barriers measured free on this kernel (repeat-controlled), so the +1 is affordab
 **Order of work when this is built:** stage Q per simdgroup → phase A with a **padded** tile
 stride → verify 12/12 → wall against 1,570 → only then tune. If the padded stride does not remove
 the conflict, the arithmetic above is wrong somewhere and the arm stops there.
+
+### ⚠ PRECONDITION discovered: the design needs `bs >= 32` — and the "refuted" sweep already paid for it
+
+Reading the actual loop (`ggml-metal.metal:3328`): the key loop is bounded by **`bs`**, not by the
+simdgroup width.
+
+```cpp
+const int tend = min(bs, n_tok - t0);
+for (int t = tbeg; t < tend; ++t) { ... simd_sum(part) ... }
+```
+
+At the default **`bs = 16`** a staged tile holds **16 keys**, so a lane-per-key phase A would idle
+**half of a 32-lane simdgroup**. **The two-phase design therefore requires `bs >= 32`**, where one
+tile maps exactly onto one simdgroup: 32 keys, 32 lanes, one phase-A pass per block.
+
+**This retroactively gives the block-size sweep a purpose.** It found no win — bs=32 at 1,559.7
+against bs=16 at 1,568.5 sits on the noise floor — but it establishes something the design needs:
+**bs=32 is FREE.** A negative result that licenses a precondition is not a wasted arm.
+
+Revised reduction count **per block** (not per 32 keys), at bs=32:
+
+| | reductions per block |
+|---|---|
+| today (bs=16) | 16 — one per key |
+| today (bs=32) | 32 — one per key |
+| two-phase (bs=32) | **2** |
+
+**Updated build order:** switch the paged default to `bs=32` (free, measured) → stage Q per simd
+group → phase A lane-per-key with a **padded** tile stride → 12/12 → wall against **1,570**.
+
+⚠ Changing the default block size is **user-visible** (`--kv-block-size`) and changes the pool
+block accounting, though not total pool bytes — `bytes_per_block` scales with `bs` while
+`n_gpu_blocks` shrinks proportionally under the n_ctx-bounded sizing landed today. Verify that
+the memory policy still reports the same footprint at bs=32 before treating it as free in
+practice as well as in latency.
