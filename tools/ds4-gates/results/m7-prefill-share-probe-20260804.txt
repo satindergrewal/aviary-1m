@@ -2608,3 +2608,48 @@
 # ⇒ PRIORITY: the stall is now worth far more than kernel tuning. Removing it takes decode
 #   from 1.50x typical to 1.16x, and 1.16x is a far smaller kernel problem than the prefill
 #   1.39x that has consumed the day.
+
+# ======= THE DECODE STALL IS A GRAPH REBUILD PER DECODE -- mechanism found, gate NOT yet =======
+# PROFILE (macOS `sample`, during a 512-token paged decode):
+#   ggml_visit_parents_graph  2,300 samples   <- DOMINANT; the next symbol is 25.
+# HOST-SIDE, and it scales with the stall: mean CPU 26% at 2.9 s, 35% at 4.2 s, 48% at 7.1 s,
+#   60% at 7.8 s, 76% (max 118%) at 14.3 s. A GPU-bound wait would show LOW cpu on slow reps.
+# ⇒ Every paged decode REBUILDS THE WHOLE GRAPH. That is the stall.
+#
+# THE OBVIOUS CULPRIT WAS NOT THE OPERATIVE ONE:
+#   llm_graph_input_attn_kv_paged::can_reuse() returns false unconditionally, with a comment
+#   blaming write_slots for encoding a per-step physical mapping. That reasoning is wrong
+#   about the GRAPH: paged_write_slots is a plain ggml_new_tensor_1d + ggml_set_input, and
+#   set_input() refreshes it -- with block_table, context_lens, batch_offsets, batch_lens --
+#   every step via ggml_backend_tensor_set. None affects graph SHAPE; only their dims do, and
+#   those derive from (n_tokens, batch_size, max_blocks).
+#   I replaced it with a proper shape check. Result: NOTHING CHANGED. min 1,402 med 1,764 vs
+#   1,406/1,829 before, and the max got worse (41,138). Output stayed bit-identical to static
+#   (both sha 136b5559), so the change was at least safe.
+# ⇒ THEN I INSTRUMENTED IT INSTEAD OF INTERPRETING THE TIMING, and the fix is INERT:
+#   DS4P_REUSE_DEBUG logged ZERO decisions. The paged input's can_reuse is NEVER CALLED.
+#   llm_graph_result::can_reuse (llama-graph.cpp:1346) returns EARLY on
+#   `!this->params.allow_reuse(params)` -- BEFORE the per-input loop. So the operative gate is
+#   llm_graph_params::allow_reuse (llama-graph.h:747), and the input-level `return false` I
+#   "fixed" was dead code that never decided anything.
+#   ⚠ WITHOUT THE MARKER I WOULD HAVE REPORTED "graph reuse does not help the stall". It was
+#     never tested -- my code did not run. Same lesson as the presence marker on the MMA path,
+#     hit again in a completely different subsystem within the same day.
+# ⇒ REVERTED: the change is correct in intent but inert and unproven, and inert code with a
+#   confident comment is how the ORIGINAL wrong comment got there. Body preserved here for
+#   reinstatement once allow_reuse is understood:
+#     res &= paged_write_slots->ne[0]   == n_tokens;
+#     res &= paged_block_table->ne[0]   == max_blocks && paged_block_table->ne[1] == batch_size;
+#     res &= paged_context_lens->ne[0]  == batch_size;
+#     res &= paged_batch_offsets->ne[0] == batch_size;
+#     res &= paged_batch_lens->ne[0]    == batch_size;
+# ⇒ NEXT ARM, precise: instrument llm_graph_params::allow_reuse (llama-graph.h:747) to log
+#   WHICH of its conditions fails on a paged decode -- ubatch shape, n_outputs, or whatever
+#   follows line 779 that I have not read. Static reuses fine on the same ubatch shape, so the
+#   difference is findable. Only after that does the input-level check matter.
+#
+# ⚠ SEPARATE PRE-EXISTING DEFECT FOUND WHILE GATING: test-paged-kv-e2e FAILS ON HEAD.
+#   "FAIL: token 0 differs in the equivalence window: ref=5220 paged=3743". Verified by
+#   STASHING my change and rebuilding: it fails identically on the clean baseline, so it is
+#   NOT caused by this work. It does mean the lane currently has no working end-to-end paged
+#   gate -- test-paged-vs-cpu (12/12) covers the kernel, not the model path. Worth its own arm.
