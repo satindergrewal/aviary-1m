@@ -15,7 +15,7 @@ echo "binary: $B  tip=$(cd "$(dirname "$B")/../.." && git rev-parse --short HEAD
 arm() { # $1 model  $2 label  $3 extra args
     pkill -f "$B" >/dev/null 2>&1; sleep 3
     # shellcheck disable=SC2086
-    nohup "$B" -m "$1" -ngl 99 -c $CTX -np 1 -b 512 -ub 512 \
+    nohup env ${HYBENV:-} "$B" -m "$1" -ngl 99 -c $CTX -np 1 -b 512 -ub 512 \
         --port $P --no-warmup -lv 4 $3 > /tmp/mm.log 2>&1 &
     local ok=0
     for i in $(seq 1 300); do
