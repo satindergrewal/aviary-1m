@@ -639,3 +639,45 @@ bs specialisation  -1.4%     marginal, at a 0.73% floor
 **Six priced eliminations. Nothing cheap remains.**
 
 **METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
+
+## M4a: champion paged port — MAPPED to exact anchors, ONE constraint found and shown satisfiable
+
+Source read, not guessed. `kernel_flash_attn_ext` (`:7720`) is a thin dispatcher; the real body is
+the template **`kernel_flash_attn_ext_impl` (`:7082`, ~350 lines)**.
+
+**There is exactly ONE K/V addressing point to change — `:7326`:**
+```cpp
+device const k_t * pk = (device const k_t *) (k + ic*args.nb11);
+```
+Everything after it (`pk += sgitg*(8*NS10)`, `simdgroup_load(mk, pk + 8*i, NS10, 0, true)`,
+`pk += 8*(NSG*NS10)`) walks rows at pitch **`NS10`**, which is **already a function constant**
+(`FC_flash_attn_ext_ns10`, `:7048`). For paged, `NS10 := stride_token` — free, no code change.
+
+**Paged substitution:**
+```cpp
+pk = kv_cache + block_table[seq*max_blocks + ic0]*stride_block + kv_h*stride_head;
+```
+i.e. `ic0` becomes the **block index** directly instead of `ic = ic0*C`.
+
+### ★ THE BINDING CONSTRAINT — and it is satisfiable
+
+The champion advances `pk` contiguously across its whole C-key chunk. **Paged rows are contiguous
+only WITHIN a block.** Therefore **`C` must equal `bs`**, and the chunk must align to a block
+boundary. Champion's `C` is `OP_FLASH_ATTN_EXT_NCPSG = 64`.
+
+**⇒ The port requires `bs = 64`.** Three things make that available, all landed tonight:
+1. **Pool footprint is bs-invariant** — measured, 3.46 GiB at both bs=16 and bs=32, because
+   `ceil(n_ctx/bs)*bs` cancels. bs=64 costs nothing.
+2. **`bs` is now a function constant** (`FC_paged_attn_BS`, this session) with the pipeline keyed
+   `_d%d_bs%d`, so a second block size is a compile-time specialisation, not a runtime branch.
+3. `NS10` is already an FC, so the row pitch needs no new machinery.
+
+⚠ **Caveat recorded, not buried:** bs=64 measured *worse* on the SCALAR path (1,682 vs 1,559).
+That is the path being **replaced**, and it was on the **drifting harness**. It must be re-measured
+on the interleaved harness before bs=64 is adopted — but it is not evidence against the port.
+
+**Status: M4a is NOT done.** Mapped, constraint identified, feasibility established. Remaining
+work is a new pipeline + paged args wiring + the `:7326` substitution, then 12/12. The next step
+is transcription against named anchors rather than rediscovery.
+
+**METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
