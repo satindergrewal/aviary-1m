@@ -2368,3 +2368,35 @@
 #   by construction.
 # TOOL: DS4P_METAL_SMEM_PAD=<bytes> inflates only the allocation. Kernel layout untouched.
 #   Keep it -- it turns "is this occupancy?" into a measurement anywhere in this kernel.
+
+# --- ⚠⚠ DS4P_METAL_NSG WAS SILENTLY SKIPPING QUERY ROWS (pre-existing; fork ff42fd6b) ---
+# The knob set only the DISPATCH width. args.nsg is the SCALAR kernel's ROW STRIDE
+# (gtok_raw = tgpig[0]*args.nsg + sg), so with args.nsg=8 and FOUR simd groups launched, rows
+# 4-7, 12-15 and 20-23 were NEVER COMPUTED. nmse ~0.3 -- on a knob whose entire purpose is to
+# make paired arms trustworthy inside one binary.
+# HOW IT SURFACED: D=192 fell back to the SCALAR path under DS4P_METAL_NSG=4 (its MMA tile
+#   does not fit at nsg=4) while D=64/96/128 stayed on MMA, whose override keeps args.nsg and
+#   the dispatch in lockstep. Three FAILs beside nine PASSes -- in a run I nearly skimmed
+#   because the marker line WAS present and the marker was what I was looking for.
+#   ⇒ A presence marker proves WHICH PATH RAN. It does not prove the path was CORRECT.
+#     Read the verdict line too, every time. "ALL PASSED" was simply absent, and absence is
+#     what I have been trained by this very session to treat as failure.
+# ⇒ CONSEQUENCE BEYOND THE FIX: every previously recorded SCALAR nsg-sweep point taken via
+#   this env var measured a kernel doing LESS WORK than it should. The line recorded earlier
+#   in this file -- "nsg SWEPT, every point 12/12-gated BEFORE its wall: 2->3,565 4->3,078
+#   8->2,940 16->3,247" -- is NOT EVIDENCE except at 8, the default, the only value that left
+#   args.nsg matching the dispatch. And 8 is precisely the point that "won" that sweep, which
+#   is exactly the shape a measurement artifact takes.
+#   The Q-block wall of 2,940/2,945 was taken at the DEFAULT, so it STANDS.
+# FIXED: the override now sets args.nsg and the dispatch together. Verified NSG=2/4/8 all
+#   PASS, and the scalar path PASSES at NSG=4 where it previously failed.
+#
+# --- ALSO LANDED: V read DIRECT from device (champion's trick), 12/12 PASS ---
+#   Frees KT*D halves. Within a paged block V rows are at vb + t*stride_token + d, so the
+#   fragment pitch is stride_token and a tile's 8 keys always fall in ONE block (bs % 8 == 0).
+#   smem now: D=64 16,640 | D=96 23,808 | D=128 30,976 | D=192 25,728 at nsg=4.
+#   ⚠ NOT YET A WIN: the freed memory is being spent on MORE SIMD GROUPS (D=128 nsg 2->4,
+#   footprint 21,632 -> 30,976), and the occupancy arm says footprint costs 18.4%. The
+#   selector maximizes nsg without knowing that. Deciding how to spend the saving -- more
+#   simd groups vs wider tile vs simply staying small -- is the next arm, and it is only now
+#   sweepable because the nsg knob was broken until this commit.
