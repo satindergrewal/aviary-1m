@@ -1,0 +1,20 @@
+binary: /Users/satinder/Documents/GitHub/llama.cpp-ds4ports/build-metal/bin/llama-server  mtime=2026-08-04 18:30:39
+tip:    b1af671c  dirty=0
+STATIC        rep1  WALL=1498    prompt_ms=1146.2   
+STATIC        rep2  WALL=1486    prompt_ms=1132.6   
+STATIC        rep3  WALL=1481    prompt_ms=1131.1   
+STATIC        rep4  WALL=1474    prompt_ms=1131.2   
+STATIC        rep5  WALL=1477    prompt_ms=1134.0   
+              marker: *** ABSENT -- PATH UNPROVEN, ARM INVALID ***
+PAGED-MMA     rep1  WALL=3907    prompt_ms=2291.6   
+PAGED-MMA     rep2  WALL=2697    prompt_ms=2119.8   
+PAGED-MMA     rep3  WALL=4898    prompt_ms=2363.0   
+PAGED-MMA     rep4  WALL=2649    prompt_ms=2098.6   
+PAGED-MMA     rep5  WALL=7024    prompt_ms=3668.3   
+              marker: DS4P-MMA ACTIVE  D=128 bs=16 nsg=2 QR=16 smem=22656/32768
+PAGED-SCALAR  rep1  WALL=5764    prompt_ms=3248.8   
+PAGED-SCALAR  rep2  WALL=3613    prompt_ms=3058.8   
+PAGED-SCALAR  rep3  WALL=3490    prompt_ms=2950.1   
+PAGED-SCALAR  rep4  WALL=3621    prompt_ms=2944.8   
+PAGED-SCALAR  rep5  WALL=13958   prompt_ms=3434.4   
+              marker: DS4P-MMA OFF (scalar path) D=128 bs=16 n_tokens=512
