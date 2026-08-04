@@ -885,3 +885,40 @@
 #   The 3,160 outlier is most likely regen-lane contention on the shared card; noted, not
 #   excluded -- dropping the inconvenient sample is how the fast end became a headline in
 #   the first place.
+
+# ============================================================================
+# ★★ INSTRUCTION-MIX PROFILE OF THE SHIPPED KERNEL (sha 4327c521) -- the lever
+#    is NAMED by measurement, not proposed by me
+# ============================================================================
+#   pipe utilisation (% of peak sustained active):
+#     Tensor (the actual mma math) .... 40.6%   <- top pipe
+#     LSU (ldmatrix + smem traffic) ... 33.0%   <- LARGEST NON-TENSOR CONSUMER
+#     ALU ............................. 23.9%
+#     FMA ............................. 11.1%
+#     XU (the expf in softmax) ......... 8.4%
+#     ADU (address) .................... 6.1%
+#     CBU (branch) ..................... 1.6%
+#   SM busy 48.1% · Executed IPC active 1.93 · ncu: "Tensor is the highest-utilized
+#   pipeline (40.6%) ... well-utilized, but should not be a bottleneck."
+#
+# ★ THE ARITHMETIC IS STRIKING AND COHERENT: tensor 40.6 vs total issue 48.1 means that
+#   if the non-tensor work were free the kernel would run ~48.1/40.6 = 1.19x faster.
+#   The measured distance to the static champion is 1.21x. Those matching to within a
+#   couple of percent is the first quantitative STORY for where the remaining gap lives:
+#   it is not occupancy (dead, two levers), not memory bandwidth (DRAM 3.9%), and not the
+#   mma math (irreducible -- static does the same math). It is the instruction overhead
+#   around the math, and LSU is its biggest single component.
+#
+# ★ AND IT CORRECTS A HYPOTHESIS I HAD BEEN CARRYING ALL SESSION: I kept naming the
+#   softmax ("~40 scalar ops per element-pair including two expf and four shuffles") as
+#   the likely next target. XU is 8.4% and ALU 23.9%; LSU alone is bigger than XU+FMA
+#   combined. The softmax is NOT the main non-tensor cost. Had I spent a wall on it --
+#   which I nearly did, and said so in-room -- I would have optimised the third-largest
+#   consumer while the largest sat unexamined.
+#
+# NEXT LEVER, named by this data: reduce ldmatrix/smem traffic per mma. Note the specific
+# redundancy this shape carries -- all 8 warps ldmatrix the SAME K and V fragments for a
+# given key sub-tile (fragments are per-warp registers, so the loads cannot be shared).
+# Splitting the KEY range across warps instead of the q range removes that redundancy but
+# reintroduces a cross-warp softmax merge; that trade is UNPRICED on the mma kernel and is
+# the honest next experiment. NOT attempted here -- the profile is the deliverable.
