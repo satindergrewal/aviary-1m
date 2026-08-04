@@ -1782,3 +1782,36 @@
 #   a presence marker proving mma_ok=1 per D, THEN re-run attempt 2's half-fragment arm to
 #   separate precision from structure. Do not quote any gate result without the marker.
 # Reverted to 354f006a, 12/12 PASS rebuilt, dirty 0. Gap unchanged 2.60x. Nothing claimed.
+
+# ============================================================================
+# ★★★ SINGLE-TILE DUMP: THE MMA FAILURE SHAPE, MEASURED (marker=4242 proves it ran)
+# ============================================================================
+# Grok's read of the nmse was RIGHT and my attempt-3 question was WRONG: 0.117-0.155
+# max_abs / 0.155-0.494 nmse is a WRONG-NUMBERS signature, not precision (half-vs-float
+# lives at 1e-3..1e-5). So instead of another arm: instrument the 8x8 tile directly --
+# mma scores beside a scalar reference dot for the SAME 8 rows x 8 keys, D=64, nsg-1 path.
+#
+#   marker=4242                                     <- instrument PROVEN installed
+#   row0 mma:  0.573  0.000  0.000  0.000 -0.579  0.000  0.000  0.000
+#   row0 ref:  0.573  0.298 -0.003 -0.305 -0.579 -0.801 -0.952 -1.018
+#   row1 mma:  0.139  0.139  0.137  0.132  0.126  0.117  0.106  0.093
+#   row1 ref:  0.079  0.063  0.047  0.029  0.011 -0.007 -0.025 -0.042
+#   row2 mma:  0.186  0.179  0.169  0.156  0.141  0.123  0.103  0.081
+#   row2 ref:  0.058  0.034  0.010 -0.015 -0.039 -0.063 -0.086 -0.107
+#
+# ★ SHAPE, read off the numbers, not guessed:
+#   - row0 is EXACT at k=0 and k=4 (0.573, -0.579 match to 3 decimals) and ZERO at the
+#     other six. Stride-4 hit pattern with zero fill = a FRAGMENT-LAYOUT/stride fault in
+#     the transposed K load or the 8x8 store, NOT arithmetic and NOT precision.
+#   - rows 1-2 are smooth, plausible, and wholly unrelated to ref ⇒ they are reading a
+#     DIFFERENT source region (row-map or base-offset error), consistent with the same
+#     layout fault seen from another angle.
+#   ⇒ Two independent symptoms, one cause class: the mqk fragment's memory mapping
+#     (simdgroup_load transpose source/stride, and/or simdgroup_store dst stride) does not
+#     match the row-major [key][dim] staging layout I assumed.
+# NEXT (exact): vary ONE thing -- store mqk with stride 8 into a DEDICATED 64-float scratch
+#   and print all 64 raw floats for a known Q=identity / K=identity input. Identity in,
+#   identity out names the permutation exactly. Champion's own call site uses
+#   simdgroup_load(mk, pk + 8*i, NS10, 0, true) where NS10 is a PADDED row stride -- our
+#   staged tk uses stride D with NO padding; padding/bank-conflict stride is suspect #1.
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap unchanged 2.60x. Nothing claimed.
