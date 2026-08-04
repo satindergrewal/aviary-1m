@@ -2400,3 +2400,25 @@
 #   selector maximizes nsg without knowing that. Deciding how to spend the saving -- more
 #   simd groups vs wider tile vs simply staying small -- is the next arm, and it is only now
 #   sweepable because the nsg knob was broken until this commit.
+
+# --- SPEND ARM: the freed memory buys SIMD GROUPS, not width. New best 2,025. Gap 1.79x ---
+# Direct-V frees KT*D halves. Where to put them, D=128, one binary, fresh server each, best of 5:
+#   bank it   nsg=2 sb=1 KT=16 footprint 17,536 -> 2,259.5 ms
+#   width     nsg=2 sb=2 KT=32 footprint 22,656 -> 2,352.5 ms
+#   GROUPS    nsg=4 sb=1 KT=16 footprint 30,976 -> 2,023.8 ms   <- WINNER
+# ⇒ Spending on SIMD GROUPS wins by 10.4% over banking the saving, DESPITE the largest
+#   footprint of the three. That is NOT a contradiction of the 18.4% occupancy result: that
+#   arm inflated the allocation with bytes that bought NOTHING. Footprint is expensive when
+#   it is pure padding and worth paying when it buys real parallelism (QR 16 -> 32).
+#   The correct statement is "unused smem is expensive", not "smem is expensive".
+# ⇒ AND THE WIDTH LEVER DOES NOT SURVIVE THE NEW CONFIG: "width" (22,656) is worse than
+#   "bank it" (17,536). That does not contradict the earlier B-vs-C either -- B/C were
+#   MATCHED at 30,848 and wider won there by 7%. Here the two differ in footprint as well.
+#   Both hold; neither generalises past its own matched pair. Width is NOT promoted.
+#
+# CONFIRMING WALL (3 arms, marker proven on both paged arms, answers IDENTICAL):
+#   STATIC 1,130.8 | PAGED-MMA 2,025.3 | PAGED-SCALAR 2,937.3   (prompt_ms, min of 5)
+#   MMA vs scalar 1.45x   |   GAP TO STATIC 1.79x  (was 1.86x, and 2.60x this morning)
+#   LADDER: 6,950 -> 3,334 -> 3,300 -> 2,940 -> 2,099 -> 2,025.
+#   scalar min 2,937 still reproduces the 2,945 prior; static min 1,131 reproduces 1,134.
+# NOT SHIPPED: 1.79x is not <= 1.0x.
