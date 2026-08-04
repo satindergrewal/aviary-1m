@@ -1195,3 +1195,14 @@
 # ★ INSTRUMENT THAT FOUND ALL OF IT: log what the gate BELIEVES on every probe, armed or
 #   not. A gate that never armed and a gate that chose to admit are INDISTINGUISHABLE in a
 #   log that only prints refusals.
+
+# --- cell_mismatch -> 0 (ds4-ports 173f4c0f), P2-8 3/3 on that sha ---
+# NOTHING RESIDENT IS NOT A PAIRING MISMATCH. The paged scheduler returns a finished
+# sequence's blocks to the pool immediately (that promptness IS paging), so the idle-slot
+# save that runs later meets a sequence with zero cells and a stale token record. P0-2 was
+# counting that EXPECTED STEADY STATE as a mismatch, leaving a permanent nonzero counter
+# that made the guard look like it was firing on real defects. Now: pos_have == 0 -> skip
+# quietly (TRC); pos_have != pos_want -> WARN + counter, unchanged. The record is never
+# cached in either case, so the guard keeps its exact meaning; only the accounting changes.
+#   measured: CELL MISMATCH count 4 -> 0, output still BYTE-IDENTICAL cold vs warm.
+#   P2-8 on 173f4c0f: qnr 6/6 · rec 3/3 (recompute=8, evictions=4) · swp 3/3 (swap_ins=4).
