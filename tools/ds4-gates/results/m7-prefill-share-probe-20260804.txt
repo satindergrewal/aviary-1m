@@ -1480,3 +1480,22 @@
 #   kernel_paged_attn_f32 (copy the loop skeleton, keep our block-table addressing), which
 #   fixes the divergence AND buys the 8x K/V amortisation in one move. The uniform-bound
 #   arm stays as the cheap intermediate proof of the divergence constraint.
+
+# --- CORRECTION (Grok c-v-m of 37422f6): my anchors pointed at the WRONG KERNEL ---
+# :7467/:7557 are kernel_flash_attn_ext_VEC (the decode-shaped variant), not the main FA.
+# CORRECT anchors for the main kernel (Grok-verified, adopted):
+#   :6592  iq1 = tgpig[0]*Q            (Q-block per threadgroup, Q = NQPSG = 8,
+#                                       ggml-metal-impl.h:109)
+#   :6619  NQ = Q/NSG, j = jj*NSG+sgitg -> sgs DO split rows WITHIN the Q-block
+#   :6716  for (ic0 = 0;; ++ic0)        (uniform KV loop + mask)
+# ⇒ AND MY CLAIM WAS TOO STRONG: "champion never gives different rows to different sgs" is
+#   FALSE for main FA -- it splits rows per sg. The constraint that actually distinguishes
+#   champion from my failing arms F/G is SAME KV TILE + SAME TRIP COUNT across sgs, with
+#   masking absorbing per-row causality. Rows may differ; BOUNDS may not.
+# ⇒ This SHARPENS the uniform-bound arm's meaning: if rows-differ-per-sg passes once trip
+#   counts are uniform, the cheap port is main FA's NQ=Q/NSG row-split shape (register
+#   state per sg stays 1 row) rather than the full 8-row Q-block mma. Same K/V amortisation
+#   comes later via the shared tile, but correctness unblocks FIRST on uniform bounds.
+# The K/V-amortisation diagnosis and the transfer table's substance STAND; the anchors and
+# the over-strong "never" are corrected here. A witness citing wrong lines is a false
+# record regardless of how right the conclusion felt.
