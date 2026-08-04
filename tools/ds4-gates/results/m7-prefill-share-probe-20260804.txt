@@ -847,3 +847,27 @@
 # it is the outer guard, and widening it (head_dim % 32 == 0 divides cleanly at 96/192
 # for the decode kernel's n_warps) changes the DECODE path as well and needs its own
 # gate. Named and sized, not faked.
+
+# ============================================================================
+# ⚠ SELF-CORRECTION: "box at tip" WAS FALSE, and durable per-run walls
+# ============================================================================
+# I wrote "both trees clean, box at tip" in a summary. The box was at 309915da -- THREE
+# commits behind -- with scp'd working-tree edits (M pagedattn.cu, M tests/CMakeLists,
+# ?? test-paged-vs-cpu.cpp). My own protocol says `git reset --hard` BEFORE build and I
+# skipped it. The mitigation is real but does NOT rescue the claim: the scp'd CONTENT was
+# byte-equivalent to what I had committed, so the tests exercised the right code -- but I
+# asserted a git state I had not checked, which is the exact class of error I spent the
+# session catching elsewhere.
+#   FIXED AND RE-VERIFIED: box reset to 4327c521, `git status` empty, FULL REBUILD FROM
+#   THE TIP, both suites re-run on that binary -- test-paged-banded ALL PASSED,
+#   test-paged-vs-cpu ALL PASSED.
+#
+# ⚠ SECOND FAIR CRITICISM: every wall overwrote /tmp/m7-paged.log, so the 2,972 trio
+# survived only in this ledger -- correct numbers, un-auditable storage. Fixed by keeping
+# per-run logs. DURABLE PAIRED WALLS AT sha 4327c521:
+#   paged : 2,960 / 2,999 / 2,993   (mean 2,984)
+#   static: 2,455 / 2,440 / 2,494   (mean 2,463)
+#   ratio : 1.21x off the champion -- INDEPENDENTLY CHECKABLE in
+#           /tmp/m7-pgd-r{1,2,3}.log and /tmp/m7-durable-static-r{1,2,3}.log on the box.
+# The paged mean (2,984) sits within 0.4% of the 2,972 previously claimed, so the claim
+# stands -- but it now stands on artifacts instead of on my word, which is the point.
