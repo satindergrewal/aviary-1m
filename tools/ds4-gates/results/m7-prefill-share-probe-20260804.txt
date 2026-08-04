@@ -1603,3 +1603,29 @@
 #   MSL constant-address packing rules for the trailing uint64 triple is the prime suspect
 #   left standing (host pads 36->40 originally; verify the widened layout on BOTH sides).
 #   ⚠ untested statement, marked as such: it is the last suspect, not a finding.
+
+# --- KARGS PROBE ATTEMPT: INVALID RUN + a SEVENTH wrong cause killed BEFORE posting ---
+# FACTS ONLY (this probe produced no valid shader-side data):
+#   1. The probe BUILD FAILED: my host fprintf anchored on the FIRST occurrence of
+#      "set_pipeline(enc, pipeline)" and landed inside the CONCAT op (ops.cpp:576) --
+#      loud failure. The "ALL PASSED + no HOSTPROBE line" I then captured was the STALE
+#      binary: **second stale-binary incident today, opposite direction** (first showed
+#      false FAIL after revert; this showed false PASS after a broken build).
+#      ⇒ RULE: after ANY build, verify the binary is NEW before reading its output
+#        (build exit status or mtime), especially when the result confirms expectations.
+#   2. While the build was broken I formed cause #7 -- "the ops.cpp kargs insert was a
+#      silent un-asserted str.replace no-op, shifting stride values into the new fields" --
+#      a story that fit EVERY observation beautifully. One grep killed it before posting:
+#      q_parallel IS present in the patched initializer. The anchor works.
+#   3. STANDING VALID DATA remains the identity dump: shader computes gtok=0 everywhere
+#      => shader-side nsg reads 0. WHY is still OPEN. Narrowed by fact: the BASE struct's
+#      uint64 strides work at c6aebd6a, so C++/MSL agree on the original layout; the
+#      widened layout (12 int32 -> strides at 48/56/64) should also agree on paper.
+#      The kargs probe (host sizeof/offsetof + shader dumping args.nsg) is still THE
+#      decisive experiment -- it needs a UNIQUE anchor (e.g. the paged set_bytes line with
+#      surrounding context) and a build-freshness check before reading results.
+# PATCH-DISCIPLINE RULES BANKED (both bit today): (a) every str.replace in a patch script
+# gets an assert -- an unasserted replace is a silent no-op waiting to happen (it did NOT
+# happen here, but only the assert proves that at patch time); (b) first-occurrence
+# replaces on NON-UNIQUE anchors are forbidden -- my fprintf hit concat.
+# Reverted, dirty 0, 12/12 PASS verified on a REBUILT binary this time.
