@@ -2035,3 +2035,29 @@
 #   `__metal_simdgroup_matrix_8x8_load`'s bounds/origin semantics (matrix_origin is the
 #   ulong2 argument I have left at 0 in every arm -- UNTESTED and the obvious next factor).
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Nothing claimed.
+
+# ============================================================================
+# ★ FOUR-POINT TABLE SOLVED ON PAPER -- and it CORRECTS my own "model doesn't extend"
+# ============================================================================
+# SP = source staging row pitch, P = elements_per_row passed to simdgroup_load, D = 128.
+# Source row r lives at element offset r*SP.
+#   arm      SP    P     frag rows written   src rows landed   src OFFSETS
+#   (g)     128   128    0,2,4,6             0,2,4,6           0,256,512,768
+#   (h/2)   128    64    0,4                 0,2               0,256
+#   (h/2D)  128   256    0,1,2,3             0,2,4,6           0,256,512,768
+#   (i)      64   128    0,2                 0,4               0,256
+# ⇒ **RULE 1 (holds on all four): frag row f reads element offset f*P.**
+#     (g) f=2→256 ✓ f=4→512 ✓ · (h/2) f=4→256 ✓ · (h/2D) f=1→256 ✓ f=3→768 ✓ · (i) f=2→256 ✓
+# ⇒ **RULE 2 (holds on all four): frag-row spacing = 256/P**, i.e. 2*D/P at D=128 --
+#     P=64→4 · P=128→2 · P=256→1.
+#   ⚠⚠ **THIS CORRECTS MY OWN CLAIM IN `2f26761` THAT THE MODEL "DOES NOT EXTEND".** Arm (i)
+#     (SP=64, P=128) gives spacing 2 = 256/128 -- it FITS. Spacing depends on P ALONE, not
+#     on SP. I mis-read my own arm as a refutation and said so in the room; the table says
+#     otherwise. Correcting it here rather than leaving a false negative on the record.
+# ⇒ **THE ONE THING STILL UNEXPLAINED is the ROW COUNT: 2, 4, 4 written rows for
+#     P=64,128,256.** Not a function of spacing alone (P=256 gives spacing 1 yet only 4 rows
+#     land, where 8 would fit). That -- not the spacing -- is the residual.
+# ⇒ NEXT, exactly as ordered: `matrix_origin` (ulong2, held at 0 in ALL 13 arms) is the only
+#   untouched parameter and the natural candidate for a half-tile row window; vary it and
+#   confirm against RULE 1/RULE 2, which now predict the offsets precisely.
+# Deduction from measured points + one confirmation arm -- not a fifth guess.
