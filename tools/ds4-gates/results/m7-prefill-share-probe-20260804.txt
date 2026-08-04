@@ -2422,3 +2422,37 @@
 #   LADDER: 6,950 -> 3,334 -> 3,300 -> 2,940 -> 2,099 -> 2,025.
 #   scalar min 2,937 still reproduces the 2,945 prior; static min 1,131 reproduces 1,134.
 # NOT SHIPPED: 1.79x is not <= 1.0x.
+
+# --- BARRIERS ARE FREE (closed), and PARALLELISM ISOLATED: -29.7% at matched footprint ---
+# BARRIER SWEEP, with a REPEAT CONTROL so the noise floor is measured, not assumed:
+#   bar_on 2,020.1 | bar_off 2,039.7 | bar_on2 2,026.5 (SAME config as bar_on)
+#   on-vs-on spread = 6.4 ms = the noise floor. bar_off is 19.6 ms SLOWER, i.e. removing the
+#   barriers is neutral-to-negative. The champion's simdgroup_barrier(mem_none) placement
+#   costs nothing measurable here. LEVER CLOSED -- and note correctness passing WITHOUT them
+#   is WEAK evidence: a reordering hazard is timing-dependent, so a green gate does not prove
+#   a race guard is removable. Keeping them is the cheap, correct call.
+#   ⇒ Without the repeat control, 19.6 ms would have looked like a real effect. Any sweep
+#     whose arms differ by less than its own unmeasured noise floor is not a sweep.
+#
+# PARALLELISM vs FOOTPRINT, isolated with DS4P_METAL_SMEM_PAD (nsg and footprint are
+# inherently coupled -- QR drives sq, ss and so -- so the pad is the only way to separate them):
+#   nsg=2 QR=16 footprint 17,536 + 13,440 PAD = 30,976 -> 2,902.1
+#   nsg=4 QR=32 footprint 30,976                       -> 2,039.8
+#   nsg=2 QR=16 footprint 17,536                       -> 2,229.0
+#   ⇒ AT MATCHED FOOTPRINT (30,976), doubling the simd groups is worth -29.7%. That is the
+#     pure parallelism effect with occupancy held constant, and it is LARGE.
+#   ⇒ Unused footprint alone costs +30.2% (17,536 -> 30,976 at fixed nsg=2), confirming and
+#     ENLARGING the earlier 18.4% pad result at this configuration.
+#   ⇒ The nsg curve is STILL STEEP AT 4. That is what justifies the work to reach nsg=8.
+#
+# NSG=8 AT D=128 REQUIRES REMOVING `so` FROM THREADGROUP MEMORY. Budget at nsg=8, QR=64:
+#   tk 4,096 | sq 16,384 | ss 4,096 | so 32,768 | M,S 512  = 57,856  (limit 32,768)
+#   `so` ALONE is the entire budget. Dropping it (O kept in fragments across the block loop,
+#   per-row rescale via a DIAGONAL matrix multiply instead of a scalar loop) leaves 27,136 --
+#   which FITS. Known risks, to be measured not assumed: (a) 16 float8x8 fragments per
+#   simdgroup at D=128 is 32 floats/lane for O alone, so register SPILL is plausible and
+#   would erase the gain; (b) the final write needs O out of fragments, and the TAIL
+#   threadgroup cannot simdgroup_store past n_tokens, so it needs a scratch path.
+#   Direct-Q was considered to free sq and REJECTED: the tail threadgroup would read q out of
+#   bounds, and every fix for that either reintroduces the staging buffer or breaks row
+#   ownership. Recorded so it is not re-derived.
