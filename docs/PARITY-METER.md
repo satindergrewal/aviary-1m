@@ -1063,3 +1063,32 @@ any machine it runs on, and matches finding 4's rule — **a marker that prints 
 is the only kind that can prove anything.**
 
 **Filed as: RISK, untested, one-line probe pending box access.**
+
+### Finding 5, diagnosis COMPLETE — Ornith's graph asks for the STATIC context by construction
+
+```
+qwen35.cpp:153   auto * inp = build_inp_mem_hybrid();
+qwen35.cpp:175   cur = build_layer_attn(inp->get_attn(), cur, inp_pos, sections, il);
+qwen35.cpp:322   cur = build_attn(inp, ...);
+```
+`inp->get_attn()` returns the **`llama_kv_cache_context`** — the static per-slot cache. Ornith
+therefore runs the generic `build_attn` path and **never asks for a paged context at all.** There
+is no fallback, no silent downgrade, no conditional: the graph is wired to static by construction.
+
+That closes finding 5 with a mechanism rather than an absence-of-callers argument: not only does
+nothing call `get_attn_paged()`, the graph **requests the static context explicitly** one line
+earlier.
+
+**What the implementation actually requires** (bigger than "add a read"):
+1. reach the paged ctx via `inp->mctx` cast to `llama_memory_hybrid_context`, then `get_attn_paged()`
+2. a **paged branch inside `build_layer_attn`** — `build_attn` consumes a kv-cache context, so the
+   paged path needs its own attention construction, which is what `inkling.cpp` has and qwen35 does not
+3. every created input must be consumed (`inkling.cpp:308` trap) or `set_input` crashes on null
+
+**Scale is honest:** this is a graph-builder change per hybrid arch, not a one-line wire. Inkling
+got it because someone wrote that path for Inkling specifically. **The generic fix is the
+capability-based fallback already on the list** — otherwise every new hybrid needs this by hand,
+which is the arch-allow-list problem in a different costume.
+
+⇒ **The right order is: capability-based generic consumer FIRST, then per-arch verification** —
+not qwen35, then jamba, then nemotron-h one at a time.
