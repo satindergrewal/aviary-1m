@@ -969,3 +969,40 @@ thread geometry — compiling fine and producing wrong results, which is the exa
 that cost three debugging rounds on prefill (`blk` dummy, dst `ne1`, mask).
 
 **Status: contract read and recorded, not yet wired.** Scope is smaller than I claimed.
+
+## ★★ AUDIT #2245 FINDING 5 — "Ornith now runs paged" is FALSE. Retracted.
+
+Commit `da4c628a` is titled *"hybrid: bring paged KV to non-SWA hybrids — Ornith now runs paged,
+output identical to static."* **The second half of that claim is wrong.**
+
+Verified three ways, not inferred:
+```
+llama_memory_hybrid_context::get_attn_paged()      added by me
+callers in src/models/                              ZERO
+inkling.cpp:212   static_cast<const llama_memory_hybrid_iswa_context *>   <- ISWA type, not this one
+lfm2.cpp:100      conditional_t<> alias only; never CALLS get_attn_paged
+llama-model.cpp:2264   Ornith (qwen35) takes the llama_memory_hybrid non-SWA branch
+```
+**No model graph consumes the non-SWA hybrid's paged context.** The pool is built, the context is
+carried through `init_batch`, and the graph never reads it — **attention runs on the STATIC path.**
+
+⇒ **"output identical to static" was a TAUTOLOGY: identical because it WAS static.** This is the
+same species as the qwen paged-vs-paged tautology already banked against me, repeated one commit
+later on the headline claim of the entire hybrid landing.
+
+**What IS true and stands:** `da4c628a` landed real plumbing — the pool bring-up for the non-SWA
+branch, the layer filters, scheduler resolution across both wrapper types, and an honest error
+that names the failing precondition instead of blaming SWA. That work is verified and useful.
+
+**What is NOT true:** Ornith does not run paged. The consuming read does not exist.
+
+**⇒ Hybrid paged returns to OPEN.** Remaining work is the graph-side read for non-SWA hybrids —
+the same class as the deepseek4 `t_layer_inp` gap on the DSpark lane: plumbing present, consumer
+absent. **A capability is not landed until something READS it.**
+
+⚠ **Audit scope correction:** I reported the audit "complete" on `da4c628a..HEAD` (23 commits).
+True scope is `354f006a~1..HEAD` = **38 commits**, including `common.cpp`, the hybrid files,
+`llama-model.cpp`, `llama-paged-scheduler.cpp` and `llama-kv-cache-paged.cpp` — **none of which
+had been audited when I called the pass complete.** Finding 5 came from the widened range.
+
+**No parity number is affected** — all walls are qwen3-4b flat attention, which never used this path.
