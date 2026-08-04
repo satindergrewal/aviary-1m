@@ -1939,3 +1939,25 @@
 #   compare against the champion's `4*16` stride on a 16-wide tile, which is exactly a 2x
 #   factor of the same kind. Then (c) K from DEVICE with the tensor's own stride.
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Cause OPEN, MAP now exact.
+
+# --- ARM (f): STORE STRIDE REFUTED. Subsampling happens BEFORE the store. ---
+# Same position-encoded inputs; ONE factor changed: simdgroup_store stride 8 -> 16, with
+# the destination pre-filled with -1 so "untouched" is distinguishable from "written zero".
+#   10  0  30  0  50  0  70  0 | -1 -1 -1 -1 -1 -1 -1 -1
+#    0  0   0  0   0  0   0  0 | -1 -1 -1 -1 -1 -1 -1 -1
+#   30  0  90  0 150  0 210  0 |  0  0  0  0  0  0  0  0
+#   ...
+# ⇒ the even-even lattice is UNCHANGED by the store stride; widening the stride only spread
+#   the same 8 written values further apart and left the extra columns untouched (-1).
+#   **The 2x subsampling is already present in the FRAGMENT before it is stored.**
+# ⇒ ELIMINATED SO FAR (each by its own one-factor arm, all marker-proven):
+#   element type (half/float) · accumulator aliasing · store stride · transpose (values
+#   would move; they do not) · precision · row-mapping · padding.
+#   REMAINS: the LOAD side -- how simdgroup_load populates a fragment from THREADGROUP
+#   memory (vs the champion's DEVICE source), and the fragment element-mapping contract
+#   itself. That is now a two-item list, from an eleven-item start.
+# NEXT (one factor): load side. (c) K from DEVICE with the tensor's own stride, exactly as
+#   the champion's main loop; if that fills the lattice, threadgroup-sourced simdgroup_load
+#   is the constraint and the fix is to source K from device (which also removes a staging
+#   step). Read Apple's element-mapping spec alongside -- not from memory.
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Cause OPEN, suspects down to two.
