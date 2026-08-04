@@ -1077,3 +1077,46 @@
 # STATUS -- deliberately NOT "shipped": SPILL WORKS, ADMIT DOES NOT. Separate halves, kept
 # separate. Restore needs state_read plus repopulating the live scheduler group's
 # block_table, which the cache cannot do alone.
+
+# ============================================================================
+# ★★★ P1-5 ADMIT: THE BANK STOPS BEING WRITE-ONLY (ds4-ports 6694f1cd + 8223388c)
+# ============================================================================
+# MEASURED, box CUDA, qwen3-4b IQ4_KT, --kv-paged, DS4P_REVALIDATE=1, disk path FORCED:
+#   REQ 1  prompt A cold ........ prompt_ms 265.5
+#   REQ 2  prompt B ............. evicts A -> spill 355.500 MiB to disk (n_tok 2045)
+#   REQ 3  prompt A again ....... prompt_ms  12.3   ⇒ 21.6x FASTER, off DISK
+#   output ..................... COLD vs WARM BYTE-IDENTICAL (114 chars)
+#   server ..................... ALIVE, reval refusals unchanged at 2 (idle path, benign)
+# The full chain in one run, each step named by its own log line:
+#   spill      kv-bank: spilled evicted entry -> kvbk-0df1ab6d7606de21.kv (355.500 MiB)
+#   probe      kv-bank: admitted ... (lcp = 2023 of 2023 new tokens, admits = 1)
+#   state_read seq 0: restored 158 blocks (2045 tokens) -- awaiting adoption
+#   adopt      request 0 admitted WARM: 2022 of 2023 restored (127 blocks), 1 to prefill
+#
+# ★★ THE IDEA THAT MADE IT SMALL: A RESTORE IS A FORK WHOSE PARENT IS A FILE.
+# state_read cannot install anything because it runs from the server's prompt-cache admit,
+# BEFORE llama_paged_scheduler_add_request creates the group -- there is no block_table to
+# write into yet. So: the cache materialises blocks and PARKS them (restored_seqs);
+# queue_request adopts them and sets n_past. The resulting group is the exact shape a COW
+# fork produces, so it flows through the SAME prefill-from-n_past path P1-6's fork gate
+# already proved correct. No retention policy, no second prefill path, no new scheduling.
+#
+# ★ NEW GUARD -- GEOMETRY IS IDENTITY. A bank file written under a different model, KV
+# quant, head count or block size loads without complaint and then serves another model's
+# attention. P0-2's revalidate checks the TOKEN claim; this checks the PHYSICAL layout.
+# Neither substitutes for the other. state_read refuses on mismatch.
+# Also: a restore that does not fit the free pool THROWS rather than evicting a live
+# request -- a latency win for one agent must never become a latency loss for another.
+#
+# ⚠⚠ THE FIRST RUN OF THIS GATE PASSED AND PROVED NOTHING. --cache-ram 400 with prompt B
+# at 630 MiB meant B "exceeds cache size limit, skipping" -- B was never cached, so it
+# never evicted A, so NOTHING SPILLED, and REQ 3 was a RAM hit that read as a bank restore.
+# Bank directory EMPTY while the timing said 62x. Caught by checking the bank, not the
+# clock. Fixed by sizing --cache-ram 700 so B is admitted (630 < 700) and A+B (985) is not.
+# ⇒ RULE: a gate whose limit silently excludes the entry that is supposed to do the
+# evicting proves the opposite of what it prints. Check the ARTIFACT, not the speedup.
+#
+# ⚠ AND MY OWN LOG LINE WAS PART OF THE TRAP: queue_request said "restored from the KV
+# bank" when the scheduler cannot know whether the bytes came off disk or out of RAM.
+# Fixed to "cached state" (8223388c). Same class as the accepted-absurdity scar -- a line
+# that announces more than it knows turns a passing gate into a lie nobody had to tell.

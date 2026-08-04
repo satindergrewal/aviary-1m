@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# P1-5 WARM-ADMIT GATE (box, CUDA, paged path)
+#
+# THE ONLY QUESTION THIS ANSWERS: does a request whose KV came back from the disk bank
+# measure FASTER than the same request prefilled from scratch, and produce the SAME answer?
+# Spill without a measured warm win is a write-only museum.
+#
+# Shape:
+#   REQ 1  prompt P  -> COLD. baseline prompt_ms.
+#   REQ 2  prompt Q  -> evicts P from the RAM cache; P spills to disk.
+#   REQ 3  prompt P  -> must ADMIT from the bank. warm prompt_ms + identical answer.
+#
+# Traps already paid for by earlier gates, encoded here:
+#   - `grep -c` returns 1 on zero matches and kills a `set -e` script -> `|| true` everywhere
+#   - a cache-RAM big enough to hold both prompts never exercises the DISK path at all
+#   - prompt_ms from the response JSON is the authority; log lines announce work, they do
+#     not measure it ([[prompt-cache-idle-slot-redundant-copies]])
+set -uo pipefail
+
+WT=${WT:-/mnt/nvme0/wt-ds4-ports}
+B=${B:-$WT/build-cuda/bin/llama-server}
+M=${M:-/mnt/nvme0/ktdev/qwen3-4b-dev-IQ4_KT.gguf}
+P=${P:-8971}
+BANK=${BANK:-/mnt/nvme0/ktdev/kvbank-warmgate}
+OUT=${OUT:-/tmp/ds4gates/results/p15-warm-admit-$(date +%Y%m%d-%H%M).txt}
+LOG=/tmp/p15-warm-gate.log
+
+mkdir -p "$(dirname "$OUT")" "$BANK"
+rm -f "$BANK"/*.kv 2>/dev/null || true
+
+pkill -f "$B" 2>/dev/null || true
+sleep 2
+
+# ★ SIZING IS THE WHOLE GATE. Measured: prompt A = 355 MiB of state, prompt B = 630 MiB.
+# The first attempt used --cache-ram 400, which meant B "exceeds cache size limit, skipping"
+# -- B was never cached, so it never evicted A, so nothing spilled and REQ 3 was a RAM hit
+# that LOOKED like a bank restore. 700 admits B (630 < 700) and then cannot hold both
+# (355 + 630 = 985 > 700), so A is evicted and spilled, and REQ 3 has to come off disk.
+# A gate whose limit silently excludes the evicting entry proves nothing at all.
+DS4P_REVALIDATE=1 nohup "$B" -m "$M" -ngl 99 -c 40960 -np 1 -b 512 -ub 512 \
+    --cache-ram 700 --cache-idle-slots \
+    --kv-bank "$BANK" --kv-bank-cap 4096 \
+    --port "$P" --no-warmup -lv 4 \
+    --kv-paged --n-gpu-blocks 4096 --n-cpu-blocks 256 > "$LOG" 2>&1 &
+
+for _ in $(seq 1 90); do
+    curl -s "http://127.0.0.1:$P/health" >/dev/null 2>&1 && break
+    sleep 2
+done
+
+# two distinct ~2K prompts with ONE right answer each, so a wrong restore is visible in the
+# text and not just in the timing
+mkprompt() {  # $1 = filler word, $2 = the fact
+    python3 - "$1" "$2" <<'PY'
+import json, sys
+filler, fact = sys.argv[1], sys.argv[2]
+body = (filler + " ") * 2000
+print(json.dumps({"prompt": f"{body}\nRemember this: {fact}\nQuestion: repeat the fact exactly.\nAnswer:",
+                  "n_predict": 24, "temperature": 0, "cache_prompt": True}))
+PY
+}
+
+ask() {  # $1 = json file, $2 = label
+    curl -s --max-time 600 -H 'Content-Type: application/json' \
+         -d @"$1" "http://127.0.0.1:$P/completion" > "/tmp/p15-resp-$2.json"
+    python3 - "/tmp/p15-resp-$2.json" "$2" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+t = d.get("timings", {})
+print(f'{sys.argv[2]}\tprompt_ms={t.get("prompt_ms",-1):.1f}\tprompt_n={t.get("prompt_n",-1)}\t'
+      f'predicted_ms={t.get("predicted_ms",-1):.1f}\ttext={json.dumps(d.get("content",""))[:110]}')
+PY
+}
+
+mkprompt alpha "the vault code is 7741" > /tmp/p15-A.json
+mkprompt bravo "the ledger balance is 3320" > /tmp/p15-B.json
+
+{
+    echo "=== P1-5 WARM-ADMIT GATE ==="
+    cd "$WT" && git log --oneline -1
+    echo
+    echo "--- REQ 1: prompt A, COLD ---"
+    ask /tmp/p15-A.json A-cold
+    echo "--- REQ 2: prompt B (evicts A -> spill) ---"
+    ask /tmp/p15-B.json B
+    echo "--- REQ 3: prompt A again, must come from the BANK ---"
+    ask /tmp/p15-A.json A-warm
+    echo
+    echo "--- COLD vs WARM must be byte-identical ---"
+    python3 - <<'PY2'
+import json
+a = json.load(open("/tmp/p15-resp-A-cold.json"))["content"]
+b = json.load(open("/tmp/p15-resp-A-warm.json"))["content"]
+print(f"cold {len(a)} chars / warm {len(b)} chars -> " + ("BYTE-IDENTICAL" if a == b else "DIFFER *** FAIL ***"))
+PY2
+    echo
+    echo "--- BANK (must be non-empty: this is what proves the DISK path ran) ---"
+    ls -la "$BANK" | tail -n +2
+    echo
+    echo "--- restore lines ---"
+    grep -E "admitted WARM|restored .* blocks|kv-bank: (spilled|admitted)|geometry mismatch|error loading state" "$LOG" || true
+    echo
+    echo "--- reval refusals (want none new) ---"
+    grep -c "CELL MISMATCH" "$LOG" || true
+    echo
+    echo "--- server alive? ---"
+    (curl -s "http://127.0.0.1:$P/health" >/dev/null 2>&1 && echo "SERVER ALIVE") || echo "SERVER DEAD"
+} | tee "$OUT"
+
+pkill -f "$B" 2>/dev/null || true
+echo "witness: $OUT"
