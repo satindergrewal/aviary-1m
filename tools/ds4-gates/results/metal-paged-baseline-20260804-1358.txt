@@ -1,0 +1,18 @@
+=== METAL PAGED BASELINE (first perf number for the Apple-silicon paged path) ===
+173f4c0f P1-5: nothing resident is not a pairing MISMATCH -- cell_mismatch to zero
+model: /tmp/qwen3-4b-metal-Q4_K_M.gguf   prompt: 1500 filler words   reps: 3
+
+--- ARM STATIC (tuned Metal FA, no --kv-paged) ---
+  static rep1  WALL=  1669 ms  prompt_ms=  1325.8  prompt_n=  1523  gen=  310.2 ms  103.16 tok/s
+  static rep2  WALL=  1471 ms  prompt_ms=  1130.0  prompt_n=  1523  gen=  312.3 ms  102.45 tok/s
+  static rep3  WALL=  1472 ms  prompt_ms=  1130.6  prompt_n=  1523  gen=  310.7 ms  103.00 tok/s
+
+--- ARM PAGED (scalar paged kernel) ---
+  paged  rep1  WALL= 10557 ms  prompt_ms=  6970.6  prompt_n=  1523  gen= 3554.3 ms    9.00 tok/s
+  paged  rep2  WALL= 10529 ms  prompt_ms=  6943.6  prompt_n=  1011  gen= 3556.7 ms    9.00 tok/s
+  paged  rep3  WALL= 10539 ms  prompt_ms=  6951.7  prompt_n=  1011  gen= 3558.1 ms    8.99 tok/s
+
+--- answers must agree (a slow kernel is still allowed to be wrong) ---
+  static: " alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alp"
+  paged : " alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alp"
+  -> IDENTICAL

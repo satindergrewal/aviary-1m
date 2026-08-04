@@ -1206,3 +1206,32 @@
 # cached in either case, so the guard keeps its exact meaning; only the accounting changes.
 #   measured: CELL MISMATCH count 4 -> 0, output still BYTE-IDENTICAL cold vs warm.
 #   P2-8 on 173f4c0f: qnr 6/6 · rec 3/3 (recompute=8, evictions=4) · swp 3/3 (swap_ins=4).
+
+# ============================================================================
+# ★★★ METAL PAGED BASELINE -- the first perf number for the Apple-silicon paged path
+# ============================================================================
+# ONE binary (build-metal @ 173f4c0f), ONE model (qwen3-4b Q4_K_M), ONE prompt (1,523 tok),
+# n=3 per arm, arms differ in exactly one flag: --kv-paged absent vs present.
+#   STATIC (tuned Metal FA)   prompt 1,130 ms   decode 103.0 tok/s
+#   PAGED  (scalar kernel)    prompt 6,950 ms   decode   9.0 tok/s
+#   ⇒ PREFILL 6.1x SLOWER · DECODE 11.4x SLOWER · answers BYTE-IDENTICAL
+#
+# ★ THIS PRICES A DECISION I MADE AND NEVER COSTED. The Metal port shipped as a deliberate
+# "rung one" on the reasoning that runs-slowly beats cannot-run. That is still the right
+# call for CORRECTNESS -- the op is right, the answers match -- but 11.4x on DECODE means
+# the paged path is not usable for serving on Apple silicon, and I had been carrying it in
+# the ledger as "shipped" with no number attached for ~1.5 h. A shipped feature with no
+# performance number is a claim, not a measurement.
+#
+# WHY DECODE IS THE WORSE ARM (and where the work is): the CUDA decode path gets split-K
+# over the key range plus warp-parallel reduction; the Metal port has NEITHER -- it is one
+# thread per (head, token) walking the whole KV. Prefill at least amortises over many
+# query rows. So the Metal climb starts at DECODE, not prefill, which is the opposite of
+# where the CUDA climb started (M7 was a prefill story). Do not copy the CUDA order.
+#
+# ⚠ ANOMALY, RECORDED NOT CHASED: prompt_n reported 1523 on rep 1 then 1011 on reps 2-3 of
+# the PAGED arm with cache_prompt=false, where all three should be 1523. The paged prompt
+# mirror still mis-accounts on a REUSED slot even after 173f4c0f zeroed the counter at
+# launch. It does not affect the timings above (WALL and prompt_ms are stable to ~0.3%),
+# but it is a second defect in the same counter I already fixed once, so the fix was
+# incomplete. OPEN.
