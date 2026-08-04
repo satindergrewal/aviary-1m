@@ -1006,3 +1006,30 @@ True scope is `354f006a~1..HEAD` = **38 commits**, including `common.cpp`, the h
 had been audited when I called the pass complete.** Finding 5 came from the widened range.
 
 **No parity number is affected** — all walls are qwen3-4b flat attention, which never used this path.
+
+### Finding 5 follow-up: the missing consumer, MAPPED
+
+`inkling.cpp` is the working template for a paged hybrid. Ornith's graphs are not wired at all:
+```
+src/models/inkling.cpp    consumes paged ctx   <- WORKING (ISWA type)
+src/models/qwen35.cpp     hybrid|paged refs: 1 <- essentially nothing
+src/models/qwen35moe.cpp  hybrid|paged refs: 1 <- essentially nothing
+```
+The consumer pattern to port (`inkling.cpp:310`):
+```cpp
+const auto * paged_ctx0 = mctx_hyb ? mctx_hyb->get_attn_paged() : nullptr;
+for (int il = 0; il < n_layer; ++il) {
+    const bool paged_l = paged_ctx0 != nullptr && use_paged_banded(paged_ctx0, il);
+```
+with `mctx_hyb` cast to **`llama_memory_hybrid_context`** (non-SWA) rather than the ISWA type.
+
+**⚠ Trap already documented in-source at `inkling.cpp:308`, do not rediscover it:** *"creating an
+input no node consumes leaves it unallocated and its set_input crashes on a null buffer
+(hybrid_paged_gate run 2)"*. The consumer must be wired so every created input is actually
+consumed — which is the same "producer without consumer" class as finding 5 itself, one level down.
+
+**Gate for this work, pre-filed:** paged-vs-**STATIC** on Ornith with differing output shas proving
+the paths diverge, then identical *content*. **An "identical to static" result is only meaningful
+once the marker proves the paged op ran** — that is precisely the tautology finding 5 caught.
+
+**Status: mapped, not built.**
