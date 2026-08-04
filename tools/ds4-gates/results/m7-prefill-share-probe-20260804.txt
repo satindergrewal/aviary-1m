@@ -2086,3 +2086,23 @@
 #   the (8,0)==(0,0) result argues against, but which the champion's paired
 #   `simdgroup_load(mq[0]...)/(mq[1]...)` call shape hints at.
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x, wall 2,945. Nothing claimed.
+
+# --- CANDIDATE (1) REFUTED BY THE HEADER, no arm spent ---
+#   _valid_simdgroup_matrix_size(cols, rows) { return (cols == 8 && rows == 8); }
+#   _simdgroup_matrix_storage_type { typedef vec<T, Cols*Rows> type; }
+# ⇒ on this toolchain a simdgroup_matrix is **8x8 and ONLY 8x8** (any other size fails the
+#   static_assert), with a 64-element storage type. So `simdgroup_half8x8` is genuinely 8x8
+#   and the 4-of-8 row count is NOT a 4x8/8x4 storage-shape artifact. Candidate (1) dead,
+#   cost: one grep instead of one arm.
+# ⇒ REMAINING CANDIDATE (2): the champion's PAIRED load shape --
+#     simdgroup_load(mq[0], pq + 0*8 + 16*i, DK); simdgroup_load(mq[1], pq + 1*8 + 16*i, DK);
+#     simdgroup_multiply_accumulate(mqk, mq[0], mk[0], mqk);
+#     simdgroup_multiply_accumulate(mqk, mq[1], mk[1], mqk);
+#   -- TWO loads at +0*8 and +1*8 with a 16-element step, both accumulated into ONE mqk.
+#   That is exactly the shape that would cover 8 rows if a single load covers 4, and it is
+#   the champion's own idiom rather than my invention. It also explains the `4*16` stride:
+#   16-element steps over a 4-wide... to be MEASURED, not assumed.
+# ⇒ NEXT ARM (one factor): two loads at +0 and +8 (or +0/+1*8 with step 16 as the champion
+#   writes it) accumulated into one fragment; verify all 8 source rows land via the same
+#   round-trip harness. Rules 1+2 predict the offsets, so it confirms or breaks them.
+# SESSION END STATE: tip 354f006a, 12/12, dirty 0, wall 2,945, gap 2.60x, nothing claimed.
