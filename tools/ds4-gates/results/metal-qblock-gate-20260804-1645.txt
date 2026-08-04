@@ -1,0 +1,14 @@
+backend: MTL0   reference: CPU
+D= 64 case A: with_rel=1 window=0 max_abs=4.470e-08 nmse=7.793e-15 PASS
+D= 64 case B: with_rel=1 window=8 max_abs=4.470e-08 nmse=8.101e-15 PASS
+D= 64 case C: with_rel=0 window=8 max_abs=4.470e-08 nmse=8.073e-15 PASS
+D= 96 case A: with_rel=1 window=0 max_abs=4.470e-08 nmse=7.615e-15 PASS
+D= 96 case B: with_rel=1 window=8 max_abs=4.470e-08 nmse=7.188e-15 PASS
+D= 96 case C: with_rel=0 window=8 max_abs=5.215e-08 nmse=8.537e-15 PASS
+D=128 case A: with_rel=1 window=0 max_abs=4.470e-08 nmse=7.361e-15 PASS
+D=128 case B: with_rel=1 window=8 max_abs=4.470e-08 nmse=7.529e-15 PASS
+D=128 case C: with_rel=0 window=8 max_abs=3.725e-08 nmse=7.634e-15 PASS
+D=192 case A: with_rel=1 window=0 max_abs=4.470e-08 nmse=8.240e-15 PASS
+D=192 case B: with_rel=1 window=8 max_abs=4.470e-08 nmse=7.690e-15 PASS
+D=192 case C: with_rel=0 window=8 max_abs=5.960e-08 nmse=7.953e-15 PASS
+test-paged-vs-cpu: ALL PASSED

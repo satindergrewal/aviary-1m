@@ -1,0 +1,18 @@
+=== METAL PAGED BASELINE (first perf number for the Apple-silicon paged path) ===
+5be8d836 metal: hoist the paged block-table lookup out of the key loop -- prefill ~2%
+model: /tmp/qwen3-4b-metal-Q4_K_M.gguf   prompt: 1500 filler words   reps: 3
+
+--- ARM STATIC (tuned Metal FA, no --kv-paged) ---
+  static rep1  WALL=  1490 ms  prompt_ms=  1140.3  prompt_n=  1523  gen=  318.1 ms  100.61 tok/s
+  static rep2  WALL=  1478 ms  prompt_ms=  1129.9  prompt_n=  1523  gen=  318.1 ms  100.61 tok/s
+  static rep3  WALL=  1475 ms  prompt_ms=  1130.5  prompt_n=  1523  gen=  315.7 ms  101.36 tok/s
+
+--- ARM PAGED (scalar paged kernel) ---
+  paged  rep1  WALL=  3484 ms  prompt_ms=  2945.4  prompt_n=  1523  gen=  506.1 ms   63.23 tok/s
+  paged  rep2  WALL=  3473 ms  prompt_ms=  2935.8  prompt_n=  1011  gen=  508.9 ms   62.88 tok/s
+  paged  rep3  WALL=  3472 ms  prompt_ms=  2939.3  prompt_n=  1011  gen=  503.4 ms   63.57 tok/s
+
+--- answers must agree (a slow kernel is still allowed to be wrong) ---
+  static: " alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alp"
+  paged : " alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alp"
+  -> IDENTICAL

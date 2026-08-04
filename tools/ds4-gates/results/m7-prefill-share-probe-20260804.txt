@@ -1693,3 +1693,23 @@
 # First wall movement on the prefill axis since rung 1, and the first external-idea
 # transfer to ship. Gap to static now ~2.9x; still a bandwidth story; Q-block port is
 # still the real lever.
+
+# ============================================================================
+# ★★★ Q-BLOCK PAGED PREFILL SHIPPED (ds4-ports 354f006a) -- gap 2.91x -> 2.60x
+# ============================================================================
+# The champion-shape increment, landed the same hour the owner's research order was finally
+# executed: 8 rows per threadgroup, K/V tiles staged ONCE per block in threadgroup memory
+# and shared by every row. Barriers per BLOCK, threadgroup-uniform by construction; tail
+# rows CLAMP (a non-uniform return would deadlock the staging barriers); cross-seq packs
+# fall back to the proven unshared walk.
+# nsg SWEPT, every point 12/12-gated BEFORE its wall:  2->3,565  4->3,078  8->2,940  16->3,247
+#   turnover at 16, ships at 8. ⚠ CAUGHT BY THE GATE: nsg lives in THREE coupled places
+#   (kargs / nth / grid divisor); a one-site change produced a kernel computing only half
+#   the rows -- gate failed, that wall was DISCARDED as invalid, never quoted.
+# DURABLE (results/metal-qblock-gate-* + metal-paged-baseline-20260804-1645.txt):
+#   prefill 2,936-2,948 ms vs static 1,131-1,140 = 2.60x   (scalar start: 6.1x)
+#   decode unchanged 63.2-63.4 (1.60x)   answers IDENTICAL   box synced 354f006ab
+# LADDER: scalar 6,950 -> rung1 3,334 -> hoist 3,300 -> Q-block 2,940. Next levers, all
+# live-sourced (agent board): simdgroup_matrix mma on the staged tiles (MLX steel/MFA tile
+# shapes) for prefill; FlashInfer/ik-#370 GQA head-packing + MLX sdpa_vector 2-pass
+# split-K + vLLM use_v1 heuristic for decode; matiaslin kernel diff for CUDA 1.21x.
