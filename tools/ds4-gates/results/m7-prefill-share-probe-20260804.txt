@@ -1629,3 +1629,31 @@
 # happen here, but only the assert proves that at patch time); (b) first-occurrence
 # replaces on NON-UNIQUE anchors are forbidden -- my fprintf hit concat.
 # Reverted, dirty 0, 12/12 PASS verified on a REBUILT binary this time.
+
+# ============================================================================
+# ★★★ KARGS PROBE v3 (REAL anchor, asserted, fresh-binary-verified): PLUMBING IS PERFECT
+# ============================================================================
+#   HOSTPROBE  sizeof=72 off_nsg=44 off_stride=48 nsg=2 ntot=24     (host, on-paper)
+#   SHADERVIEW row0: nsg=2 ntot=24 qp=1 marker=12345                (SHADER, identical)
+#   SHADERVIEW row5: nsg=2 ntot=24 qp=1 marker=12345
+# ⇒ THE WIDENED KARGS STRUCT REACHES THE SHADER EXACTLY. There was NEVER a kargs bug.
+#
+# ★★★ AND THE ROOT CAUSE OF THE ENTIRE ARM SAGA IS NOW NAMED, WITH PROOF:
+# The combine-comment anchor my patches inserted the q_parallel block at
+# ("// ---- combine the simd groups' partial softmaxes...") DOES NOT EXIST in the shipped
+# kernel -- it was MY OWN comment from the first, REVERTED split-K attempt. Every patch
+# that replaced against it UNASSERTED silently no-op'd. So F/G/H/J ran kernels where the
+# gtok/loop edits applied but the q_parallel write-and-return NEVER EXISTED: the kernel
+# fell through into the DECODE COMBINE with per-sg DIFFERENT rows -- sg0+sg1's m/l/acc
+# log-sum-exp-merged across two different rows, only sg0 writing. Garbage for its row,
+# stale for the other. That is the 0.494. The identity dump's "gtok=0" numbers came from
+# this fall-through path too, not from my instrument. Conclusion count: EIGHT wrong, and
+# #6 ("shader reads nsg=0") was wrong at the level of the INSTRUMENT, not the reasoning.
+# ⇒ ★★ THE RULE ABOVE ALL TODAY'S RULES: a diagnostic's output is only data if the
+#   diagnostic is PROVEN INSTALLED. The v3 probe carried marker=12345 for exactly this --
+#   instrument-presence is part of the measurement. "Data, then cause" has a prerequisite:
+#   "instrument, then data".
+# ⇒ STATUS: packing has never actually been tested. Plumbing verified end to end. The next
+#   arm is the REAL first packing experiment -- q_parallel block at the TRUE anchor
+#   ("threadgroup float * sh_m   = shmem;"), asserted, marker included, freshness-gated.
+# Reverted, 12/12 PASS on fresh-verified binary, dirty 0.
