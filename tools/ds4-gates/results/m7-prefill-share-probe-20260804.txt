@@ -1991,3 +1991,24 @@
 #   `simdgroup_matrix<T, Cols, Rows>` with `elements_per_row = Cols` -- worth reading the
 #   header rather than assuming, which is what finally isolated this.
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. LOAD named; contract fix is next.
+
+# ============================================================================
+# ★★★ PITCH SWEPT ON THE ISOLATED LOAD -- QUANTITATIVE MODEL, HALF THE BUG FIXED
+# ============================================================================
+# Round trip, src[i][d] = i*10+d, store stride 8, ONLY elements_per_row varied:
+#   pitch D    -> frag rows 0,2,4,6  <- src rows 0,2,4,6   (spacing 2)
+#   pitch D/2  -> frag rows 0,4      <- src rows 0,2       (spacing 4)
+#   pitch 2*D  -> frag rows 0,1,2,3  <- src rows 0,2,4,6   (spacing 1, CONTIGUOUS)  <-- fix
+# ★ MODEL (fits all three points exactly): **output row spacing = 2*D / pitch.**
+#   ⇒ pitch = 2*D places the loaded rows CONTIGUOUSLY. My original bare `D` was off by
+#     exactly the factor the champion's `4*16`-on-a-16-wide-tile hinted at all along.
+#   ⚠ My D/2 prediction was BACKWARDS -- spacing scales INVERSELY with pitch. Tested it
+#     rather than shipping it, which is the only reason that cost 90 seconds.
+# ⇒ REMAINING, and it is now the ONLY defect: the SOURCE rows read are always 0,2,4,6
+#   (step 2) regardless of pitch -- 4 rows read where 8 are needed. Output placement is
+#   SOLVED; input selection is not. That residual is independent of pitch, so it is a
+#   second, separate factor -- next arm varies the source staging pitch (stage src with a
+#   row pitch of D/2, or equivalently interleave) and re-runs this same harness.
+# ⇒ VALUE OF ISOLATION: the multiply, the transpose, the softmax and the attention math are
+#   all absent from this harness. Every number above is the load contract alone.
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Load contract HALF SOLVED, model exact.
