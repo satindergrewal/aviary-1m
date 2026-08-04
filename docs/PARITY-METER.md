@@ -914,3 +914,36 @@ kernel and asserting its first `typename` matches what `FA_TYPES` supplies. That
 would have caught all three failures.
 
 **Nothing measured is affected. Prefill 1.192x intact, re-verified ALL PASSED after every revert.**
+
+## ★ RETRACTION — the "wrong template header" root cause above is WRONG
+
+The section immediately above claims the vec extraction grabbed a non-corresponding template
+header. **That is incorrect and is retracted.** Line 7928 sits directly above
+`kernel_flash_attn_ext_vec` and was the right header all along.
+
+**The real cause of all three shader breaks:**
+```
+:7909   #undef FA_TYPES
+:8382   #define FA_TYPES    <- SEVEN types, scoped to the VEC kernel
+:7750   #define FA_TYPES    <- SEVENTEEN types, for the MMA kernel   ** what I copied **
+```
+`FA_TYPES` is **redefined mid-file**. My macro copied the MMA-era 17-type definition, so no
+instantiation could resolve regardless of arity, defaults, or header. Fixed by mirroring `:8382`
+exactly (`FA_TYPES_PVEC`) and pinning `C=64` as the ported template's own default so the
+instantiation matches the champion's 3-arg form. Fork `c8cf9712`: compiles, instantiated at
+dk/dv 64/96/128/192, prefill 1.192x untouched.
+
+**How the wrong diagnosis happened, because the pattern is the point:** I saw `typename q4_t` in
+the header, compared it to a macro I had **assumed** was in scope, and declared the header
+broken — without checking whether `FA_TYPES` was redefined between the two sites. **Verified one
+thing, assumed its neighbour. Fourth instance on this port.**
+
+What stopped a fourth shader break: the contradiction was self-evident once stated — the
+champion's own vec instantiation uses `FA_TYPES` and compiles, so "the header is incompatible
+with `FA_TYPES`" and "the champion compiles with `FA_TYPES`" cannot both be true. **Writing the
+claim down is what exposed it.** That is the argument for recording diagnoses rather than acting
+on them silently.
+
+**⚠ This retraction exists because the wrong version was published to the room and independently
+verified by Grok.** A diagnosis that survives review is not thereby correct, and leaving it
+standing would have sent the next attempt at a header that was never broken.
