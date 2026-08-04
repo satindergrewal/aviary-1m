@@ -209,3 +209,36 @@ failure rather than merely surviving it.
 
 Nothing here is implemented. It is written down so the next session starts from the arithmetic
 rather than re-deriving it.
+
+### Two more obstacles found while specifying phase A — both have standard fixes
+
+**(a) Q cannot live in registers.** Phase A needs lane `l` to read the **whole** Q vector for the
+row (D values), not its `NPT = D/32` slice. At D=128 that is 128 floats per lane — a register
+blowup, and fatal at D=256.
+**Fix:** stage the row's Q in threadgroup memory, one D-vector per simd group — `nsg * D` floats,
+**4 KB at nsg=8, D=128**. All lanes then read the same `sq[d]` each step, which is a *broadcast*
+in threadgroup memory, not 32 separate reads. Cheap, and the MMA path already stages Q this way.
+
+**(b) ⚠ The K read in phase A is a worst-case bank conflict, and the arithmetic says so.**
+Lane `l` reads key row `t0+l`, i.e. address `tk[(t0+l)*D + d]`. Consecutive lanes are therefore
+`D` halves apart. At D=128 that is **256 bytes = 64 four-byte words**, and `64 mod 32 == 0`, so
+**all 32 lanes land in the same bank — a 32-way conflict on every access.** That would erase the
+entire reduction saving and then some.
+**Fix:** pad the staged tile stride, `tk[t*(D + pad) + d]`, choosing `pad` so the row stride in
+4-byte words is **odd** (in halves, `D + 2` gives 65 words at D=128). Standard shared-memory
+padding; costs `KT * pad` halves of smem, negligible at KT=16.
+**This must be measured, not assumed** — it is precisely the kind of "the fix is obvious" step
+that has been wrong three times today.
+
+**Revised cost model per 32 keys per lane** (D=128), with both fixes applied:
+
+| | MACs (scores) | MACs (V) | reductions | barriers |
+|---|---|---|---|---|
+| today | 128 | 128 | **32** | 0 in the key loop |
+| two-phase | 128 | 128 | **2** | +1 per 32 keys |
+
+Barriers measured free on this kernel (repeat-controlled), so the +1 is affordable.
+
+**Order of work when this is built:** stage Q per simdgroup → phase A with a **padded** tile
+stride → verify 12/12 → wall against 1,570 → only then tune. If the padded stride does not remove
+the conflict, the arithmetic above is wrong somewhere and the arm stops there.
