@@ -603,3 +603,39 @@ the path that already leads. No re-derivation needed to resume.
 dirty-tree wall. Board prefill stays **1.317x**.
 
 **METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**
+
+## M3: bs as a function constant — MARGINAL (~1.4% at a 0.73% floor), not the lever
+
+`FC_paged_attn_BS` added; pipeline name keyed `_d%d_bs%d` so two block sizes cannot share one
+cached compilation. One binary, two arms (`DS4P_METAL_NO_BSFC=1` = runtime `args.block_size`),
+identical values, pure one-factor test of specialisation. 12/12 on BOTH arms, plus bs=16
+compiling its own pipeline.
+
+| arm | mean |
+|---|---|
+| STATIC | 1,505 |
+| STATIC2 (repeat control) | 1,516 — **floor 0.73%, looser than usual** |
+| LPK, bs from constant | **2,035** |
+| LPK, bs runtime | 2,063 |
+
+**BSFC buys -1.36% against a 0.73% floor — under 2x the noise.** Real but weak. It refines the
+earlier "neutral" verdict (ornith `1941628`) to *"~1.4%, not zero"* — the condition-expiry
+re-ask was justified and produced a number, but **it does not change the conclusion.**
+
+**Parity 2,035/1,505 = 1.352x. Specialising loop bounds is NOT the lever that closes 1.317x.**
+
+⇒ Per the locked criterion (wall moved, still far above STATIC): **keep cutting, no park.** The
+remaining path is the **full champion `kernel_flash_attn_ext` paged port**, with literal code
+copy permitted. Everything cheaper has now been measured and priced:
+
+```
+tile width          refuted 3 ways
+reduction count     ~3%      (LPK, 94% of reductions removed)
+staging traffic     +1.2%    WRONG direction (staging amortises at nsg>1)
+gather/indirection  0        contiguous by construction
+MMA occupancy      -14.8%    real, but MMA capped at nsg=4 STRUCTURALLY
+bs specialisation  -1.4%     marginal, at a 0.73% floor
+```
+**Six priced eliminations. Nothing cheap remains.**
+
+**METER: prefill 1.317x · decode 1.171x · CUDA 1.21x STALE · 12/12 · NOT SHIPPED.**

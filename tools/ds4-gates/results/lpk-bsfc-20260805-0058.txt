@@ -1,0 +1,22 @@
+tip: 1d7d71f3 dirty=4
+round1  STATIC   WALL=1483
+round1  LPK      WALL=2022
+round1  LPK_NOFC WALL=2027
+round1  STATIC2  WALL=1524
+round2  LPK      WALL=2022
+round2  LPK_NOFC WALL=2111
+round2  STATIC2  WALL=1502
+round2  STATIC   WALL=1483
+round3  LPK_NOFC WALL=2033
+round3  STATIC2  WALL=1505
+round3  STATIC   WALL=1519
+round3  LPK      WALL=2045
+round4  STATIC2  WALL=1533
+round4  STATIC   WALL=1538
+round4  LPK      WALL=2053
+round4  LPK_NOFC WALL=2082
+--- MEANS (interleaved, rotated) ---
+STATIC   1505 ms (n=4)
+LPK      2035 ms (n=4)
+LPK_NOFC 2063 ms (n=4)
+STATIC2  1516 ms (n=4)
