@@ -2339,3 +2339,32 @@
 #      sb=2, it does not isolate width from occupancy. Flagged rather than glossed.
 #   2. simdgroup_barrier(mem_none) placement -- copied from the champion, never measured here.
 #   3. D=192 sits at 31,872/32,768: no room for a second resident threadgroup.
+
+# --- OCCUPANCY ATTRIBUTION: the sb loss is SPLIT, and width is actually a WIN ---
+# The sb=2 arm changed tile width AND footprint together. Holding smem flat while widening is
+# impossible (width DRIVES the staged K/V), so I isolated from the other side: hold the tile
+# completely fixed and inflate ONLY the allocation with bytes the kernel never addresses.
+# Three points, one binary, fresh server each, best of 5, marker verified per point:
+#   A  tile 16, footprint 21,632 -> 2,303.5 ms
+#   B  tile 16, footprint 30,848 -> 2,727.7 ms   +18.4% vs A   <- ONLY residency differs
+#   C  tile 32, footprint 30,848 -> 2,536.6 ms   +10.1% vs A, and -7.0% vs B
+# ⇒ OCCUPANCY ALONE COSTS +18.4%. Padding the allocation with unused bytes slows the kernel
+#   by nearly a fifth. Threadgroup residency per core is a first-order term here.
+# ⇒ AT MATCHED FOOTPRINT THE WIDER TILE IS 7.0% FASTER. Widening is a genuine WIN; it simply
+#   does not pay for the smem it consumes. My original instinct about width was right and my
+#   conclusion ("wider is worse") was wrong -- wider is better, wider-and-heavier is worse.
+#   The sb sweep could never have shown this: C vs A nets +10.1%, matching the earlier
+#   sb=1 2,298 / sb=2 2,561 (+11.4%), so the sweep reproduces but cannot decompose.
+# ⇒ THE TARGET IS NOW CONCRETE: widen the tile WITHOUT growing smem -> take the 7% and avoid
+#   the 18%. The mechanism is the champion's own: it reads V (and K) DIRECTLY FROM DEVICE
+#   memory rather than staging it (ggml-metal.metal:7150, `device const v_t * pv`, pitch
+#   NS20). Dropping the staged V frees KT*D halves -- exactly enough to double KT at flat
+#   footprint; dropping both frees 2*KT*D. Within a paged block V rows are at
+#   vb + t*stride_token + d, so the fragment pitch is stride_token and the 8 keys of a tile
+#   are guaranteed in ONE block whenever bs % 8 == 0 (true: bs=16).
+#   TRADE TO MEASURE, not assume: staging amortises K/V across all QR rows, so direct reads
+#   cost nsg x device traffic instead of 1 x smem. The champion accepts that trade; whether
+#   it wins HERE is an arm, and it is now a ONE-FACTOR arm because the footprint is held flat
+#   by construction.
+# TOOL: DS4P_METAL_SMEM_PAD=<bytes> inflates only the allocation. Kernel layout untouched.
+#   Keep it -- it turns "is this occupancy?" into a measurement anywhere in this kernel.
