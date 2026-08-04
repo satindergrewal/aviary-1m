@@ -1,0 +1,8 @@
+# Compiled probes are BUILD ARTIFACTS -- the sources and the gate scripts are the deliverable.
+# They rebuild in seconds via build.sh / the gate scripts, and a committed binary is exactly
+# the stale-binary trap this lane has already been bitten by twice.
+probe
+qk_tile
+fa_paged
+*.air
+*.metallib
