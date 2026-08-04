@@ -1436,3 +1436,47 @@
 #   counts across simd groups is the constraint and the fix is uniform bounds + masking.
 # NOT a diagnosis -- a hypothesis with the arm that would refute it, stated in that order
 # for once. Reverted to c6aebd6a, 12/12 PASS, dirty 0. Prefill unchanged 2.96x.
+
+# ============================================================================
+# ★★★ CHAMPION TRANSFER LIST (Satinder's order: learn from static FA, copy allowed)
+# ============================================================================
+# Read the in-tree Metal champion: kernel_flash_attn_ext (ggml-metal.metal:7212-7275,
+# impl at :7467+). THE CHAMPION ANSWERS THE DIVERGENCE QUESTION BY DESIGN:
+#
+#   :7467  iq1 = tgpig[0]            -> ONE query BLOCK per threadgroup (Q=8 queries)
+#   :7557  for (ic0 = iwg*NSG + sgitg; ; ic0 += NWG*NSG)
+#                                    -> ALL simd groups share those SAME 8 queries and
+#                                       stride over CACHE ITEMS -- uniform loop, masking
+#                                       does causality. NEVER different rows per sg.
+#
+# ⇒ THE CHAMPION NEVER DOES WHAT MY ARMS F/G TRIED. Its prefill parallelism is a QUERY
+#   BLOCK per threadgroup, with K/V tiles loaded ONCE and amortised across all 8 queries
+#   (8x K/V bandwidth saved -- THE actual prefill win), q·k via simdgroup_matrix 8x8.
+#   My one-row-per-simd-group design cannot amortise K/V at all, so even fixed it would
+#   leave the 8x on the table. The divergence hypothesis matches the champion's shape:
+#   it engineers divergent trip counts OUT rather than surviving them.
+#
+# 3-COLUMN TRANSFER LIST:
+# | STATIC does (anchor)                        | PAGED missing               | equivalent already |
+# | Q=8 queries/threadgroup as a BLOCK (:7212)  | 1 query per (tg,sg)         | --                 |
+# | K/V tile loaded once, shared by 8 queries   | K/V re-read per query       | --                 |
+# | uniform loop + MASK for causality (:7557)   | per-row divergent n_tok     | --                 |
+# | simdgroup_matrix 8x8 q·k mma                | scalar per-lane dot         | --                 |
+# | sg's stride cache items (:7557)             | --                          | decode split-K     |
+# | online softmax m/l rescale                  | --                          | ours matches       |
+# | per-block K gather (block tables via blk)   | per-TOKEN block_table index | --                 |
+#
+# EXTERNAL IDEAS (training-data knowledge, MUST be verified against live sources before
+# relying -- the live PR/fork sweep is the fresh-context session's first action):
+#  1. vLLM PagedAttention: gathers K/V per BLOCK (16 tokens contiguous), not per token; my
+#     kernel recomputes block_table[tok/block_size] EVERY iteration. Apply: hoist the
+#     gather to block granularity. KILL if the indexing cost measures as noise.
+#  2. FlashAttention-2 (Dao): parallelise over QUERY BLOCKS for prefill, over KV ONLY for
+#     decode. Independently confirms the champion's axis choice. Apply: Q-block prefill.
+#  3. FlashInfer: unified prefill/decode kernel using per-tile UNIFORM bounds (max over
+#     tile) + masking -- the exact uniform-bound arm already queued. Apply as planned.
+#
+# ⇒ RUNG 3 REDESIGN, replacing the q-parallel plan: port the champion's Q-BLOCK shape into
+#   kernel_paged_attn_f32 (copy the loop skeleton, keep our block-table addressing), which
+#   fixes the divergence AND buys the 8x K/V amortisation in one move. The uniform-bound
+#   arm stays as the cheap intermediate proof of the divergence constraint.
