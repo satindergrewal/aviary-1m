@@ -833,3 +833,29 @@ and doubles the simd groups. That is the one knob our own layouts could never tu
 CUDA 1.21x STALE.
 
 **METER: Metal prefill 1.192x · decode 1.171x · CUDA 1.21x STALE · 12/12 · floor 0.07%.**
+
+## Decode-side champion port: constraint checked FIRST — no bs conflict, port is viable
+
+Same discipline that made the prefill port work architecturally on the first try: measure what
+DEFINES the search space before entering it.
+
+**The worry:** the decode-side champion is `kernel_flash_attn_ext_vec`, whose default
+`NCPSG_VEC = 32`. Prefill champ requires `C == bs == 64`. **One pool has ONE block size**, so a
+hard C=32 requirement for decode would have meant the two champion paths cannot coexist.
+
+**Checked, using the vec kernel's own smem formula** (`ggml-metal-ops.cpp:3013`):
+```
+vec C=32 nsg=4:   4,096      vec C=64 nsg=4:   5,120
+vec C=32 nsg=8:   8,192      vec C=64 nsg=8:  10,240
+```
+**`C` is a template parameter, not a hard constant, and C=64 fits with 22 KiB to spare.**
+`NQPSG_VEC = 1` (one query per threadgroup) is exactly right for decode.
+
+⇒ **NO CONFLICT. One pool at bs=64 serves BOTH champion paths.** The decode port is viable and
+does not force a second block size or a second pool.
+
+**Status: checked, not built.** The prefill port's own history says the cheap constraint check is
+worth doing before writing 640 lines — it is what turned "is this even possible" into a named,
+satisfiable contract last time.
+
+**METER: prefill 1.192x · decode 1.171x (untouched) · CUDA 1.21x STALE · NOT SHIPPED.**
