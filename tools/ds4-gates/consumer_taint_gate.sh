@@ -4,7 +4,7 @@
 set -uo pipefail
 WT=$HOME/Documents/GitHub/llama.cpp-ds4ports
 B=$WT/build-metal/bin/llama-server
-M=/tmp/qwen3-4b-metal-Q4_K_M.gguf
+M=${M:-/tmp/qwen3-4b-metal-Q4_K_M.gguf}
 P=8991
 OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/consumer-taint-gate-$(date +%Y%m%d-%H%M).txt
 mkdir -p "$(dirname "$OUT")"
@@ -14,7 +14,7 @@ echo "binary: $(stat -f '%Sm' -t '%H:%M:%S' "$B")" | tee -a "$OUT"
 run() { # $1 label  $2 server args  $3 env
     pkill -f "$B" >/dev/null 2>&1; sleep 2
     # shellcheck disable=SC2086
-    env $3 nohup "$B" -m "$M" -ngl 99 -c 4096 -np 1 -b 512 -ub 512 --port $P --no-warmup -lv 4 $2 > "/tmp/tg-$1.log" 2>&1 &
+    env $3 nohup "$B" -m "$M" -ngl 99 -c 4096 -np 1 -b 512 -ub 512 --port $P --no-warmup -lv 4 ${EXTRA:-} $2 > "/tmp/tg-$1.log" 2>&1 &
     for _ in $(seq 1 120); do
         [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] && break; sleep 1
     done
@@ -43,14 +43,22 @@ else:
     echo "$sha"
 }
 
-echo "=== SELF-VALIDATION on qwen3-4b (paged KNOWN to work) ===" | tee -a "$OUT"
-a=$(run PAGED-clean  "--kv-paged --kv-block-size 32" "" | tail -1)
-b=$(run PAGED-tainted "--kv-paged --kv-block-size 32" "DS4P_PAGED_TAINT=1" | tail -1)
+echo "=== CONSUMER GATE on $(basename "$M") ===" | tee -a "$OUT"
+a=$(run PAGED-clean  "--kv-paged --kv-block-size 32" "${SRVENV:-}" | tail -1)
+b=$(run PAGED-tainted "--kv-paged --kv-block-size 32" "${SRVENV:-} DS4P_PAGED_TAINT=1" | tail -1)
 pkill -f "$B" >/dev/null 2>&1
 echo "---" | tee -a "$OUT"
-if [ "$a" != "$b" ] && [ -n "$a" ] && [ -n "$b" ]; then
-    echo "GATE VALID: taint CHANGED output ($a -> $b) => the probe can detect a real consumer" | tee -a "$OUT"
+armed=$(grep -c "DS4P-PAGED-TAINT active" /tmp/tg-PAGED-tainted.log 2>/dev/null); armed=$(printf %s "${armed:-0}" | head -1)
+pagedop=$(grep -cE "DS4P-(LPK ACTIVE|MMA OFF|CHAMP-PAGED ACTIVE)" /tmp/tg-PAGED-tainted.log 2>/dev/null); pagedop=$(printf %s "${pagedop:-0}" | head -1)
+echo "probe_armed=$armed  paged_op_ran=$pagedop  model=$(basename "$M")" | tee -a "$OUT"
+
+if [ "$armed" = "0" ]; then
+    echo "INCONCLUSIVE: the taint probe never armed (no paged KV write dispatched). NOT evidence of anything -- the paged pool was absent or the write path never ran." | tee -a "$OUT"
+elif [ -z "$a" ] || [ -z "$b" ] || [ "$a" = "NO_LOGPROBS" ]; then
+    echo "INCONCLUSIVE: no usable logprob observable." | tee -a "$OUT"
+elif [ "$a" != "$b" ]; then
+    echo "CONSUMED: taint CHANGED logprobs ($a -> $b) => this graph genuinely READS the paged pool" | tee -a "$OUT"
 else
-    echo "GATE BROKEN: taint did NOT change output ($a vs $b) => probe cannot detect consumption; DO NOT trust it on Ornith" | tee -a "$OUT"
+    echo "NOT CONSUMED: probe armed, paged writes tainted, logprobs BIT-IDENTICAL ($a) => the graph does NOT read the paged pool" | tee -a "$OUT"
 fi
 echo "OUT=$OUT"

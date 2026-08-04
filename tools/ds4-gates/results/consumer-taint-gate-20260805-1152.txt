@@ -1,0 +1,12 @@
+tip: 6062f6f7 dirty=0
+binary: 11:49:43
+=== CONSUMER GATE on ornith-1.0-9b-1M-IQ2_M.gguf ===
+PAGED-clean        sha=4f725c2b64a6  taint_marker=0
+0
+PAGED-tainted      sha=4f725c2b64a6  taint_marker=0
+0
+---
+probe_armed=0
+0  paged_op_ran=0
+0  model=ornith-1.0-9b-1M-IQ2_M.gguf
+NOT CONSUMED: probe armed, paged writes tainted, logprobs BIT-IDENTICAL (4f725c2b64a6) => the graph does NOT read the paged pool

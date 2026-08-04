@@ -1,0 +1,9 @@
+tip: 6062f6f7 dirty=0
+binary: 11:49:43
+=== SELF-VALIDATION on qwen3-4b (paged KNOWN to work) ===
+PAGED-clean        sha=4f725c2b64a6  taint_marker=0
+0
+PAGED-tainted      sha=4f725c2b64a6  taint_marker=0
+0
+---
+GATE BROKEN: taint did NOT change output (4f725c2b64a6 vs 4f725c2b64a6) => probe cannot detect consumption; DO NOT trust it on Ornith
