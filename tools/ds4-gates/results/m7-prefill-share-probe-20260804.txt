@@ -1331,3 +1331,26 @@
 # -1, and NO error printed anywhere. Now polls until the STATUS CODE is 200.
 # ⇒ same class as everything else today: a readiness check that accepted an ANNOUNCEMENT
 #   instead of the STATE.
+
+# --- METAL RUNG 2 (ds4-ports c6aebd6a): decode nsg 8 -> 32, the HARDWARE CEILING ---
+# SWEPT as paired arms in ONE binary (DS4P_METAL_NSG), every point correctness-gated BEFORE
+# any timing:
+#   nsg        4        8       16       32
+#   decode  19.25    31.50    45.73    54.78 tok/s    monotonic, NO turnover
+#   prefill  3885     3965     4789     4855 ms       monotonic the OTHER way
+# 32 is the CEILING, not a tuned optimum: 1024 threads/threadgroup / 32 lanes.
+# ★ THE CUDA SWEEP'S SHAPE DOES NOT TRANSFER. CUDA's decode split count peaked at 64 and got
+#   WORSE beyond it; this one rises to the hardware limit and stops. The CURRENCY transfers
+#   (parallelism over the key range), the CURVE does not -- so "as high as possible" is
+#   right here and was wrong there. Re-sweep per backend; never port a constant.
+# Prefill degrading over the same sweep CONFIRMS the shape argument rather than contradicting
+# it: prefill already has n_tokens*n_heads threadgroups so extra slices only widen the
+# combine. Decode's grid is (1, n_heads) and simd groups are its ONLY parallelism. Hence 2/32.
+#
+# DURABLE PAIRED WALL (n=3, one binary, one flag apart, answers BYTE-IDENTICAL):
+#                 scalar    rung1     rung2      static FA    gap now
+#   prefill       6,950     3,334     3,372 ms   1,140 ms     2.96x
+#   decode          9.0      34.2      63.6 t/s    102.7 t/s   1.60x
+# ⇒ decode is 7.07x the original scalar kernel and 11.4x -> 1.60x off the tuned static path.
+#   Prefill untouched by this commit and now the WEAKER axis -- the next rung is prefill,
+#   which is the reverse of where this climb started.
