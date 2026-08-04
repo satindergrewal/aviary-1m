@@ -75,3 +75,56 @@ That is the difference between a supported-list and Satinder's bar.
 **output shas** plus RSS and system-free. Extend it to every model on the box as they arrive, and
 require: **serves, output identical to static, memory sane.** A model that cannot page must fail
 the gate *loudly with a model-specific reason*, not silently drop to static.
+
+---
+
+## Implementation map for step 1 — mirroring paged into the non-SWA hybrid branch
+
+Extracted from the working ISWA implementation so this executes without re-deriving it.
+**Scope correction:** I called this "wiring, not design". It is wiring, but it spans **five
+files**, not one line. Stated honestly so the estimate is not repeated wrong.
+
+`llama_memory_hybrid_iswa` has the complete paged plumbing; `llama_memory_hybrid` has **none of
+it**. The mirror:
+
+**1. `src/llama-memory-hybrid.h`** — copy from `llama-memory-hybrid-iswa.h`:
+```cpp
+void                   set_attn_paged(llama_kv_cache_paged * paged);   // :52
+llama_kv_cache_paged * get_mem_attn_paged() const;                     // :54
+std::unique_ptr<llama_kv_cache_paged> mem_attn_paged;                  // :104  (non-const:
+                                                                       //  handed in post-ctor)
+```
+and on the **context** class:
+```cpp
+const llama_kv_cache_paged_context * get_attn_paged() const;           // :147
+llama_memory_context_ptr ctx_attn_paged;                               // :160
+void set_attn_paged_ctx(llama_memory_context_ptr ctx) { ctx_attn_paged = std::move(ctx); } // :165
+```
+
+**2. `src/llama-memory-hybrid.cpp`** — copy from `llama-memory-hybrid-iswa.cpp`:
+- the two accessors (`:69-75`)
+- inside `init_batch`, the paged branch (`:139-147`):
+  `if (mem_attn_paged && mem_attn_paged->has_paged_batch_info())` →
+  `init_batch_with_ubatches(ubatches)` → `ctx->set_attn_paged_ctx(std::move(paged_ctx))`
+  ⚠ note the ISWA comment: *"copy: hybrid ctx owns the originals"* — preserve that ownership rule.
+- the context accessor `get_attn_paged()` (`:313`)
+
+**3. `src/llama-paged-scheduler.cpp:25`** — today `paged_kv = hyb->get_mem_attn_paged();` resolves
+only the ISWA type. Must also accept `llama_memory_hybrid`. **This is the line that produced the
+misleading "SWA architectures are not yet supported" message**, so fix the text here at the same
+time: report *which* precondition failed, in model terms.
+
+**4. `src/llama-model.cpp` (~:2263)** — the non-SWA branch currently does `res = new
+llama_memory_hybrid(...)` inline. Capture the pointer, then paste the bring-up block from the
+ISWA branch (`:2233-2260`): build `llama_kv_cache_paged`, choose `init_multi` vs `init` on
+`pg_multi_dev`, then `set_attn_paged`. Narrow the assert at `:2182` so non-SWA hybrids are no
+longer refused once this lands.
+
+**5. Gate it** with `tools/ds4-gates/paged_multimodel_gate.sh` on Ornith-9B: **must serve, and its
+output sha must equal the static run's.** That gate already exists and already proves
+paged==static on qwen3-4b.
+
+**Why this one step is worth doing first:** `QWEN35`, `QWEN35MOE`, `JAMBA`, `NEMOTRON_H(+MOE)`,
+`KIMI_LINEAR`, `LFM2(+MOE)`, `PLAMO2`, `GRANITE_HYBRID`, `DREAM`, `LLADA(+MOE)` all take the plain
+hybrid path. **One mirror unblocks the bring-up for all of them**, including Ornith and Kimi-K3.
+Decode correctness (step 4 in the list above) is still a separate gate per family.
