@@ -1,0 +1,10 @@
+binary: $HOME/Documents/GitHub/llama.cpp-ds4ports/build-metal/bin/llama-server  tip=a391331c
+=== qwen3-4b-metal-Q4_K_M.gguf (ctx=8192) ===
+  static   sha=82cce25432  RSS=  3.52 GB  free=89%  
+  paged    sha=82cce25432  RSS=  4.55 GB  free=88%  UNIFIED (reserve is the OS working set),
+  -> OUTPUT IDENTICAL
+=== Ornith-9B-Q8_0.gguf (ctx=8192) ===
+  static   sha=46aed20243  RSS=  9.23 GB  free=85%  
+  paged    DID NOT SERVE -> $HOME/Documents/GitHub/llama.cpp-ds4ports/src/llama-model.cpp:2182: GGML_ASSERT(
+  -> paged did not produce output (see above)
+=== done -> $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/paged-multimodel-20260804-2141.txt ===
