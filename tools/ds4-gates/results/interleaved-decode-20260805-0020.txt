@@ -1,0 +1,17 @@
+tip: 02a3b6d9 dirty=0  n_predict=256
+round1  STATIC   predicted_ms=2462.7    tok/s=103.95
+round1  PAGED    predicted_ms=2840.8    tok/s=90.12
+round1  STATIC2  predicted_ms=2463.2    tok/s=103.93
+round2  PAGED    predicted_ms=2885.7    tok/s=88.71
+round2  STATIC2  predicted_ms=2436.3    tok/s=105.08
+round2  STATIC   predicted_ms=2425.4    tok/s=105.55
+round3  STATIC2  predicted_ms=2468.1    tok/s=103.72
+round3  STATIC   predicted_ms=2441.9    tok/s=104.84
+round3  PAGED    predicted_ms=2862.9    tok/s=89.42
+round4  STATIC   predicted_ms=2430.4    tok/s=105.33
+round4  PAGED    predicted_ms=2844.2    tok/s=90.01
+round4  STATIC2  predicted_ms=2428.1    tok/s=105.43
+--- MEANS (interleaved, rotated) ---
+STATIC   2440.1 ms (n=4)
+PAGED    2858.4 ms (n=4)
+STATIC2  2448.9 ms (n=4)

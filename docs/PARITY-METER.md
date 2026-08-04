@@ -382,3 +382,31 @@ server, with the restart as a cooldown, removes it — the arms no longer share 
 
 **METER (drift-free, tip 02a3b6d9): Metal prefill 1.317x · decode 1.16x · CUDA 1.21x STALE ·
 12/12 · noise floor 0.07% · NOT SHIPPED.**
+
+## Decode re-gated on the interleaved harness — 1.16x CONFIRMED, not superseded
+
+Same discipline as the prefill run (fresh server per sample, interleaved, rotated, repeat
+control). LPK is **not** an arm: it is gated `n_tokens > 1`, so decode takes the combine path.
+Metric is server-reported `predicted_ms`, not wall — wall would fold in prefill and HTTP.
+
+| arm | mean predicted_ms | tok/s |
+|---|---|---|
+| STATIC | **2,440.1** | ~105 |
+| STATIC2 (repeat control) | **2,448.9** | ~104 |
+| PAGED bs=32 | 2,858.4 | ~89 |
+
+**Noise floor 0.36%** (2,440.1 vs 2,448.9) — looser than prefill's 0.07%, still far below the
+effect. **Decode parity = 1.171x**, against 1.16x from the broken harness.
+
+**This is a CONFIRMATION, and it was PREDICTED BEFORE THE RUN** (chat #2455): the drift mechanism
+is thermal accumulation across back-to-back reps, and decode reps generate less heat per rep than
+a 1,500-token prefill, so the confound had little to bite on. Calling it ahead of time is what
+makes it a confirmation rather than a retrofit — the old number was right for the wrong harness.
+
+⇒ **The broken harness did not corrupt everything it touched.** It corrupted the *prefill*
+numbers, where reps are expensive. That is the CONDITION this negative needs
+([[refuted-needs-its-condition]]): sequential-arm drift scales with per-rep cost, so cheap-rep
+gates are far less exposed than expensive-rep ones.
+
+**METER (both re-gated, drift-free): Metal prefill 1.317x · Metal decode 1.171x · CUDA 1.21x
+STALE · 12/12 · floors 0.07%/0.36% · fork `02a3b6d9` dirty=0 · NOT SHIPPED.**
