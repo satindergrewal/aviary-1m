@@ -1,0 +1,22 @@
+tip: da4c628a dirty=4  binary=23:17:35
+STATIC        rep1  WALL=1483   
+STATIC        rep2  WALL=1482   
+STATIC        rep3  WALL=1500   
+STATIC        rep4  WALL=1493   
+STATIC        rep5  WALL=1493   
+STATIC        MEAN=1490 ms
+STATIC sha=4520f9af  marker: 
+PAGED-SCALAR  rep1  WALL=2020   
+PAGED-SCALAR  rep2  WALL=2008   
+PAGED-SCALAR  rep3  WALL=2005   
+PAGED-SCALAR  rep4  WALL=2007   
+PAGED-SCALAR  rep5  WALL=2012   
+PAGED-SCALAR  MEAN=2010 ms
+PAGED-SCALAR sha=4520f9af  marker: DS4P-MMA OFF (scalar path) D=128 bs=32 n_tokens=512 lpk=off(not requested)
+PAGED-LPK     rep1  WALL=1954   
+PAGED-LPK     rep2  WALL=1953   
+PAGED-LPK     rep3  WALL=1973   
+PAGED-LPK     rep4  WALL=1948   
+PAGED-LPK     rep5  WALL=1945   
+PAGED-LPK     MEAN=1954 ms
+PAGED-LPK sha=4520f9af  marker: DS4P-LPK ACTIVE (lane-per-key two-phase) D=128 bs=32 nsg=8 TKP=130 smem=21632/32768

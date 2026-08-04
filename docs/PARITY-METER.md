@@ -302,3 +302,48 @@ obvious" has been wrong three separate times in this lane today.
 (Grok reproduced 2/2). It fires on `pkill`, *after* RSS is sampled, identically in both arms,
 so it does not touch this result. Stays on the open list; noted here so a later reader does not
 mistake this run for the reproducer.
+
+## Lane-per-key two-phase: BUILT, gated, and it refutes its own premise — fork `02a3b6d9`
+
+`DS4P_METAL_LPK=1` (needs `bs>=32`). Phase A scores 32 keys with **two** reductions instead of a
+full 32-lane `simd_sum` per (row,key); phase B keeps the original lane-per-head-dim V loop.
+12/12 vs CPU at every head_dim with `DS4P-LPK ACTIVE` printed; all server shas identical.
+
+**The marker earned its keep again:** the correctness test was hard-coded `BS=16`, where the
+path can *never* run. `DS4P_METAL_LPK=1` would have printed **ALL PASSED for a kernel that never
+executed.** Test `BS`/`NB` are now env-driven.
+
+| arm | forward (pos) | reverse (pos) |
+|---|---|---|
+| STATIC | 1,483 (1st) | 1,916 (5th) |
+| PAGED-SCALAR bs=32 | 2,126 (3rd) | 2,853 (3rd) |
+| **PAGED-LPK** | **2,106 (4th)** | **2,704 (2nd)** |
+| LPK-UNPADDED | 2,787 (5th) | 3,165 (1st) |
+
+**1. Padding is load-bearing — robust.** UNPAD is the worst arm *even from the most advantaged
+slot*. The 32-way bank conflict was predicted from arithmetic and is confirmed at 14-24%.
+
+**2. LPK wins, small.** Better in BOTH orderings — including forward, where it ran in the
+*disadvantaged* slot and still won. ~1-5%. No tighter number is honest.
+
+**3. ★ THE PREMISE IS REFUTED BY ITS OWN FIX.** I argued: width refuted three ways, therefore by
+elimination the bottleneck is the **reduction count**. I then removed ~94% of the reductions and
+got **~3%**. The fix worked; the theory behind it did not. `simd_sum` is a cheap hardware
+shuffle-reduce here. **Reductions are priced at ~3% — that is the condition this negative needs**
+([[refuted-needs-its-condition]]). Standing suspect for the real cost: device->threadgroup
+staging traffic, which no arm has isolated yet.
+
+### ⚠⚠ HARNESS DEFECT — sequential arms drift 29% by position
+
+STATIC measures **1,483 ms first and 1,916 ms last** in the same script. Arm order is a
+confound, and it is larger than most effects this lane has chased. **Every few-percent delta
+measured with sequential arms is suspect**, including my own "bs=32 is free, 0.6% noise floor".
+That claim survives *directionally* — bs=32 ran later, was penalised, and still measured equal —
+but the quoted noise floor was fiction.
+
+**Rule going forward: any wall claiming <10% must run its arms in both orders**, and report the
+direction where the winning arm had the *disadvantaged* slot. A single forward sweep is only
+valid for effects larger than the positional swing.
+
+**METER (this session, forward run): Metal prefill STATIC 1,483 vs best paged 2,106 = 1.42×.**
+Not parity. LPK narrows it; the gap is not substantially the reduction count.

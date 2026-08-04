@@ -1,0 +1,29 @@
+tip: da4c628a dirty=4  binary=23:21:14
+STATIC        rep1  WALL=1489   
+STATIC        rep2  WALL=1480   
+STATIC        rep3  WALL=1476   
+STATIC        rep4  WALL=1487   
+STATIC        rep5  WALL=1566   
+STATIC        MEAN=1499 ms
+STATIC sha=4520f9af  marker: 
+PAGED-SCALAR  rep1  WALL=2045   
+PAGED-SCALAR  rep2  WALL=2030   
+PAGED-SCALAR  rep3  WALL=2039   
+PAGED-SCALAR  rep4  WALL=2025   
+PAGED-SCALAR  rep5  WALL=2046   
+PAGED-SCALAR  MEAN=2037 ms
+PAGED-SCALAR sha=4520f9af  marker: DS4P-MMA OFF (scalar path) D=128 bs=32 n_tokens=512 lpk=off(not requested)
+PAGED-LPK     rep1  WALL=1976   
+PAGED-LPK     rep2  WALL=1970   
+PAGED-LPK     rep3  WALL=1958   
+PAGED-LPK     rep4  WALL=1958   
+PAGED-LPK     rep5  WALL=1971   
+PAGED-LPK     MEAN=1966 ms
+PAGED-LPK sha=4520f9af  marker: DS4P-LPK ACTIVE (lane-per-key two-phase) D=128 bs=32 nsg=8 TKP=130 smem=21632/32768
+LPK-UNPAD     rep1  WALL=2237   
+LPK-UNPAD     rep2  WALL=2230   
+LPK-UNPAD     rep3  WALL=2221   
+LPK-UNPAD     rep4  WALL=2249   
+LPK-UNPAD     rep5  WALL=2288   
+LPK-UNPAD     MEAN=2245 ms
+LPK-UNPAD sha=4520f9af  marker: DS4P-LPK ACTIVE (lane-per-key two-phase) D=128 bs=32 nsg=8 TKP=128 UNPADDED smem=21504/32768
