@@ -1683,3 +1683,13 @@
 # ⇒ NEXT (unchanged, now fully de-risked): the Q-block port from main FA :6592/:6619/:6716
 #   -- shared KV tiles + NQ=Q/NSG row split + uniform loop + mask. Copy allowed, credited.
 # Reverted, 12/12 PASS fresh-verified, dirty 0. Prefill 2.96x / decode 1.60x stand.
+
+# --- SHIPPED (ds4-ports 5be8d836): block-table lookup hoisted -- prefill ~2%, honest size ---
+# The vLLM per-block gather pattern from the transfer list, applied at its smallest: the
+# key loop's per-token divide + modulo + global block_table load becomes a cached block
+# base recomputed only on block crossings. 12/12 gate BEFORE the wall.
+#   prefill 3,298-3,310 ms vs shipped 3,341-3,413 -- ranges do NOT overlap. ~2%. Claimed
+#   as exactly that. decode 63.2-63.6 unchanged. answers IDENTICAL. Box synced 5be8d8369.
+# First wall movement on the prefill axis since rung 1, and the first external-idea
+# transfer to ship. Gap to static now ~2.9x; still a bandwidth story; Q-block port is
+# still the real lever.
