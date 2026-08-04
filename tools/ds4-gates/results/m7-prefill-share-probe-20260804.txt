@@ -2012,3 +2012,26 @@
 # ⇒ VALUE OF ISOLATION: the multiply, the transpose, the softmax and the attention math are
 #   all absent from this harness. Every number above is the load contract alone.
 # Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Load contract HALF SOLVED, model exact.
+
+# --- ARM (i) + THE APPLE HEADER READ (spec, not inference) ---
+# ARM (i): source staged at row pitch D/2, load pitch 2*SP. Result: frag rows 0 and 2 hold
+#   src rows 0 and 4 -- did NOT fix, and the simple "spacing = 2*D/pitch" model does NOT
+#   extend once the SOURCE pitch also moves. Recorded as a data point, not a theory.
+# ★ HEADER READ (/System/Library/PrivateFrameworks/GPUCompiler.framework/.../include/metal/
+#   metal_simdgroup_matrix) -- three facts that replace guesses:
+#   1. `template <typename T, int Cols, int Rows> simdgroup_matrix` -- the template order is
+#      **Cols THEN Rows**, and `elements_per_row = Cols` is the DEFAULT.
+#   2. simdgroup_load HAS BOTH overloads: `const device T *src` AND `const threadgroup T
+#      *src`. ⇒ **MY "device-only, that's why the champion sources K from device"
+#      HYPOTHESIS IS REFUTED BY THE SPEC -- before I posted it.** Threadgroup loads are
+#      first-class; the champion's device source is a choice, not a requirement.
+#   3. simdgroup_store likewise has both, and REQUIRES matching T (half fragment ->
+#      threadgroup half*, never float*) -- which is the compile error that led me here.
+# ⇒ STATE: the load contract is NOT explained by address space, element type, store stride,
+#   transpose, accumulator aliasing, precision, padding or row-mapping -- all measured out.
+#   The remaining unknown is the exact (pitch, source-pitch) -> (frag row, src row) mapping,
+#   for which I now have FOUR measured points and a refuted model. Next session: solve the
+#   mapping from the four points rather than guessing a fifth, and read
+#   `__metal_simdgroup_matrix_8x8_load`'s bounds/origin semantics (matrix_origin is the
+#   ulong2 argument I have left at 0 in every arm -- UNTESTED and the obvious next factor).
+# Reverted, 12/12 PASS rebuilt, dirty 0. Gap 2.60x. Nothing claimed.
