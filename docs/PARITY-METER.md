@@ -885,3 +885,32 @@ contract but it doubles the host wiring.
 session once the contract was named; this is the same starting point.
 
 **METER: prefill 1.192x · decode 1.171x · CUDA 1.21x STALE · NOT SHIPPED.**
+
+## Decode vec port: ROOT CAUSE of three shader breaks — the extraction took the WRONG template header
+
+Three instantiation attempts, three broken Metal libraries, all reverted. The cause is not arity
+and not the type macro:
+
+```
+my ported copy's template starts:   template< typename q4_t, typename k4_t, typename v4_t, ...
+FA_TYPES expands starting:          half, half4, simdgroup_half8x8, ...   (q_t, q4_t, q8x8_t)
+```
+
+**The extraction searched backwards from the kernel for the first line beginning `template` and
+took line 7928 — which is NOT the header belonging to `kernel_flash_attn_ext_vec`.** So the
+committed body at fork `766d7fd2` carries a template header that does not correspond to it, and
+no instantiation can ever resolve. Every "fix" I tried was downstream of a mismatch upstream.
+
+**⇒ The committed vec body is UNUSABLE as-is and must be re-extracted with the correct header.**
+Recording that rather than leaving a body in the tree that looks done.
+
+**The real lesson, and it is mine three times over:** I verified the *body* anchors and then
+assumed the *header*. On the prefill port I read the structure first and it worked on the first
+architectural try. On decode I have now paid three shader breaks for skipping exactly that step,
+including once while claiming I had "verified anchors" — I had verified some of them.
+
+**Next attempt must, before transforming:** locate the template header by walking back from the
+kernel and asserting its first `typename` matches what `FA_TYPES` supplies. That single assertion
+would have caught all three failures.
+
+**Nothing measured is affected. Prefill 1.192x intact, re-verified ALL PASSED after every revert.**
