@@ -922,3 +922,43 @@
 # Splitting the KEY range across warps instead of the q range removes that redundancy but
 # reintroduces a cross-warp softmax merge; that trade is UNPRICED on the mma kernel and is
 # the honest next experiment. NOT attempted here -- the profile is the deliverable.
+
+# ============================================================================
+# ★★ P1-5 PAGED TOKEN MIRROR SHIPPED (ds4-ports aae5498b) -- and the gate on it
+#    found the REAL blocker, one layer below where I was looking
+# ============================================================================
+# THE CODE (the owed debt, not another comment): update_slots_paged now mirrors the
+# committed prompt tokens into slot.prompt.tokens and advances n_prompt_tokens_processed.
+# Driven by info->context_lens[i] -- the authoritative committed length -- NOT by
+# appending what each batch decoded, which is what makes it IDEMPOTENT: a
+# recompute-preemption replay rewinds context_lens and the mirror truncates to follow
+# instead of double-appending. The desync risk I named when sizing this is removed BY
+# CONSTRUCTION rather than by care. Loop runs before the sampling branch so mid-prompt
+# chunked-prefill chunks are mirrored too; sampled token pushed at accept time.
+#
+# MEASURED (DS4P_REVALIDATE armed):
+#   prompt_n : 0 for EVERY paged request  ->  2010 and 3508.  The zero that cost hours
+#              of this session, and that I quoted in every wall without questioning, is
+#              gone.
+#   prompt_save(): no longer bails at tokens.size()==0 -- reaches the save and logs
+#              "saving prompt with length 2014".
+#
+# ⇒ THEN THE GUARD FIRED, WHICH IS WHY IT WAS GATED THAT WAY:
+#     "reval CELL MISMATCH at save: seq pos_max+1 = 0 vs tokens pos_next = 2014
+#      -> not caching (cell_mismatch=1)"     and     "total state size = 0.000 MiB"
+#
+# ★★ THE REAL BLOCKER, NAMED AND LOCATED: this is NOT the mirror being wrong.
+#   - llama_kv_cache_paged::state_write / state_read are EMPTY STUBS `{}`
+#     (src/llama-kv-cache-paged.h:105-111) => llama_state_seq_get_size_ext returns 0:
+#     THERE IS NO STATE TO SPILL.
+#   - seq_pos_max returns -1 for paged sequences => the revalidate pairing check cannot
+#     pass either.
+#   So the token mirror was NECESSARY BUT NOT SUFFICIENT. P1-5 on the paged path requires
+#   the paged KV CACHE to implement state serialisation -- a cache-level feature, not a
+#   server-level one. Now a single-file, named blocker instead of "the bank mysteriously
+#   never spills".
+#
+# ★ THE P0-2 REVALIDATE INSTRUMENT EARNED ITS EXISTENCE HERE: it refused to bind a
+#   record it could not verify, LOUDLY, instead of silently caching something wrong. Had
+#   I shipped the mirror on a green build without arming it, I would have reported "P1-5
+#   fixed" on a path that still cannot spill a single byte.
