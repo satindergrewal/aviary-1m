@@ -947,3 +947,25 @@ on them silently.
 **⚠ This retraction exists because the wrong version was published to the room and independently
 verified by Grok.** A diagnosis that survives review is not thereby correct, and leaving it
 standing would have sent the next attempt at a header that was never broken.
+
+### Decode wiring: the "TWO dispatches" claim is WRONG at nwg=1 — one kernel suffices
+
+Read the champion's own vec dispatch before writing ours (the step whose absence caused three
+shader breaks). Contract:
+```
+nwg == 1 : single dispatch, dst bound DIRECTLY at buffer 7      <- NO reduce stage
+nwg >  1 : dispatch into bid_tmp, THEN a vec_reduce pipeline combines tmp -> dst
+geometry : ((ne01+nqptg-1)/nqptg, (ne02+nhptg-1)/nhptg, ne03*nwg,  32, nsg, 1)
+           note the threadgroup is 2-D: (32, nsg, 1), not (32*nsg, 1, 1)
+```
+**I told the room decode "needs TWO dispatches, incl. vec_reduce". At `nwg = 1` it needs ONE.**
+The reduce exists to parallelise across workgroups for long KV — it is an **optimisation, not a
+requirement**. A first correct paged decode can pin `nwg = 1`, wire a single dispatch, gate 12/12,
+and only then consider nwg>1 for speed.
+
+**⚠ And a trap the same read caught: the threadgroup is 2-D, `(32, nsg, 1)`.** The prefill port
+uses `(32*nsg, 1, 1)`. Copying the prefill dispatch shape into decode would launch the wrong
+thread geometry — compiling fine and producing wrong results, which is the exact failure species
+that cost three debugging rounds on prefill (`blk` dummy, dst `ne1`, mask).
+
+**Status: contract read and recorded, not yet wired.** Scope is smaller than I claimed.
