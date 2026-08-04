@@ -167,3 +167,113 @@ memory thresholds alone. Deferred until S1–S3 are measured; it is the most spe
 [virtio-balloon guest-cache trap](https://github.com/virtio-win/kvm-guest-drivers-windows/issues/568) ·
 [DISPATCH_SOURCE_TYPE_MEMORYPRESSURE](https://developer.apple.com/documentation/Dispatch/DISPATCH_SOURCE_TYPE_MEMORYPRESSURE) ·
 [xnu memorystatus_notify](https://github.com/apple-oss-distributions/xnu/blob/main/doc/vm/memorystatus_notify.md)
+
+
+---
+
+# Round 2 — the owner's questions answered, and a correction I owed him
+
+## 0. ❗ CORRECTION: unified memory is NOT niche. It is the direction of the industry.
+
+Round 1 called unified memory "niche in serving". **That is wrong.** DGX Spark and DGX Station
+are unified CPU/GPU memory, the owner already runs a two-Spark cluster, and Windows-on-ARM is
+converging on the same architecture. Apple was simply first at volume.
+
+⇒ This **raises** the priority of everything below rather than making it a Mac curiosity, and
+it means a solution must be **portable**, not Metal-specific. Note that DGX Spark is CUDA, so
+the CUDA VMM route is open *there* even though it is closed on Apple.
+
+## 1. Should we adopt kvcached instead of building our own? — **No, and not because of NIH.**
+
+the owner's instinct ("why reinvent the wheel, and I don't want to fork/maintain it") is right in
+principle. Three hard blockers, from its own docs:
+
+1. **It is a Python library that monkey-patches Python engines.** `pip install kvcached`, then
+   `ENABLE_KVCACHED=true KVCACHED_AUTOPATCH=1`. "No engine changes needed" means *no changes to
+   vLLM/SGLang* — both Python. **llama.cpp is C++.** There is nothing to autopatch.
+2. **It is CUDA-only**: `cuMemAddressReserve`, `cuMemCreate`, `cuMemMap`, `cuMemSetAccess`.
+   No Metal path exists, so it cannot serve the Mac at all.
+3. It is a **daemon + library** for sharing one GPU between *several* engine processes. Our
+   problem is one process sizing itself sanely, which is a different problem.
+
+**So there is no seamless integration to have, and forking it would mean rewriting it in C++
+for a GPU API it does not target — exactly the maintenance burden he wants to avoid.**
+
+**What we take instead: the technique, which is published and unencumbered.** The same idea has
+three independent write-ups — kvcached, **vAttention** (arXiv 2405.04437), and **vTensor**
+(arXiv 2407.15309) — and there is an open vLLM request for it (issue #17612). We implement the
+*idea* where our platform allows, and we cite them.
+
+## 2. eLLM — paper only, and yes it is worth planning for
+
+**No public source code.** arXiv 2506.15155, v2 revised 2026-05-06, 14 authors, no repository
+found. So "fully applying it" means implementing from the paper.
+
+Reported results: **2.32x higher decoding throughput and 3x larger batch at 128K inputs.**
+Its three parts split cleanly by cost to us:
+
+- **Virtual tensor abstraction** — needs the same VMM primitives kvcached needs. Blocked on
+  Metal (see §3); open on CUDA/DGX Spark.
+- **Elastic inflation/deflation with CPU memory as an extensible buffer** — *we already have a
+  CPU block pool* (`n_cpu_blocks`, `cpu_to_gpu_blocks_ratio`). This is the closest fit.
+- **SLO-aware scheduling** (3 TPOT violations ⇒ shrink, TTFT violations ⇒ expand) — **portable,
+  cheap, and needs no VMM at all.** It is pure policy over counters we already have. This is
+  the piece to steal first, and it is S4 in the plan.
+
+## 3. ❌ Metal sparse is TEXTURE-ONLY — the VA-reservation route is closed on Apple
+
+Checked the Metal headers directly rather than the docs (the docs page is a JS app):
+
+- `MTLHeapType`: Automatic, Placement, **Sparse** (macOS 11+).
+- `MTLResourceStateCommandEncoder` exposes **only** `updateTextureMapping` and
+  `updateTextureMappings`; the mode enum is `MTLSparseTextureMappingMode`.
+- **There is no sparse *buffer* API anywhere in the headers.**
+- Placement heaps do allow `newBufferWithLength:options:offset:`, but a placement heap's memory
+  is committed when the **heap** is created — that controls *where* buffers land, not *whether*
+  pages are backed.
+
+⇒ **Reserve-VA-then-commit is not available for buffers on Metal.** S1 as originally conceived
+is dead on Apple, and this is a platform limitation, not an implementation gap.
+
+**The portable path that remains: a CHUNKED pool.** Allocate the KV pool as *many* smaller
+buffers instead of one monolith, create them on demand, and release them when free. That gives
+real grow-and-shrink at chunk granularity, needs no sparse or VMM support, and works identically
+on Metal, CUDA and CPU. Less elegant than VA reservation, and it fragments at chunk granularity,
+but it is **the one design that works on every backend we care about** — including DGX Spark.
+**This becomes the new S1/S3.**
+
+## 4. "Will this break other models that handle KV differently?" — partly already guarded
+
+Legitimate worry, and one guard already exists: the paged path **refuses hybrid architectures
+loudly** (`kv_paged is not yet supported for hybrid architectures`), added by this lane after it
+used to be silently ignored and OOM. So Mamba-hybrids like Nemotron are rejected, not corrupted.
+
+What my sizing change does and does not touch:
+
+- It changes only the **block COUNT**. `bytes_per_block` is pre-existing and already carries a
+  fix for the Qwen3 head-dim assumption (`n_head*head_dim != n_embd`), so any model whose
+  per-block size was right stays right.
+- The `n_ctx x n_seq x headroom` estimate **over-allocates** for sliding-window models, where
+  not every layer needs full context. Over-allocation is the SAFE direction — it cannot
+  under-provision and corrupt — but it is waste worth fixing when SWA support lands.
+- **Not yet verified: MLA (DeepSeek-style compressed KV).** Its per-token footprint differs
+  structurally. ⚠ Do not assume the sizing is right there; test before claiming it.
+
+## 5. Revised plan
+
+| stage | status |
+|---|---|
+| **S0** bound + reserve + refuse | **DONE** (fork `9f7006b9`, `bf25ebd5`) |
+| **S1** ~~lazy commit via VA~~ → **chunked multi-buffer pool** | redesigned; portable, unblocked |
+| **S2** pressure-driven reclaim (macOS pressure source, Linux PSI) | unblocked, needs only free-block release |
+| **S3** grow-on-demand | falls out of S1-chunked |
+| **S4** SLO feedback from eLLM | portable, no VMM needed, cheapest of the eLLM ideas |
+
+**Extra sources this round:** [kvcached PyPI](https://pypi.org/project/kvcached/) ·
+[kvcached.org](https://kvcached.org/) ·
+[vAttention (arXiv 2405.04437)](https://arxiv.org/pdf/2405.04437) ·
+[vTensor (arXiv 2407.15309)](https://arxiv.org/pdf/2407.15309) ·
+[vLLM issue #17612 (vAttention request)](https://github.com/vllm-project/vllm/issues/17612) ·
+[eLLM abstract](https://arxiv.org/abs/2506.15155) ·
+[MTLHeapType](https://developer.apple.com/documentation/metal/mtlheaptype) ·
+[Metal resource heaps guide](https://developer.apple.com/library/archive/documentation/Miscellaneous/Conceptual/MetalProgrammingGuide/ResourceHeaps/ResourceHeaps.html)
