@@ -2515,3 +2515,17 @@
 #   Read how the reference is BUILT, not just what it computes.
 # NEXT: the scalar path is now the subject. Re-measure ITS levers (it has never been swept
 #   post-specialisation -- and the old nsg sweep is void anyway, see the desync above).
+
+# --- SCALAR nsg SWEEP, POST-SPECIALISATION, WITH THE DESYNC FIXED (replaces the void one) ---
+#   nsg=2 2,087.2 | nsg=4 1,683.0 | nsg=8 1,568.9 (default) | nsg=16 1,625.5 | nsg=32 1,561.5
+#   Answers identical at every point (they were NOT trustworthy in the old sweep -- that knob
+#   was skipping a third of the query rows).
+# ⇒ THE DEFAULT (8) IS ALREADY AT THE OPTIMUM. nsg=32 is 7.4 ms better, at/below the ~5 ms
+#   noise floor, so it is a tie, not a win -- NO CHANGE MADE. nsg=16 is genuinely worse
+#   (+56 ms) and non-monotonic between 8 and 32; at n=1 per point that is recorded as an
+#   oddity, NOT explained. If it matters later, it needs repeats before a story.
+# ⇒ The old sweep's CONCLUSION (8 wins) turns out to be right, but it was not EVIDENCE when
+#   it was made -- it was the only point the broken knob left intact. A correct answer
+#   reached by a broken instrument is still a broken instrument. It is established now.
+# STATE: fork c896eee8, scalar+specialisation DEFAULT at 1,570 ms, gap 1.39x, 12/12 both
+#   paths, dirty 0. MMA opt-in behind DS4P_METAL_MMA=1 and must beat 1,570 to return.
