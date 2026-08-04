@@ -1759,3 +1759,26 @@
 #   CANNOT supply (his is scalar, ours is mma). Named gaps in order: MMA on Metal (in
 #   flight) · GQA head-packing (absent both backends) · split-K partition heuristic
 #   (vLLM use_v1, absent) · APC/prefix-sharing at his layer (absent).
+
+# --- MMA SLICE ATTEMPT 2: WIRED, GATED, FAILED 9/12. Attempt 3 (float) INVALID. Reverted.
+# ATTEMPT 2 -- full wire, all four steps as ONE change (kernel layout + kargs + DISPATCH
+# smem together, the 64f1ad5 lesson applied and NOT repaid): each simd group owns 8 query
+# rows, Q staged cooperatively, S(8x8) = Qtile x Ktile^T via simdgroup_multiply_accumulate
+# over D/8 half fragments, scores round-tripped through a per-sg 8x8 threadgroup strip,
+# scalar PV accumulate retained.
+#   D= 64/96/128: 9 FAIL (max_abs 0.117-0.155, nmse 0.155-0.494)
+#   D=192       : 3 PASS  <-- ONLY because smem_mma (38,912 B) EXCEEDS the 32 KiB budget at
+#                 D=192, so mma_ok=0 and the PROVEN fallback ran. The pass proves the
+#                 fallback, not the mma.
+# ⇒ REAL DATUM: the mma path is wrong at D where it actually RUNS. Structure vs precision
+#   NOT yet separated.
+# ⚠⚠ ATTEMPT 3 (float fragments instead of half, to separate precision from structure)
+#   REPORTED "ALL PASSED" AND IS INVALID: the float mirrors (sqf + tkf) push smem_mma to
+#   34,816 B at D=64 -- over budget for EVERY D -- so mma_ok=0 everywhere and the fallback
+#   ran again. **Instrument-not-installed, third instance today.** Caught by ARITHMETIC on
+#   the smem budget before the result was quoted anywhere. A passing gate is not evidence
+#   unless the path under test is proven ENABLED.
+# ⇒ NEXT: give the mma path its own SMALLER nsg (4, or 2 at D=192) so the budget fits with
+#   a presence marker proving mma_ok=1 per D, THEN re-run attempt 2's half-fragment arm to
+#   separate precision from structure. Do not quote any gate result without the marker.
+# Reverted to 354f006a, 12/12 PASS rebuilt, dirty 0. Gap unchanged 2.60x. Nothing claimed.
