@@ -1,0 +1,11 @@
+binary: $HOME/Documents/GitHub/llama.cpp-ds4ports/build-metal/bin/llama-server  mtime=2026-08-04 18:30:39
+tip:    b1af671c  dirty=0
+STATIC        rep1  WALL=1773    prompt_ms=1423.0   
+STATIC        rep2  WALL=1473    prompt_ms=1129.4   
+STATIC        rep3  WALL=1474    prompt_ms=1129.2   
+PAGED-MMA     rep1  WALL=9162    prompt_ms=5809.5   
+PAGED-MMA     rep2  WALL=7571    prompt_ms=5570.6   
+PAGED-MMA     rep3  WALL=17623   prompt_ms=2115.1   
+PAGED-SCALAR  rep1  WALL=8074    prompt_ms=3147.8   
+PAGED-SCALAR  rep2  WALL=3492    prompt_ms=2955.9   
+PAGED-SCALAR  rep3  WALL=13643   prompt_ms=4787.9   

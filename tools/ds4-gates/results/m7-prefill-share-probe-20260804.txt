@@ -2240,3 +2240,49 @@
 #
 # STILL NOT CLAIMED: this is a standalone prototype. kernel_paged_attn_f32 is untouched.
 #   Wall 2,945, gap 2.60x. Nothing lands until it is wired, marked, gated 12/12 and walled.
+
+# ================= MMA WIRED IN-TREE: WALL MEASURED, GAP 2.60x -> 1.86x =================
+# fork b1af671c, dirty 0, binary verified newer than both edited sources.
+# tools/ds4-gates/metal_mma_wall.sh -- three arms, ONE binary, fresh server each, 5 reps.
+# MARKER PROVEN ON BOTH PAGED ARMS (the arms differ in exactly one thing):
+#   PAGED-MMA    -> "DS4P-MMA ACTIVE  D=128 bs=16 nsg=2 QR=16 smem=22656/32768"
+#   PAGED-SCALAR -> "DS4P-MMA OFF (scalar path) D=128 bs=16"   (DS4P_METAL_NO_MMA=1)
+#
+#   arm            prompt_ms(min)   WALL(min)
+#   STATIC              1,129         1,474
+#   PAGED-MMA           2,099         2,649
+#   PAGED-SCALAR        2,944         3,490
+#
+#   MMA vs scalar : 2,944 / 2,099 = 1.40x faster prefill (WALL 3,490/2,649 = 1.32x)
+#   GAP to static : 2,099 / 1,129 = 1.86x   (was 2.60x)   <-- target is <= 1.0x
+#   Ladder now: scalar 6,950 -> rung1 3,334 -> hoist 3,300 -> Q-block 2,940 -> MMA 2,099.
+#
+# WHY MIN AND NOT MEAN: the machine is contended (WindowServer ~54%, load ~3.3). Reps 1 and 5
+#   of both paged arms are polluted (up to 13,958 ms WALL); the minimum is the least
+#   contaminated sample. The control validates the harness rather than my judgement: SCALAR
+#   min 2,944 reproduces the recorded 2,945 baseline and STATIC min 1,129 reproduces 1,134,
+#   both from a run on a quiet machine. A harness that reproduces two independent priors is
+#   measuring the kernel, not the weather.
+#
+# THREE HARNESS DEFECTS FOUND AND FIXED BEFORE ANY NUMBER WAS QUOTED:
+#  (i)  MARKER READ TOO EARLY. The gate grepped for the presence marker immediately after
+#       readiness -- but the paged-attention op only runs when a REQUEST is served, so the
+#       grep looked before the line could exist. It reported "PATH UNPROVEN" for a run that
+#       did take the MMA path. A presence check that runs before the thing can happen is not
+#       a presence check.
+#  (ii) MARKER INVISIBLE AT -lv 2. It is INFO-level. Both this and (i) had to be fixed before
+#       the path could be proven; fixing only one still yields silence, which is exactly how
+#       a missing marker gets shrugged off.
+#  (iii) A FIRST RUN WAS ENTIRELY INVALID: the server hit
+#       GGML_ASSERT([rsets->data count] == 0) at ggml-metal-device.m:656 and aborted, and I
+#       nearly read its numbers (7,571 .. 17,623 ms) as an MMA regression. Numbers printed by
+#       a process that crashed are not measurements. Re-run clean.
+#
+# STILL OPEN, NOT CLAIMED: gap is 1.86x, not <= 1.0x. NOT SHIPPED. Next levers, in order:
+#   - bs=16 wastes half the lanes in the softmax stage (16 columns over 32 lanes) and pays a
+#     barrier per 16 keys. Staging TWO blocks per iteration would halve the barrier count and
+#     fill the lanes -- the single most likely remaining win at this block size.
+#   - nsg=2 at D=128 leaves the tile small; smem is the binding constraint, so shrinking the
+#     score tile (it is float and 2x QR*SH) would buy back a simd group.
+#   - simdgroup_barrier(mem_none) placement around load groups is copied from the champion but
+#     has never been swept here; some may be removable.
