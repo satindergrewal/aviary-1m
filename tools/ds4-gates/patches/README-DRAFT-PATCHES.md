@@ -53,7 +53,19 @@ on a heuristic and failed where it was tested.
 **Verified:** `git apply --check` passes; anchor asserted unique before editing.
 **NOT verified:** not compile-tested; not run against `state_serdes_gate.sh`.
 
-**Acceptance:** apply → build → `./state_serdes_gate.sh` → arm A must report a **refusal**, not
-`n_written=716`. ⚠ The gate currently expects a *successful* save, so it will need its arm-A bar
-inverted to "refuses cleanly" — the same correction already applied to the eviction gate's
-single-sequence arm when the design intent was established.
+**Acceptance:** apply → build → `./state_serdes_gate.sh` → arm A must report a **refusal**.
+
+## `DRAFT-defect3-gate-arm-a.patch` — PAIRED with the above, apply both or neither
+
+Inverts `state_serdes_gate.sh` arm A from "a successful save" to "a clean refusal".
+
+⚠ **These two are a pair and the ordering matters in both directions:**
+- the gate inverted **without** the patch fails on the unfixed tree *for the wrong reason*
+- the patch **without** the gate turns a correct fix red and reads as a regression
+
+Arm A originally required `sz >= 1024` and correctly FAILED at 716 B — that is how the defect was
+found. Once the endpoint refuses, that same bar would fail a *correct* fix. The bar has to move with
+the behaviour.
+
+**Verified:** `git apply --check` passes; `bash -n` on the patched gate passes; the anchor was
+asserted unique before editing.

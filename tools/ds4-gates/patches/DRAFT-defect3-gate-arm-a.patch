@@ -1,0 +1,24 @@
+--- a/tools/ds4-gates/state_serdes_gate.sh
++++ b/tools/ds4-gates/state_serdes_gate.sh
+@@ -81,8 +81,19 @@
+ echo "$sa" | head -c 300 | tee -a "$OUT"; echo | tee -a "$OUT"
+ sz=$(stat -f%z "$SAVEDIR/ds4-state.bin" 2>/dev/null || echo 0)
+ echo "saved bytes: $sz" | tee -a "$OUT"
+-if [ "$sz" -lt 1024 ]; then
+-    echo "A: FAIL save produced ${sz}B -- nothing was serialised" | tee -a "$OUT"; fails=$((fails+1))
++# ⚠ THE BAR HERE IS A REFUSAL, NOT A SUCCESSFUL SAVE -- flipped when the design intent was
++# established. The paged path frees a sequence's blocks at finish BY DESIGN, and this endpoint runs
++# after the completion returns, so there is no KV left to serialise. A successful save on the paged
++# path is therefore NOT the correct outcome; a clean refusal is. Arm A originally required
++# sz >= 1024 and correctly FAILED at 716 B, which is how the defect was found -- but once the
++# endpoint refuses, that same bar would fail a CORRECT fix.
++#   PAIRED WITH: patches/DRAFT-defect3-slotsave-refuse.patch. Apply both or neither: this gate
++#   inverted without the patch fails on the unfixed tree for the wrong reason, and the patch without
++#   this gate turns a good fix red and looks like a regression.
++if echo "$sa" | grep -qi "not supported on the paged KV path"; then
++    echo "A: PASS endpoint REFUSED cleanly on the paged path -- correct, there is no KV to save" | tee -a "$OUT"
++elif [ "$sz" -lt 1024 ]; then
++    echo "A: FAIL save produced ${sz}B and did NOT refuse -- silently reported success for a no-op" | tee -a "$OUT"; fails=$((fails+1))
+ else
+     echo "A: PASS save produced $sz bytes" | tee -a "$OUT"
+ fi
