@@ -14,6 +14,22 @@
 #   A  save        -> must succeed and produce a non-empty file
 #   B  restore     -> must succeed
 #   C  continuation after restore == continuation without interruption (the actual correctness bar)
+# ★★ WHAT THIS GATE IS ACTUALLY MEASURING (corrected 2026-08-06 -- READ BEFORE "FIXING" state_write)
+#
+# This gate FAILS at arm A with n_written=716 against an expected ~864 KB, and that is NOT a broken
+# serialiser. server-context.cpp:3229 documents it: the paged path runs finish() -> free_blocks()
+# and RETURNS THE BLOCKS TO THE POOL AT REQUEST FINISH, BY DESIGN -- "holding a finished sequence's
+# blocks would fight the entire point of paging". /slots/N?action=save fires AFTER the completion
+# returns, so sequence_blocks.find(seq_id) correctly misses and state_write correctly writes nothing.
+#
+# The caller is wired, the serialiser is complete, and both are working. The DEFECT this gate is
+# really catching is that the server answers 200 with n_saved=27 / n_written=716 for a save that
+# saved nothing. An endpoint that cannot work on this path by construction should REFUSE.
+#
+# So the fix is at the ENDPOINT, not in state_write, and anyone who "makes the serialiser work" here
+# will be fighting the design. Self-drive is NOT involved: DS4P_PAGED_DRIVE=0 gives a byte-identical
+# 716.
+
 set -uo pipefail
 WT=$HOME/Documents/GitHub/llama.cpp-ds4ports
 SRV=$WT/build-metal/bin/llama-server
