@@ -1,0 +1,5 @@
+tip: 53ed79e2 dirty=0
+1-static-noenv         paged_pool=0  rset_assert=0
+2-static-withenv       paged_pool=0  rset_assert=0
+3-paged-norequest      paged_pool=1  rset_assert=1
+4-paged-request        paged_pool=1  rset_assert=1
