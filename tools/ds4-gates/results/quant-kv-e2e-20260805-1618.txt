@@ -1,0 +1,14 @@
+tip: 6c8c8c4b dirty=3
+model: ornith-1.0-9b-1M-IQ2_M.gguf
+--- A REFUSAL CONTROL (paged + q8_0, no dev flag) ---
+A: PASS refused at startup (rc=134)
+--- B STATIC q8_0 (quantisation without paging) ---
+B:  Paris. A. True B. False  <think> Thinking process: 1.  Analyze the statement
+--- C PAGED f16 (paging without quantisation) ---
+C:  Paris. A. True B. False  <think> Thinking process: 1.  Analyze the statement
+--- D PAGED q8_0 (THE TEST) ---
+D:  Paris. Paris, officially known as the <ruby align=\"mtr-skin-avbrudwpdew\
+D presence marker (paged dispatches in log): 2
+D layers refused by predicate: 0
+-----
+QUANT-KV E2E GATE: PASS -- refusal may be retired
