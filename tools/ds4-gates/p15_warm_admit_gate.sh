@@ -24,6 +24,19 @@ P=${P:-8971}
 BANK=${BANK:-<BOX>/ktdev/kvbank-warmgate}
 TAG=${TAG:-2k}
 OUT=${OUT:-/tmp/ds4gates/results/p15-warm-admit-$TAG-$(date +%Y%m%d-%H%M).txt}
+
+# ⚠ PLATFORM PRECONDITION -- REFUSE, DO NOT PRETEND. This is a box/CUDA gate: it needs the NVMe KV
+# bank directory. Run on the Mac it printed a JSON parse traceback, "BANK ... No such file or
+# directory", "SERVER DEAD", produced NO verdict line, and EXITED 0. A gate that cannot run on this
+# machine must say so and fail, not return success -- a batch runner reading exit codes scores that
+# as a pass forever. Same defect paged_multimodel_gate.sh had (2026-08-06).
+_bank_parent="$(dirname "${BANK:-<BOX>/ktdev/kvbank-warmgate}")"
+if [ ! -d "$_bank_parent" ]; then
+    echo "PRECONDITION FAIL: KV bank parent '$_bank_parent' does not exist." >&2
+    echo "  This gate runs on the box (CUDA + NVMe bank), not here. Refusing rather than reporting a pass." >&2
+    exit 2
+fi
+
 LOG=/tmp/p15-warm-gate.log
 
 mkdir -p "$(dirname "$OUT")" "$BANK"

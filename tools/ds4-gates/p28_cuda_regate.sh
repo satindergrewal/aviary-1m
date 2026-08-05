@@ -17,6 +17,16 @@ PORT="${3:-8953}"
 BUILD="$WT/build-cuda"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 OUT="$DIR/results/p28-cuda-regate-$(date +%Y%m%d-%H%M).txt"
+
+# ⚠ PLATFORM PRECONDITION -- REFUSE, DO NOT PRETEND. This is a box gate (CUDA / NVMe paths). Run on
+# a machine without them it produces errors, no verdict, and EXITS 0 -- which a batch runner reading
+# exit codes scores as a pass forever. p15_warm_admit_gate.sh did exactly that on 2026-08-06.
+if [ ! -d "<BOX>/wt-ds4-ports" ] && [ ! -d "$(dirname "<BOX>/wt-ds4-ports")" ]; then
+    echo "PRECONDITION FAIL: '<BOX>/wt-ds4-ports' not present -- this gate runs on the box, not here." >&2
+    echo "  Refusing rather than reporting a pass." >&2
+    exit 2
+fi
+
 mkdir -p "$DIR/results"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 trap 'pkill -f "por[t] $PORT" 2>/dev/null || true' EXIT

@@ -19,6 +19,17 @@
 
 set -euo pipefail
 
+# ⚠ PLATFORM PRECONDITION -- REFUSE, DO NOT PRETEND. Box gate (CUDA / NVMe paths). On a machine
+# without them it errors, prints no verdict, and EXITS 0 -- scored as a pass by any exit-code runner.
+# Placed immediately after `set` on purpose: an earlier attempt used "after the last VAR= line" and
+# landed inside a PROMPTS=( ... ) array literal, breaking the script. bash -n caught it.
+if [ ! -d "<BOX>" ]; then
+    echo "PRECONDITION FAIL: <BOX> not present -- this gate runs on the box, not here." >&2
+    echo "  Refusing rather than reporting a pass." >&2
+    exit 2
+fi
+
+
 BIN=${BIN:-<BOX>/wt-ds4-ports/build-cuda/bin/llama-server}
 MODEL=${MODEL:?set MODEL to the V4 gguf path (regen serve config uses dsv4-flash UD-Q4_K_XL)}
 DRAFT=${DRAFT:?set DRAFT to the DSpark drafter gguf path}
@@ -35,6 +46,8 @@ grep -q DS4P_YIELD_QUENCH "$IMPL" 2>/dev/null || strings "$IMPL" | grep -q DS4P_
 
 # mixed-length prompts: short decode-bound + long prefill-tail, per the gotchas memory
 PROMPTS=(
+
+
   "Explain in one paragraph why paged KV caches reduce memory fragmentation."
   "Write a bash loop that renames all .txt files in a directory to .md, with comments."
   "$(printf 'List item %d. ' $(seq 1 200)) Summarize the pattern above in one sentence."
