@@ -9,8 +9,23 @@
 # ⚠ THE PRESENCE MARKER IS THE GATE. Starving GPU blocks and then comparing outputs would pass
 # perfectly if no eviction ever occurred: the run would simply be an ordinary run. "Outputs match"
 # is evidence only when the path under test actually executed, so DS4P-EVICT swap lines must be
-# non-zero or the comparison means nothing. This is the same failure I have hit repeatedly today in
-# other forms -- a green verdict for a case that never ran.
+# non-zero or the comparison means nothing.
+#
+# ★★ THIS GATE CANNOT PASS TODAY, AND THE REASON IS NOW KNOWN (2026-08-05) -- it is NOT weak
+# starvation. Under DS4P_PAGED_DRIVE=1 the self-drive path and the server's scheduler BOTH allocate
+# for the same sequence (measured: 8 checkouts for a 4-block need, two distinct group objects, one
+# of which IS sd_group and one of which is not). When the pool runs low, self_drive_begin fails to
+# grow, FREES its own KV, and bails to the static path -- so the sequence LEAVES the pool before it
+# can ever pressure it into a swap. Eviction is unreachable from the server in this configuration.
+#
+# One-factor, marker-verified:
+#   DRIVE_ON   paged_attn_dispatches=2  selfdrive_calls=8  checkouts=8  -> corrupt output
+#   DRIVE_OFF  paged_attn_dispatches=2  selfdrive_calls=0  checkouts=4  -> clean output
+#
+# So a FAIL here is currently CORRECT and expected. Do not "fix" it by loosening the marker check --
+# fix the allocator conflict (mutual exclusion, or self-drive sharing the scheduler's group), then
+# this gate becomes meaningful for the first time. See ds4-ports-lane memory for the full trail,
+# including the six wrong names this took to reach.
 #
 # ARMS
 #   CTRL   plenty of GPU blocks -> no spill, reference output
