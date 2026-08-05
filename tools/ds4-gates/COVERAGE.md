@@ -90,3 +90,22 @@ a verdict scorer that did not know the word `IDENTICAL`.
 The lint deliberately says what it is **not** claiming: a sequential `-np` gate may be a perf wall
 where sequential is correct. The bug is counting it as multi-slot *coverage*. Fix is narrow — make
 it concurrent, or drop the `-np` flag so the claim matches the behaviour.
+
+## Gates added 2026-08-06 (and what they do when the regime is ABSENT)
+
+That last column is the point. A gate's behaviour when it cannot measure anything is what decides
+whether its silence means something.
+
+| gate | tests | regime absent → |
+|---|---|---|
+| `multislot_gate.sh` | two concurrent sequences produce their own answers | FAILs on no-swap/no-pool markers |
+| `batch_offset_invariant_gate.sh` | `sum(batch_lens) == n_tokens` per dispatch | **INCONCLUSIVE, exit 2 — never PASS** |
+| `lint_claimed_vs_entered.sh` | a gate's `-np` flag matches its behaviour | n/a (static) |
+| `long_context_gate.sh` | needle retrieval at 25.7K vs static control | UNINTERPRETABLE if the static control fails |
+| `rset_leak_probe.sh` | Metal residency-set leak, 5 one-factor arms | arm marked UNUSABLE if its marker is missing |
+| `prefill_scaling_probe.sh` | prefill cost curve, static vs paged | point DISCARDED if it exceeds the context |
+| `slot_stagger_probe.sh` | does the defect need a shared prefill batch | arm UNUSABLE if the stagger did not happen |
+
+`batch_offset_invariant_gate` is verified in both directions: FAIL (exit 1, 600/600) on the broken
+tree, INCONCLUSIVE (exit 2) at `-np 1` where no multi-sequence dispatch can occur. A PASS in the
+second case would reproduce exactly the failure that hid the defect it was written for.
