@@ -1,0 +1,21 @@
+tip: 53ed79e2 dirty=0  DS4P_PAGED_DRIVE=1
+=== MIXED-geometry ===
+CTRL :  One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+measured peak demand: 8 blocks -> starving to -ngpub 7
+EVICT: 
+swaps: CTRL=0  EVICT=7
+paged_attn config-lines (EVICT arm, presence only): 360
+MIXED-geometry: FAIL output DIFFERS after eviction -- block copy is corrupting KV
+    ctrl :  One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    evict: 
+=== UNIFORM-geometry ===
+CTRL :  one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+measured peak demand: 8 blocks -> starving to -ngpub 7
+EVICT: 
+swaps: CTRL=0  EVICT=7
+paged_attn config-lines (EVICT arm, presence only): 2
+UNIFORM-geometry: FAIL output DIFFERS after eviction -- block copy is corrupting KV
+    ctrl :  one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+    evict: 
+-----
+EVICTION GATE: FAIL (2)

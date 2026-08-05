@@ -1,0 +1,35 @@
+tip: 53ed79e2 dirty=0  model=gemma4-26b-a4b-uncensored-1M-Q4_K_M.gguf  reps=3
+--- static-r1  swaps=0  -> DIVERGED
+    soloA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    concA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    soloB: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    concB: CONTENT# A, B, C, D, E, F, G, H, I, J, K, L
+--- paged-r1  swaps=0  -> DIVERGED
+    soloA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    concA: CONTENT# commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas:
+    soloB: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    concB: CONTENT#: <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+--- paged-r2  swaps=0  -> DIVERGED
+    soloA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    concA: CONTENT# commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas:
+    soloB: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    concB: CONTENT#: <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+--- static-r2  swaps=0  -> DIVERGED
+    soloA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    concA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    soloB: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    concB: CONTENT# A, B, C, D, E, F, G, H, I, J, K, L
+--- static-r3  swaps=0  -> DIVERGED
+    soloA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    concA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    soloB: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    concB: CONTENT# A, B, C, D, E, F, G, H, I, J, K, L
+--- paged-r3  swaps=0  -> DIVERGED
+    soloA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    concA: CONTENT# <|channel><channel|>A, a, B, B, C, D, E, F, G, H, I, J, K, L
+    soloB: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    concB: CONTENT#: <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+-----
+static: 0 clean / 3 bad     paged: 0 clean / 3 bad
+verdicts: static:DIVERGED paged:DIVERGED paged:DIVERGED static:DIVERGED static:DIVERGED paged:DIVERGED
+RESULT: BOTH paths corrupt under concurrency -- NOT paged-specific. Do not file this against the paged cache.

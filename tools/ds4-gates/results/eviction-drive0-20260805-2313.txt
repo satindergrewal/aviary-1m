@@ -1,0 +1,15 @@
+tip: 53ed79e2 dirty=0  DS4P_PAGED_DRIVE=0
+=== MIXED-geometry ===
+CTRL :  One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+EVICT:  One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+swaps: CTRL=0  EVICT=0
+paged_attn config-lines (EVICT arm, presence only): 480
+MIXED-geometry: FAIL no eviction occurred -- the starved arm never spilled, so this proves NOTHING
+=== UNIFORM-geometry ===
+CTRL :  one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+EVICT:  one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+swaps: CTRL=0  EVICT=0
+paged_attn config-lines (EVICT arm, presence only): 2
+UNIFORM-geometry: FAIL no eviction occurred -- the starved arm never spilled, so this proves NOTHING
+-----
+EVICTION GATE: FAIL (2)

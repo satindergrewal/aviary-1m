@@ -1,0 +1,43 @@
+tip: 53ed79e2 dirty=0  DS4P_PAGED_DRIVE=0
+=== MIXED-geometry ===
+CTRL : CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+measured peak demand: 4 blocks -> starving to -ngpub 3
+EVICT: REFUSED#paged KV: the request outgrew the block pool and was terminated
+swaps: CTRL=0  EVICT=2
+paged_attn config-lines (EVICT arm, presence only): 190
+MIXED-geometry: PASS starved to 3<4 blocks, attempted 2 swap(s), then refused CLEANLY
+    client saw: paged KV: the request outgrew the block pool and was terminated
+=== MIXED-geometry MULTI-SEQ lossless eviction ===
+refA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+refB: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+starving 2 sequences to -ngpub 5 (single-seq peak=4, so one fits, two cannot)
+swaps: 2
+outA: CONTENT# <|channel>thought <channel|>one, two, three, four, five, six,   100000000000100000001000000100
+outB: CONTENT# One, one, , , two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty
+MIXED-geometry MULTI-SEQ: FAIL a sequence changed across eviction
+    A ref: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    A got: CONTENT# <|channel>thought <channel|>one, two, three, four, five, six,   100000000000100000001000000100
+    B ref: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    B got: CONTENT# One, one, , , two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty
+=== UNIFORM-geometry ===
+CTRL : CONTENT# one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+measured peak demand: 4 blocks -> starving to -ngpub 3
+EVICT: REFUSED#paged KV: the request outgrew the block pool and was terminated
+swaps: CTRL=0  EVICT=2
+paged_attn config-lines (EVICT arm, presence only): 2
+UNIFORM-geometry: PASS starved to 3<4 blocks, attempted 2 swap(s), then refused CLEANLY
+    client saw: paged KV: the request outgrew the block pool and was terminated
+=== UNIFORM-geometry MULTI-SEQ lossless eviction ===
+refA: CONTENT# one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+refB: CONTENT# A. 1999. 1999. 1999. 1999. 1999. 1999. 1999. 199
+starving 2 sequences to -ngpub 5 (single-seq peak=4, so one fits, two cannot)
+swaps: 2
+outA: CONTENT#  <think>  <think>  <think>  <think> A.  <think> </think>  1. . . . . . . . . . . . . . . .
+outB: CONTENT# A, B, C, ..., 20.  <think> Thinking Process:  1.  **Analyze the Request:**     *   The user wants a list of numbers from 1 to 20.    
+UNIFORM-geometry MULTI-SEQ: FAIL a sequence changed across eviction
+    A ref: CONTENT# one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+    A got: CONTENT#  <think>  <think>  <think>  <think> A.  <think> </think>  1. . . . . . . . . . . . . . . .
+    B ref: CONTENT# A. 1999. 1999. 1999. 1999. 1999. 1999. 1999. 199
+    B got: CONTENT# A, B, C, ..., 20.  <think> Thinking Process:  1.  **Analyze the Request:**     *   The user wants a list of numbers from 1 to 20.    
+-----
+EVICTION GATE: FAIL (2)

@@ -1,0 +1,43 @@
+tip: 53ed79e2 dirty=0  DS4P_PAGED_DRIVE=0
+=== MIXED-geometry ===
+CTRL : CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+measured peak demand: 4 blocks -> starving to -ngpub 3
+EVICT: REFUSED#paged KV: the request outgrew the block pool and was terminated
+swaps: CTRL=0  EVICT=2
+paged_attn config-lines (EVICT arm, presence only): 190
+MIXED-geometry: PASS starved to 3<4 blocks, attempted 2 swap(s), then refused CLEANLY
+    client saw: paged KV: the request outgrew the block pool and was terminated
+=== MIXED-geometry MULTI-SEQ lossless eviction ===
+SOLO  A: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+SOLO  B: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+CONC-GENEROUS A: CONTENT# <|channel><channel|>A, a, B, B, C, D, E, F, G, H, I, J, K, L
+CONC-GENEROUS B: CONTENT#: <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+CONC-GENEROUS swaps (must be 0 or it is not generous): 0
+MIXED-geometry MULTI-SEQ: FAIL CONCURRENCY ALONE corrupts -- two slots on an UNSTARVED pool already diverge
+    this is NOT an eviction defect, and the eviction comparison is BLOCKED, not passed
+    A solo: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    A conc: CONTENT# <|channel><channel|>A, a, B, B, C, D, E, F, G, H, I, J, K, L
+    B solo: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    B conc: CONTENT#: <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+=== UNIFORM-geometry ===
+CTRL : CONTENT# one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+measured peak demand: 4 blocks -> starving to -ngpub 3
+EVICT: REFUSED#paged KV: the request outgrew the block pool and was terminated
+swaps: CTRL=0  EVICT=2
+paged_attn config-lines (EVICT arm, presence only): 2
+UNIFORM-geometry: PASS starved to 3<4 blocks, attempted 2 swap(s), then refused CLEANLY
+    client saw: paged KV: the request outgrew the block pool and was terminated
+=== UNIFORM-geometry MULTI-SEQ lossless eviction ===
+SOLO  A: CONTENT# one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+SOLO  B: CONTENT# A. 1999. 1999. 1999. 1999. 1999. 1999. 1999. 199
+CONC-GENEROUS A: CONTENT# one of the, the, the, the, the problem of the problem of the problem of the problem of the problem of the problem of the problem of the problem of the problem of the problem of the problem of the pro
+CONC-GENEROUS B: CONTENT# 1.  # 1.  # 1.  # 1.  # 1.  # 1.  # 1.  # 1.  # 1.  # 1.
+CONC-GENEROUS swaps (must be 0 or it is not generous): 0
+UNIFORM-geometry MULTI-SEQ: FAIL CONCURRENCY ALONE corrupts -- two slots on an UNSTARVED pool already diverge
+    this is NOT an eviction defect, and the eviction comparison is BLOCKED, not passed
+    A solo: CONTENT# one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+    A conc: CONTENT# one of the, the, the, the, the problem of the problem of the problem of the problem of the problem of the problem of the problem of the problem of the problem of the problem of the problem of the pro
+    B solo: CONTENT# A. 1999. 1999. 1999. 1999. 1999. 1999. 1999. 199
+    B conc: CONTENT# 1.  # 1.  # 1.  # 1.  # 1.  # 1.  # 1.  # 1.  # 1.  # 1.
+-----
+EVICTION GATE: FAIL (2)
