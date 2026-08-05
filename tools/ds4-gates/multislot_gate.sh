@@ -36,7 +36,7 @@ mkdir -p "$LOGDIR" "$(dirname "$OUT")"
 PROMPT_A='Count from one to twenty in English words, separated by commas:'
 PROMPT_B='List the first twelve letters of the English alphabet, separated by commas:'
 
-echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  model=$(basename "$M")  reps=$REPS" | tee "$OUT"
+echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  model=$(basename "$M")  reps=$REPS  env=[${MS_ENV-DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1}]" | tee "$OUT"
 
 classify() {
     python3 -c '
@@ -63,7 +63,12 @@ ask() {
 start_srv() { # $1 label  $2 extra args
     pkill -f "$SRV" >/dev/null 2>&1; sleep 2
     # shellcheck disable=SC2086
-    env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 \
+    # ⚠ ENV IS A VARIABLE, NOT A CONSTANT. Every gate in this lane pins DS4P_PAGED_HYBRID=1
+    # DS4P_PAGED_SWA=1, so the plain shipping configuration -- `llama-server --kv-paged` with no
+    # undocumented env -- has never been tested for the slot-A corruption. MS_ENV="" runs it bare.
+    # The paged arm's presence marker is what makes the bare run interpretable: if no pool is built
+    # the arm FAILS rather than reporting a clean result that only means "nothing paged".
+    env ${MS_ENV-DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1} \
         nohup "$SRV" -m "$M" -ngl 99 -c 8192 -np 2 -b 512 -ub 512 --port $P --no-warmup -lv 4 \
         $2 > "$LOGDIR/$1.log" 2>&1 &
     for _ in $(seq 1 400); do
@@ -79,7 +84,19 @@ declare -a verdicts
 probe() { # $1 arm  $2 rep  $3 server args
     local tag="$1-r$2" soloA soloB concA concB swaps v
     if ! start_srv "$tag" "$3"; then
-        echo "$tag: NEVER_READY" | tee -a "$OUT"; verdicts+=("$1:NEVER_READY"); fails=$((fails+1)); return
+        # ⚠ DISTINGUISH A DESIGNED REFUSAL FROM A FAILURE. Running bare (MS_ENV="") on an SWA
+        # architecture, the server asserts on purpose: "kv_paged on an SWA architecture needs
+        # DS4P_PAGED_SWA=1". That is the guard working, not a defect, and lumping it under
+        # NEVER_READY would file a correct refusal as a broken arm.
+        # BOTH guards, not just the SWA one. Matching only the first message would file the hybrid
+        # refusal -- an equally deliberate guard -- as a broken arm.
+        if grep -qE "needs DS4P_PAGED_SWA=1|not yet supported for hybrid architectures" "$LOGDIR/$tag.log" 2>/dev/null; then
+            echo "$tag: REFUSED-BY-DESIGN ($(grep -oE "needs DS4P_PAGED_SWA=1|not yet supported for hybrid architectures" "$LOGDIR/$tag.log" | head -1)) -- not a defect, but this arm cannot answer the question" | tee -a "$OUT"
+            verdicts+=("$1:REFUSED-BY-DESIGN")
+        else
+            echo "$tag: NEVER_READY" | tee -a "$OUT"; verdicts+=("$1:NEVER_READY"); fails=$((fails+1))
+        fi
+        return
     fi
     # solo first, SAME process -- concurrency is then the only thing that changes
     soloA=$(ask "$PROMPT_A")
@@ -111,11 +128,24 @@ probe() { # $1 arm  $2 rep  $3 server args
     #
     # So: does each sequence still answer ITS OWN prompt? Immune to reduction-order jitter, and it
     # catches ownership and broken state, which are the only failures worth a bug report.
+    # ⚠ CASE-INSENSITIVE (-i), AND THAT IS NOT A DETAIL. The first version used case-sensitive
+    # grep for "Three, Four, Five". Gemma4 answers "One, Two, Three"; Ornith answers "one, two,
+    # three". So on Ornith the marker scored a_own=0 and the gate reported GARBAGE on a run whose
+    # own secondary field read bytes=exact -- the two outputs were BYTE-IDENTICAL to the solo run.
+    #
+    # Note the direction: the byte-exact bar this replaced failed by EXONERATING (every arm fails,
+    # so nothing is ever attributable). This one failed by ACCUSING (a clean run reported as
+    # corruption). A semantic bar is model-dependent by construction, so it needs to be as loose as
+    # the property allows and no looser.
+    #
+    # ★ AND THE THING THAT CAUGHT IT WAS THE SIGNAL I DEMOTED. bytes= was kept as a secondary
+    # observation precisely because it is too strict to be a verdict; "bytes=exact -> GARBAGE" is a
+    # self-contradiction no single signal could have produced. Keep the weaker redundant field.
     local a_own b_own a_other b_other
-    a_own=0;  echo "$concA" | grep -q "Three, Four, Five" && a_own=1
-    a_other=0; echo "$concA" | grep -q "C, D, E, F"       && a_other=1
-    b_own=0;  echo "$concB" | grep -q "C, D, E, F"        && b_own=1
-    b_other=0; echo "$concB" | grep -q "Three, Four, Five" && b_other=1
+    a_own=0;   echo "$concA" | grep -qi "three, four, five" && a_own=1
+    a_other=0; echo "$concA" | grep -qi "c, d, e, f"        && a_other=1
+    b_own=0;   echo "$concB" | grep -qi "c, d, e, f"        && b_own=1
+    b_other=0; echo "$concB" | grep -qi "three, four, five" && b_other=1
     if [ "$a_own" = 1 ] && [ "$b_own" = 1 ]; then
         v=CLEAN            # both answered their own prompt; byte diffs are jitter
     elif [ "$a_other" = 1 ] || [ "$b_other" = 1 ]; then
@@ -126,6 +156,13 @@ probe() { # $1 arm  $2 rep  $3 server args
     # byte-equality kept as a secondary observation, never as the verdict
     local bytes=exact
     { [ "$concA" != "$soloA" ] || [ "$concB" != "$soloB" ]; } && bytes=differs
+    # a byte-identical run that scores anything but CLEAN means the SEMANTIC BAR is broken, not the
+    # code under test. Say so loudly instead of emitting a corruption verdict.
+    if [ "$bytes" = exact ] && [ "$v" != CLEAN ]; then
+        echo "$tag: ⚠ BAR FAULT -- outputs are byte-identical to solo yet scored $v. The semantic" | tee -a "$OUT"
+        echo "    markers do not match this model's phrasing. Fix the bar; this is NOT a code defect." | tee -a "$OUT"
+        v=BAR-FAULT
+    fi
     verdicts+=("$1:$v")
      echo "--- $tag  swaps=$swaps  bytes=$bytes  -> $v" | tee -a "$OUT"
     if [ "$v" != CLEAN ]; then

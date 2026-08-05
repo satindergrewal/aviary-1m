@@ -1,0 +1,6 @@
+tip: 53ed79e2 dirty=0  model=ornith-1.0-9b-1M-IQ2_M.gguf  reps=2  env=[]
+--- static-r1  swaps=0  bytes=exact  -> GARBAGE
+    soloA: CONTENT# one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+    concA: CONTENT# one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.  <think> Thinking Process:  1
+    soloB: CONTENT# A, B, C, D, E, F, G, H, I, J, K, L.  <think> Thinking Process:  1.  **Analyze the Request:** The user wants me to list the first
+    concB: CONTENT# A, B, C, D, E, F, G, H, I, J, K, L.  <think> Thinking Process:  1.  **Analyze the Request:** The user wants me to list the first

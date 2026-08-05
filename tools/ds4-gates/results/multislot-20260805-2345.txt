@@ -1,0 +1,2 @@
+tip: 53ed79e2 dirty=0  model=gemma4-26b-a4b-uncensored-1M-Q4_K_M.gguf  reps=2  env=[]
+--- static-r1  swaps=0  bytes=differs  -> CLEAN
