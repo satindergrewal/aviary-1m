@@ -1,0 +1,6 @@
+tip: 53ed79e2 dirty=0
+dispatches captured: 600   multi-sequence: 600
+  VIOLATION  n_tokens=15  batch_lens=[15, 14]  sum=29  -> kernel indexes 0..14 against offsets spanning 0..28
+  VIOLATION  n_tokens=14  batch_lens=[15, 14]  sum=29  -> kernel indexes 0..13 against offsets spanning 0..28
+  VIOLATION  n_tokens=1  batch_lens=[1, 1]  sum=2  -> kernel indexes 0..0 against offsets spanning 0..1
+BATCH-OFFSET INVARIANT: FAIL  (600 of 600 multi-seq dispatches violate sum(batch_lens) == n_tokens)
