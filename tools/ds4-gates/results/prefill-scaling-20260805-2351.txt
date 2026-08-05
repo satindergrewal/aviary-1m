@@ -1,0 +1,8 @@
+tip: 53ed79e2 dirty=0  ctx=32768
+--- STATIC ---
+  static lines=200   tokens=4297   prefill=6.02s
+  static lines=800   tokens=17497  prefill=27.86s
+  static lines=2400  tokens=-1     prefill=0.05s
+  static lines=4800  tokens=-1     prefill=0.07s
+--- PAGED ---
+  paged  lines=200   tokens=4297   prefill=7.26s
