@@ -16,7 +16,7 @@
 # the gate's own `exit` jumped straight over it -- and a `grep -l scrub_abs_paths` still listed the
 # gate as a caller, because a grep counts TEXT, not control flow. Verified end-to-end afterwards:
 # the result file still carried the absolute path. On EXIT it runs whatever path the gate takes.
-trap 'scrub_abs_paths "$OUT"' EXIT
+trap 'scrub_abs_paths "${OUT:-}"' EXIT   # ${OUT:-} : the trap fires on EARLY exits too, before OUT is assigned; set -u would abort there
 
 set -euo pipefail
 

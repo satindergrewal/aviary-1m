@@ -13,6 +13,8 @@
 # This gate deliberately does NOT set a pass bar. There is no prior Metal paged number to
 # regress against -- inventing a threshold now would be picking the answer before measuring.
 set -uo pipefail
+. "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+trap 'scrub_abs_paths "${OUT:-}"' EXIT
 
 WT=${WT:-$HOME/Documents/GitHub/llama.cpp-ds4ports}
 B=${B:-$WT/build-metal/bin/llama-server}
