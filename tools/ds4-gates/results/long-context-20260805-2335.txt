@@ -1,0 +1,12 @@
+tip: 53ed79e2 dirty=0  ctx=32768  fill~14000tok
+--- STATIC (control) ---
+  static depth 10%  prompt_tokens=25743  found=1   MAGENTA-7742  Note 1166: the
+  static depth 50%  prompt_tokens=25743  found=1   MAGENTA-7742  Note 1166: the
+  static depth 90%  prompt_tokens=25743  found=1   MAGENTA-7742  Based on the provided notes, the secret
+--- PAGED ---
+  paged  depth 10%  prompt_tokens=25743  found=1   MAGENTA-7742  Note 1166: the
+  paged  depth 50%  prompt_tokens=25743  found=1   MAGENTA-7742  Note 1166: the
+  paged  depth 90%  prompt_tokens=25743  found=1   MAGENTA-7742  Based on the provided notes, the secret
+-----
+retrieved: static 3/3   paged 3/3
+LONG-CONTEXT GATE: PASS paged matches static (3/3 vs 3/3) at 32768 ctx
