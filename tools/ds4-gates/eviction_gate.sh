@@ -58,8 +58,11 @@ check_pair() { # $1 tag  $2 model
     ctrl=$(run "$1-ctrl"  "$2" "-ngpub 512 -ncpub 128")
     echo "CTRL : $ctrl" | tee -a "$OUT"
 
-    # Starve GPU blocks hard so the pool must spill, and give CPU room to receive.
-    evict=$(run "$1-evict" "$2" "-ngpub 24 -ncpub 512")
+    # ⚠ -ngpub 24 DID NOT SPILL. 24 blocks x 16 = 384 tokens against a ~60-token job: no pressure,
+    # swaps=0, and the gate correctly failed itself on the presence marker. The livelock hunt later
+    # established that -ngpub 8 (128 tokens) is what actually forces the pool to spill on this
+    # prompt. Starvation has to be sized against the JOB, not merely look small.
+    evict=$(run "$1-evict" "$2" "-ngpub 8 -ncpub 512")
     echo "EVICT: $evict" | tee -a "$OUT"
 
     swaps_c=$(grep -c "DS4P-EVICT swap" "/tmp/ev-$1-ctrl.log"  2>/dev/null);  swaps_c=${swaps_c:-0}
