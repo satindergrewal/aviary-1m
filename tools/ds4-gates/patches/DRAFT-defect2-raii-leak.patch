@@ -1,0 +1,71 @@
+--- a/src/llama-kv-cache-paged.h
++++ b/src/llama-kv-cache-paged.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ 
++#include "ggml-cpp.h"
+ #include "llama-batch.h"
+ #include "llama-block-manager.h"
+ #include "llama-graph.h"
+@@ -231,9 +232,19 @@
+     uint32_t       block_bytes;
+ 
+     // one context+buffer per distinct device holding layers (multi-device path)
+-    std::vector<struct ggml_context *>     gpu_ctxs;
+-    std::vector<ggml_backend_buffer_t>     gpu_bufs;
++    // OWNING: these were raw pointers with no destructor on this class, so every context and
++    // buffer init() allocated was leaked. ggml_context_ptr / ggml_backend_buffer_ptr are the
++    // in-tree RAII types (ggml-cpp.h), already used by llama-kv-cache.h and llama-adapter.h.
++    std::vector<ggml_context_ptr>          gpu_ctxs;
++    std::vector<ggml_backend_buffer_ptr>   gpu_bufs;
+ 
++    // The single-device GPU pool and the two CPU pools allocated a context + buffer each and
++    // stored NEITHER -- six handles unreachable the moment init() returned. Own them here.
++    // Declared AFTER kv_gpu_layers/kv_cpu_layers on purpose: members destruct in reverse
++    // declaration order, so these are released BEFORE the raw ggml_tensor* views into them.
++    std::vector<ggml_context_ptr>          owned_ctxs;
++    std::vector<ggml_backend_buffer_ptr>   owned_bufs;
++
+     ggml_backend_t gpu_backend;
+     ggml_backend_t cpu_backend;
+ 
+--- a/src/llama-kv-cache-paged.cpp
++++ b/src/llama-kv-cache-paged.cpp
+@@ -210,8 +210,8 @@
+                        ggml_backend_name(be), n_here,
+                        ggml_backend_buffer_get_size(buf) / 1024.0 / 1024.0);
+ 
+-        gpu_ctxs.push_back(ctx);
+-        gpu_bufs.push_back(buf);
++        gpu_ctxs.emplace_back(ctx);
++        gpu_bufs.emplace_back(buf);
+     }
+ 
+     for (uint32_t il = 0; il < n_layers; ++il) {
+@@ -233,6 +233,8 @@
+     }
+     ggml_backend_buffer_t buf_cpu = ggml_backend_alloc_ctx_tensors(ctx_cpu, backend_cpu);
+     GGML_ASSERT(buf_cpu && "Failed to allocate CPU KV cache buffer");
++    owned_ctxs.emplace_back(ctx_cpu);
++    owned_bufs.emplace_back(buf_cpu);
+     ggml_backend_buffer_clear(buf_cpu, ds4p_kv_fill("CPU pool (A)"));
+     for (uint32_t il = 0; il < n_layers; ++il) {
+         if (!ds4p_layer_kv(layer_has_kv, il)) { continue; }
+@@ -310,6 +312,8 @@
+     // Allocate on GPU backend
+     ggml_backend_buffer_t buf_gpu = ggml_backend_alloc_ctx_tensors(ctx_gpu, backend_gpu);
+     GGML_ASSERT(buf_gpu && "Failed to allocate GPU KV cache buffer");
++    owned_ctxs.emplace_back(ctx_gpu);
++    owned_bufs.emplace_back(buf_gpu);
+     // POISON PROBE (DS4P_KV_POISON): fill with 0xFF so every fp16 is NaN. If nothing ever
+     // reads an unwritten block, results are unchanged and the gates still pass -- which is
+     // the premise that makes deferring this clear (and thus lazy commit) safe. If something
+@@ -341,6 +345,8 @@
+     // Allocate on the CPU backend (using pinned memory for faster PCIe transfer)
+     ggml_backend_buffer_t buf_cpu = ggml_backend_alloc_ctx_tensors(ctx_cpu, backend_cpu);
+     GGML_ASSERT(buf_cpu && "Failed to allocate CPU KV cache buffer");
++    owned_ctxs.emplace_back(ctx_cpu);
++    owned_bufs.emplace_back(buf_cpu);
+     ggml_backend_buffer_clear(buf_cpu, ds4p_kv_fill("CPU pool (B)"));
+     for (uint32_t il = 0; il < n_layers; ++il) {
+         if (!ds4p_layer_kv(layer_has_kv, il)) { continue; }
