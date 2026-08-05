@@ -1,0 +1,12 @@
+tip: 53ed79e2 dirty=0  reps=2
+  sim-r1  (same prefill batch):   CROSSED
+  stag-r1 (A decoding first, gap 4.04s): CLEAN
+  sim-r2  (same prefill batch):   CROSSED
+  stag-r2 (A decoding first, gap 4.04s): CLEAN
+-----
+simultaneous: CROSSED CROSSED   (2/2 not clean)
+staggered   : CLEAN CLEAN   (0/2 not clean)
+
+RESULT: corruption requires the two sequences to SHARE A PREFILL BATCH. Staggering them
+  is clean, so it is batch COMPOSITION, not concurrent decode.
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/slot-stagger-20260806-0113.txt

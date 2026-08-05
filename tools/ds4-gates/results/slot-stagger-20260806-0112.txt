@@ -1,0 +1,12 @@
+tip: 53ed79e2 dirty=0  reps=2
+  sim-r1  (same prefill batch):   CROSSED
+  stag-r1 (A decoding first):    CROSSED
+  sim-r2  (same prefill batch):   CROSSED
+  stag-r2 (A decoding first):    CROSSED
+-----
+simultaneous: CROSSED CROSSED   (2/2 not clean)
+staggered   : CROSSED CROSSED   (2/2 not clean)
+
+RESULT: corruption fires even when the two NEVER share a prefill batch. It is concurrent
+  DECODE, not batch composition.
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/slot-stagger-20260806-0112.txt
