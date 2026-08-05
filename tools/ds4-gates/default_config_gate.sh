@@ -9,10 +9,16 @@
 # This gate tests ONLY the default: repeated prompts with the prompt cache ON. Its job is to be a
 # standing, visible measurement of whether --kv-paged is usable the way people actually call it.
 #
-# ⚠ IT IS EXPECTED TO FAIL TODAY, and that is the point. cache_prompt on the paged path is broken
-# (pre-existing, independently recorded in memory: "--kv-paged leaves slot.prompt.tokens empty so
-# prompt_save bails"). A red line that names a real defect on the default path is worth more than
-# six green ones that agree about a configuration nobody runs.
+# ⚠ THE "EXPECTED TO FAIL" NOTE THAT WAS HERE IS OBSOLETE -- FIXED 2026-08-05, and left as a scar.
+# It said cache_prompt on the paged path was broken and cited a memory note as corroboration. Both
+# were wrong: the failures were a regression of MINE (a server drain keyed on a reused slot id),
+# and the runs that seemed to exonerate it had been measured against a STALE BINARY -- the build had
+# been silently failing. Fixed, this gate now PASSES with the paged path reusing 25 of 26 tokens,
+# BETTER than static (26 -> 1 -> 1 vs 26 -> 4 -> 4).
+#
+# Kept verbatim as a lesson rather than deleted: a comment asserting a permanent expectation ages
+# into a lie the moment the thing is fixed, and it will be believed because it is right there in the
+# file. If this gate ever fails again, that is NEWS -- do not read this header as permission.
 #
 # ARMS -- static is the CONTROL, and without it "paged is broken" cannot be separated from
 # "prompt caching is broken":
