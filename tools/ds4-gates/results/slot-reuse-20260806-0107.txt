@@ -1,0 +1,12 @@
+tip: 53ed79e2 dirty=0  reps=2
+  warm-r1 (prior finish on slot 0): CROSSED
+  cold-r1 (no prior request):      CROSSED
+  warm-r2 (prior finish on slot 0): CROSSED
+  cold-r2 (no prior request):      CROSSED
+-----
+warm: CROSSED CROSSED   (2/2 not clean)
+cold: CROSSED CROSSED   (2/2 not clean)
+
+RESULT: corruption fires with NO prior request. Slot-id reuse is NOT the whole story --
+  the hypothesis is wrong or incomplete.
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/slot-reuse-20260806-0107.txt
