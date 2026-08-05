@@ -1,0 +1,2 @@
+binary: $HOME/Documents/GitHub/llama.cpp-ds4ports/build-metal/bin/llama-server  tip=53ed79e2
+=== done -> $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/paged-multimodel-20260806-0038.txt ===

@@ -1,0 +1,9 @@
+tip: 53ed79e2 dirty=0
+binary: 22:57:39
+=== CONSUMER GATE on qwen3-4b-metal-Q4_K_M.gguf ===
+PAGED-clean        sha=7942f8fc360b  taint_marker=0
+0
+PAGED-tainted      sha=d5583d693699  taint_marker=1
+---
+probe_armed=1  paged_op_ran=2  model=qwen3-4b-metal-Q4_K_M.gguf
+CONSUMED: taint CHANGED logprobs (7942f8fc360b -> d5583d693699) => this graph genuinely READS the paged pool

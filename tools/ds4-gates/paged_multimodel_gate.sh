@@ -10,6 +10,7 @@ P=${P:-9047}
 CTX=${CTX:-8192}
 OUT=${OUT:-$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/paged-multimodel-$(date +%Y%m%d-%H%M).txt}
 mkdir -p "$(dirname "$OUT")"
+fails=0; skipped=0
 echo "binary: $B  tip=$(cd "$(dirname "$B")/../.." && git rev-parse --short HEAD)" | tee "$OUT"
 
 arm() { # $1 model  $2 label  $3 extra args
@@ -41,6 +42,19 @@ arm() { # $1 model  $2 label  $3 extra args
     echo "$sha" > "/tmp/mm-sha-$2"
     pkill -f "$B" >/dev/null 2>&1; sleep 2
 }
+# ⚠ REFUSE TO RUN VACUOUSLY. This gate takes its models as arguments, and with none it fell
+# straight through the loop, printed "=== done ===" and exited 0 -- a gate that tested nothing and
+# reported success. It sat in the suite in that state, and a batch runner counting exit codes would
+# have scored it as a pass forever.
+#
+# Its neighbour abort_paths_gate.sh has the SAME requirement and handles it the opposite way:
+# `URL="${1:?server url}"` refuses loudly and exits non-zero. Same problem, one refuses, one
+# fabricates a pass. An empty run must never be indistinguishable from a clean run.
+if [ "$#" -eq 0 ]; then
+    echo "usage: $0 <model.gguf> [model2.gguf ...]" >&2
+    echo "  refusing to run with no models -- an empty run is not a passing run" >&2
+    exit 2
+fi
 for m in "$@"; do
     [ -f "$m" ] || { echo "missing: $m" | tee -a "$OUT"; continue; }
     echo "=== $(basename "$m") (ctx=$CTX) ===" | tee -a "$OUT"
@@ -48,8 +62,26 @@ for m in "$@"; do
     arm "$m" static ""
     arm "$m" paged  "--kv-paged"
     a=$(cat /tmp/mm-sha-static 2>/dev/null); b=$(cat /tmp/mm-sha-paged 2>/dev/null)
-    if [ -n "$a" ] && [ "$a" = "$b" ]; then echo "  -> OUTPUT IDENTICAL" | tee -a "$OUT"
-    elif [ -z "$b" ]; then echo "  -> paged did not produce output (see above)" | tee -a "$OUT"
-    else echo "  -> *** OUTPUT DIVERGED: static=$a paged=$b ***" | tee -a "$OUT"; fi
+    if [ -n "$a" ] && [ "$a" = "$b" ]; then
+        echo "  -> OUTPUT IDENTICAL" | tee -a "$OUT"
+    elif [ -z "$b" ]; then
+        # ⚠ SEPARATE A DESIGNED REFUSAL FROM A FAILURE. The hybrid and SWA guards refuse --kv-paged
+        # on purpose and say so; that is the guard working, and this gate cannot answer for that
+        # model without the enabling env. Anything else that fails to serve is a real failure.
+        if grep -qE "not yet supported for hybrid architectures|needs DS4P_PAGED_SWA=1" /tmp/mm.log 2>/dev/null; then
+            echo "  -> SKIPPED: paged refused BY DESIGN for this architecture (set HYBENV to enable) -- gate cannot answer" | tee -a "$OUT"
+            skipped=$((skipped+1))
+        else
+            echo "  -> *** paged did not produce output (see above) ***" | tee -a "$OUT"
+            fails=$((fails+1))
+        fi
+    else
+        echo "  -> *** OUTPUT DIVERGED: static=$a paged=$b ***" | tee -a "$OUT"
+        fails=$((fails+1))
+    fi
 done
-echo "=== done -> $OUT ===" | tee -a "$OUT"
+# ⚠ THE EXIT CODE MUST AGREE WITH THE TEXT. This gate used to print "paged did not produce output"
+# and then exit 0, so any batch runner reading exit codes scored it a pass while the body said it
+# had failed. A verdict nobody can act on programmatically is a verdict that gets ignored.
+echo "=== done: $fails failure(s), $skipped skipped -> $OUT ===" | tee -a "$OUT"
+exit $((fails > 0 ? 1 : 0))
