@@ -1,0 +1,16 @@
+tip: 53ed79e2 dirty=0  ctx=32768
+--- STATIC ---
+  static lines=200   tokens=4297   prefill=6.02s
+  static lines=1000  tokens=21897  prefill=35.85s
+--- PAGED ---
+  [path] 
+  paged  lines=200   tokens=4297   prefill=12.0s
+  paged  lines=1000  tokens=21897  prefill=105.7s
+-----
+tokens   static   paged     ratio     verdict
+4297     6.02s    12.0s     1.99x     
+21897    35.85s   105.7s    2.95x     climbing
+
+FLAT ratio  => fixed overhead; survives to 128K/1M unchanged.
+CLIMBING    => worse complexity than static; there is a length past which paged is unusable,
+               and it is the length this lane exists for. That would be the real finding.

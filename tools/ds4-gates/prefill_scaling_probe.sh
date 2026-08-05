@@ -22,7 +22,7 @@ set -uo pipefail
 WT=$HOME/Documents/GitHub/llama.cpp-ds4ports
 SRV=$WT/build-metal/bin/llama-server
 M=${PS_MODEL:-$HOME/Documents/GitHub/ornith-models/Ornith-1.0-9B-1M-GGUF/ornith-1.0-9b-1M-IQ2_M.gguf}
-P=9012
+P=9013
 CTX=${PS_CTX:-32768}
 # ⚠ LINES, NOT TOKENS, AND THE CONVERSION IS MEASURED NOT GUESSED. The first run used
 # "200 800 2400 4800" on an assumed ~12 tokens/line. The very first data point reported 4297 tokens
@@ -33,8 +33,8 @@ CTX=${PS_CTX:-32768}
 # Caught from the first point rather than after the run. The guard below now enforces it.
 LENS=${PS_LENS:-"200 600 1000 1400"}     # ~4.3K / 12.9K / 21.5K / 30.1K tokens at 21.5 tok/line
 BS=${PS_BS:-32}                          # --kv-block-size for the paged arm
-LOGDIR=${CLAUDE_JOB_DIR:-/tmp}/prefillscale-bs${PS_BS:-32}
-OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/prefill-scaling-bs${PS_BS:-32}-$(date +%Y%m%d-%H%M).txt
+LOGDIR=${CLAUDE_JOB_DIR:-/tmp}/prefillscale-${PS_TAG:-bs}${PS_BS:-32}
+OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/prefill-scaling-${PS_TAG:-bs}${PS_BS:-32}-$(date +%Y%m%d-%H%M).txt
 mkdir -p "$LOGDIR" "$(dirname "$OUT")"
 echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  ctx=$CTX" | tee "$OUT"
 
@@ -52,7 +52,11 @@ PY
 start_srv() { # $1 label  $2 extra args
     pkill -f "$SRV" >/dev/null 2>&1; sleep 2
     # shellcheck disable=SC2086
-    env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 \
+    # ⚠ EXTRA_ENV lets a run opt into DS4P_METAL_MMA=1. The MMA path is off by default on a
+    # MEASUREMENT taken at D=128/bs=16, where the specialised scalar kernel beat it 1.25x. This
+    # workload is D=256 -- twice the head_dim walk that the scalar path's advantage came from --
+    # so the condition behind that default does not obviously hold here.
+    env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 ${EXTRA_ENV:-} \
         nohup "$SRV" -m "$M" -ngl 99 -c "$CTX" -np 1 -b 512 -ub 512 --port $P --no-warmup -lv 4 \
         $2 > "$LOGDIR/$1.log" 2>&1 &
     for _ in $(seq 1 600); do
@@ -68,6 +72,11 @@ arm() { # $1 name  $2 server args
         echo "$1: NEVER_READY -- results unusable" | tee -a "$OUT"; return 1
     fi
     local marker; marker=$(grep -c "initializing paged KV cache" "$LOGDIR/$1.log")
+    if [ "$1" = paged ]; then
+        # TWO-SIDED PATH MARKER: the kernel prints ACTIVE or OFF, so the arm states which path it
+        # actually took rather than leaving it to be inferred from the env I meant to set.
+        echo "  [path] $(grep -oE "DS4P-MMA (ACTIVE|OFF \(scalar path\))" "$LOGDIR/$1.log" | sort -u | tr '\n' ' ')" | tee -a "$OUT"
+    fi
     case "$1" in
         paged)  [ "$marker" -lt 1 ] && { echo "paged: FAIL no pool built" | tee -a "$OUT"; pkill -f "$SRV"; return 1; } ;;
         static) [ "$marker" -gt 0 ] && { echo "static: FAIL built a paged pool" | tee -a "$OUT"; pkill -f "$SRV"; return 1; } ;;
