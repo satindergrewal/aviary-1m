@@ -1,0 +1,8 @@
+tip: c505c5d8 dirty=3
+binary: 12:01:07
+=== CONSUMER GATE on ornith-1.0-9b-1M-IQ2_M.gguf ===
+PAGED-clean NEVER READY
+PAGED-tainted NEVER READY
+---
+probe_armed=0  paged_op_ran=0  model=ornith-1.0-9b-1M-IQ2_M.gguf
+INCONCLUSIVE: the taint probe never armed (no paged KV write dispatched). NOT evidence of anything -- the paged pool was absent or the write path never ran.

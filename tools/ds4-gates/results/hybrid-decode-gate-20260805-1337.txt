@@ -1,0 +1,10 @@
+tip: 47a76d0c dirty=3
+--- STATIC (reference) ---
+ one, two, three, four, five, six, seven, eight, nine, ten.  <think> Thinking Process: 1.  **Analyze the Request:** The user wants me
+--- PAGED (self-drive) ---
+ one, two, three.  <think> The user wants me to count the number of items. The user is asking me to count the number of items. </think>
+--- PAGED + TAINT (tautology discriminator) ---
+ one, two, , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , ,
+---
+DISCRIMINATOR OK: taint changed paged output => the pool IS driving this generation
+DECODE GATE FAIL: paged DIVERGES from static -- decode is incorrect (expected: self-drive resets n_past=0 per call)

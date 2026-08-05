@@ -1,0 +1,3 @@
+tip: acafec68 dirty=3
+FILTER-ON      RSS=3.97 GB   attention-only pool: 8 of 32 layers hold KV
+FILTER-OFF     RSS=4.68 GB   DS4P_NO_LAYER_FILTER -- allocating ALL layers (filter disabled)

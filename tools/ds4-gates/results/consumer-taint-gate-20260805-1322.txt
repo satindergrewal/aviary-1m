@@ -1,0 +1,9 @@
+tip: acafec68 dirty=3
+binary: 13:22:19
+=== CONSUMER GATE on ornith-1.0-9b-1M-IQ2_M.gguf ===
+PAGED-clean        sha=63c2fc36e759  taint_marker=0
+0
+PAGED-tainted      sha=adc0c2f01d60  taint_marker=1
+---
+probe_armed=1  paged_op_ran=2  model=ornith-1.0-9b-1M-IQ2_M.gguf
+CONSUMED: taint CHANGED logprobs (63c2fc36e759 -> adc0c2f01d60) => this graph genuinely READS the paged pool
