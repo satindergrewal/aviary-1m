@@ -58,3 +58,35 @@ gate that passes — every gap here was absence-shaped.
   there.
 - Every marker needs to be **two-sided** and read at the right moment. Startup-emitted markers may be
   read after startup; **work-emitted markers may not** — they do not exist until work has run.
+
+## ⚠ Flags are a CLAIM. Behaviour is the coverage.
+
+`hybrid_paged_gate.sh` runs `-np 2`, is a correctness gate, and **passed 4/4** while the paged path
+had a data-destroying multi-sequence bug. It passed because it sends requests sequentially:
+
+```bash
+for i in 0 1 2 3; do curl ... ; done      # no &, no wait
+```
+
+`-np 2` on the command line, one sequence in flight at a time, every batch single-sequence, bug
+dormant. **The gate was configured for a regime it never entered — and that is why the defect
+survived.**
+
+Grepping the suite for `-np 2` reports three gates covering multi-slot. Reading what they *do* says
+one, and it was written the day the bug was found:
+
+| gate | claims | enters | |
+|---|---|---|---|
+| `hybrid_paged_gate` | `-np 2` | no | sequential |
+| `p28_cuda_regate` | `-np 3` | no | sequential (also box-only) |
+| `p28_finale_gate` | `-np 3` | no | sequential (also box-only) |
+| `multislot_gate` | `-np 2` | **yes** | genuinely concurrent — and it FAILS |
+
+`./lint_claimed_vs_entered.sh` checks this statically and exits non-zero on a mismatch. It carries a
+positive control (it must find `hybrid_paged_gate`) because two of the audit tools written the same
+night were blind to exactly what they audited — a scanner whose pattern could not cross a pipe, and
+a verdict scorer that did not know the word `IDENTICAL`.
+
+The lint deliberately says what it is **not** claiming: a sequential `-np` gate may be a perf wall
+where sequential is correct. The bug is counting it as multi-slot *coverage*. Fix is narrow — make
+it concurrent, or drop the `-np` flag so the claim matches the behaviour.
