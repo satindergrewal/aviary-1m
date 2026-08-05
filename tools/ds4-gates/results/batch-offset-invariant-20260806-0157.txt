@@ -1,0 +1,5 @@
+tip: 53ed79e2 dirty=0
+dispatches captured: 600   multi-sequence: 0
+INCONCLUSIVE: no multi-sequence dispatch was produced, so this gate proves NOTHING.
+  (A suite where nothing is concurrent passes this trivially -- which is how the
+   original defect survived. Presence of the regime is checked before the invariant.)

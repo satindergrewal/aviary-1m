@@ -26,7 +26,7 @@ set -uo pipefail
 WT=$HOME/Documents/GitHub/llama.cpp-ds4ports
 SRV=$WT/build-metal/bin/llama-server
 M=${BI_MODEL:-$HOME/Documents/GitHub/ornith-models/Gemma4-26B-A4B-Uncensored-1M/gemma4-26b-a4b-uncensored-1M-Q4_K_M.gguf}
-P=9021
+P=${BI_PORT:-9021}
 LOGDIR=${CLAUDE_JOB_DIR:-/tmp}/batchinv
 OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/batch-offset-invariant-$(date +%Y%m%d-%H%M).txt
 mkdir -p "$LOGDIR" "$(dirname "$OUT")"
@@ -37,7 +37,7 @@ echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git sta
 
 pkill -f "$SRV" >/dev/null 2>&1; sleep 2
 env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 DS4P_ARGDUMP=600 \
-    nohup "$SRV" -m "$M" -ngl 99 -c 8192 -np 2 -b 512 -ub 512 --port $P --no-warmup -lv 4 \
+    nohup "$SRV" -m "$M" -ngl 99 -c 8192 -np ${BI_NP:-2} -b 512 -ub 512 --port $P --no-warmup -lv 4 \
     --kv-paged --kv-block-size 16 -ngpub 512 -ncpub 128 > "$LOGDIR/srv.log" 2>&1 &
 for _ in $(seq 1 400); do
     [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] && break
