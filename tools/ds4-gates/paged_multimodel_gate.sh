@@ -4,6 +4,16 @@
 # For each model: run STATIC and PAGED, compare OUTPUT SHA, and record RSS + system free.
 # A paged path that is fast but answers differently is broken; a paged path that eats the
 # machine is broken; both are checked here.
+
+# ⚠ Strip absolute home paths before this file is committed. Gates build their output path from
+# $HOME and echo it, which writes /Users/<username>/... into the result. See _no_abs_paths.sh.
+. "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+# ⚠ TRAP, NOT A TRAILING CALL. The first wiring put scrub_abs_paths at the end of the file, where
+# the gate's own `exit` jumped straight over it -- and a `grep -l scrub_abs_paths` still listed the
+# gate as a caller, because a grep counts TEXT, not control flow. Verified end-to-end afterwards:
+# the result file still carried the absolute path. On EXIT it runs whatever path the gate takes.
+trap 'scrub_abs_paths "$OUT"' EXIT
+
 set -uo pipefail
 B=${B:-$HOME/Documents/GitHub/llama.cpp-ds4ports/build-metal/bin/llama-server}
 P=${P:-9047}

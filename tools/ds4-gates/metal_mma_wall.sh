@@ -8,6 +8,16 @@
 # exactly how a 21.6x that did not exist got produced once ([[arms-must-differ-in-one-thing]]).
 # Arms differ in ONE thing each, and every arm gets a FRESH server so no arm pays another's
 # eviction or benefits from another's warm cache.
+
+# ⚠ Strip absolute home paths before this file is committed. Gates build their output path from
+# $HOME and echo it, which writes /Users/<username>/... into the result. See _no_abs_paths.sh.
+. "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+# ⚠ TRAP, NOT A TRAILING CALL. The first wiring put scrub_abs_paths at the end of the file, where
+# the gate's own `exit` jumped straight over it -- and a `grep -l scrub_abs_paths` still listed the
+# gate as a caller, because a grep counts TEXT, not control flow. Verified end-to-end afterwards:
+# the result file still carried the absolute path. On EXIT it runs whatever path the gate takes.
+trap 'scrub_abs_paths "$OUT"' EXIT
+
 set -uo pipefail
 
 WT=${WT:-$HOME/Documents/GitHub/llama.cpp-ds4ports}

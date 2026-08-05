@@ -1,0 +1,10 @@
+tip: 53ed79e2 dirty=0
+--- STATIC (reference) ---
+ one, two, three, four, five, six, seven, eight, nine, ten.  <think> Thinking Process: 1.  **Analyze the Request:** The user wants me
+--- PAGED (self-drive) ---
+ one, two, three, four, five, six, seven, eight, nine, ten.  <think> Thinking Process: 1.  **Analyze the Request:** The user wants me
+--- PAGED + TAINT (tautology discriminator) ---
+ one, two, three, four, five, six, seven, eight, nine, ten.  The correct sequence is: one, two, three, four, five, six, seven,
+---
+DISCRIMINATOR OK: taint changed paged output => the pool IS driving this generation
+DECODE GATE PASS: paged output MATCHES static across 40 decode tokens

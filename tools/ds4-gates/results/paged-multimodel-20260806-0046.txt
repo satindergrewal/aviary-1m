@@ -1,0 +1,6 @@
+binary: $HOME/Documents/GitHub/llama.cpp-ds4ports/build-metal/bin/llama-server  tip=53ed79e2
+=== ornith-1.0-9b-1M-IQ2_M.gguf (ctx=8192) ===
+  static   sha=fcdd040c24  RSS=  3.85 GB  free=91%  
+  paged    sha=fcdd040c24  RSS=  4.33 GB  free=91%  UNIFIED (reserve is the OS working set),
+  -> OUTPUT IDENTICAL
+=== done: 0 failure(s), 0 skipped -> $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/paged-multimodel-20260806-0046.txt ===
