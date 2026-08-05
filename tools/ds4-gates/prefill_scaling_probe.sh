@@ -22,7 +22,7 @@ set -uo pipefail
 WT=$HOME/Documents/GitHub/llama.cpp-ds4ports
 SRV=$WT/build-metal/bin/llama-server
 M=${PS_MODEL:-$HOME/Documents/GitHub/ornith-models/Ornith-1.0-9B-1M-GGUF/ornith-1.0-9b-1M-IQ2_M.gguf}
-P=9011
+P=9012
 CTX=${PS_CTX:-32768}
 # ⚠ LINES, NOT TOKENS, AND THE CONVERSION IS MEASURED NOT GUESSED. The first run used
 # "200 800 2400 4800" on an assumed ~12 tokens/line. The very first data point reported 4297 tokens
@@ -32,8 +32,9 @@ CTX=${PS_CTX:-32768}
 # shrinks at length" off arithmetic that never happened.
 # Caught from the first point rather than after the run. The guard below now enforces it.
 LENS=${PS_LENS:-"200 600 1000 1400"}     # ~4.3K / 12.9K / 21.5K / 30.1K tokens at 21.5 tok/line
-LOGDIR=${CLAUDE_JOB_DIR:-/tmp}/prefillscale
-OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/prefill-scaling-$(date +%Y%m%d-%H%M).txt
+BS=${PS_BS:-32}                          # --kv-block-size for the paged arm
+LOGDIR=${CLAUDE_JOB_DIR:-/tmp}/prefillscale-bs${PS_BS:-32}
+OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/prefill-scaling-bs${PS_BS:-32}-$(date +%Y%m%d-%H%M).txt
 mkdir -p "$LOGDIR" "$(dirname "$OUT")"
 echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  ctx=$CTX" | tee "$OUT"
 
@@ -101,7 +102,7 @@ except Exception: print(-1)')
 }
 
 echo "--- STATIC ---" | tee -a "$OUT"; arm static "" || exit 1
-echo "--- PAGED ---"  | tee -a "$OUT"; arm paged "--kv-paged --kv-block-size 32 -ngpub 4096 -ncpub 512" || exit 1
+echo "--- PAGED ---"  | tee -a "$OUT"; arm paged "--kv-paged --kv-block-size $BS -ngpub 8192 -ncpub 512" || exit 1
 
 echo "-----" | tee -a "$OUT"
 printf "%-8s %-8s %-9s %-9s %s\n" tokens static paged ratio verdict | tee -a "$OUT"
