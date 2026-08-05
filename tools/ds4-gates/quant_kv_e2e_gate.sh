@@ -10,11 +10,17 @@
 # sufficient: it exercises one op with a hand-built cache, while the garbage involved a whole
 # server -- scheduler, block table, multi-layer graph, slot reuse.
 #
-# FOUR arms, and two of them are controls that must FAIL/agree or the gate means nothing:
-#   A REFUSAL   paged+q8_0, no dev flag  -> MUST refuse at startup (guard still armed)
-#   B STATIC    q8_0, no paging          -> MUST be correct (isolates paging from quantisation)
-#   C PAGED f16 paged, f16               -> MUST be correct (isolates quantisation from paging)
-#   D PAGED q8  paged+q8_0, dev flag     -> THE TEST
+# ★ RESOLVED. Root cause was the decode path adding an ELEMENT offset to a base built from
+# BLOCK-unit strides and reading it as half -- correct for f16, meaningless for q8_0, and invisible
+# because prefill staged and dequantised correctly. The refusal is retired; this gate now proves the
+# retirement rather than the refusal, which is why arm A is INVERTED rather than deleted.
+#
+# FIVE arms, and four of them are controls -- without them the test arm means nothing:
+#   A1 ACCEPT   paged+q8_0, NO dev flag  -> MUST start        (the retirement is real)
+#   A2 REFUSE   paged+q4_0               -> MUST still refuse (the guard still guards)
+#   B  STATIC   q8_0, no paging          -> MUST be correct   (isolates paging from quantisation)
+#   C  PAGED f16 paged, f16              -> MUST be correct   (isolates quantisation from paging)
+#   D  PAGED q8 paged+q8_0, no dev flag  -> THE TEST, must MATCH B exactly
 #
 # ⚠ Arm D also requires a PRESENCE MARKER. The original bug was not a wrong answer from a running
 # kernel -- the paged op NEVER DISPATCHED under q8_0, silently, and the server answered from the
@@ -36,16 +42,54 @@ PROMPT='The capital of France is'
 
 fails=0
 
-# ---- Arm A: the guard must still be armed without the dev flag -------------------------------
-echo "--- A REFUSAL CONTROL (paged + q8_0, no dev flag) ---" | tee -a "$OUT"
+# ---- Arm A: INVERTED now that q8_0 is supported ----------------------------------------------
+# ⚠ THIS ARM USED TO ASSERT THE OPPOSITE. While q8_0 was refused it checked that the guard FIRED.
+# Retiring the refusal without rewriting this arm would have left a control that passes no matter
+# what happens -- a test asserting a condition that can no longer occur is not a weaker test, it is
+# a test of nothing, and it would still print PASS forever.
+#
+# So it is now TWO arms, because retiring a guard has two ways to go wrong and they need separate
+# verdicts:
+#   A1 the thing that WAS refused now WORKS with no dev flag  -> the retirement is real
+#   A2 a type that is STILL unsupported is STILL refused      -> the guard still guards
+# Without A2, "q8_0 works now" and "the guard was deleted" are indistinguishable from the outside.
+echo "--- A1 q8_0 ACCEPTED (paged + q8_0, NO dev flag -- must start) ---" | tee -a "$OUT"
+pkill -f "$SRV" >/dev/null 2>&1; sleep 2
+# ⚠ NEEDS THE SAME ENV AS THE OTHER PAGED ARMS. Without DS4P_PAGED_HYBRID this aborts on the
+# hybrid assert long after the KV-type check, and the arm reported "still refused" for a run that
+# had already PASSED the check it was testing -- i.e. it blamed the feature for the harness.
+env DS4P_PAGED_HYBRID=1 DS4P_PAGED_DRIVE=1 \
+nohup "$SRV" -m "$M" -ngl 99 -c 4096 -np 1 -b 512 -ub 512 --port $P --no-warmup \
+       --kv-paged --kv-block-size 32 -ctk q8_0 -ctv q8_0 > /tmp/qkv-A1.log 2>&1 &
+a1=0
+for _ in $(seq 1 240); do
+    [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] && { a1=1; break; }
+    sleep 1
+done
+pkill -f "$SRV" >/dev/null 2>&1; sleep 2
+# ⚠ THE VERDICT MUST NAME ITS FAILURE. This said "still refused (or never became healthy)", which
+# cannot tell those two apart -- and the first run failed for the SECOND reason while the message
+# pointed at the first. A verdict that reports the wrong cause is worse than one that reports none,
+# because it sends you to fix the wrong thing. Check for the refusal message explicitly.
+if [ "$a1" = "1" ]; then
+    echo "A1: PASS paged + q8_0 starts with no dev flag" | tee -a "$OUT"
+elif grep -q "does not support this KV cache type" /tmp/qkv-A1.log; then
+    echo "A1: FAIL q8_0 STILL REFUSED by the KV-type guard -- retirement did not land" | tee -a "$OUT"
+    fails=$((fails+1))
+else
+    echo "A1: FAIL server never became healthy, but NOT via the KV-type guard -- see /tmp/qkv-A1.log" | tee -a "$OUT"
+    fails=$((fails+1))
+fi
+
+echo "--- A2 GUARD STILL ARMED (paged + q4_0, an unsupported quant -- must refuse) ---" | tee -a "$OUT"
 pkill -f "$SRV" >/dev/null 2>&1; sleep 2
 "$SRV" -m "$M" -ngl 99 -c 4096 -np 1 -b 512 -ub 512 --port $P --no-warmup \
-       --kv-paged --kv-block-size 32 -ctk q8_0 -ctv q8_0 > /tmp/qkv-A.log 2>&1
+       --kv-paged --kv-block-size 32 -ctk q4_0 -ctv q4_0 > /tmp/qkv-A2.log 2>&1
 rc=$?
-if grep -q "does not support this KV cache type" /tmp/qkv-A.log && [ $rc -ne 0 ]; then
-    echo "A: PASS refused at startup (rc=$rc)" | tee -a "$OUT"
+if grep -q "does not support this KV cache type" /tmp/qkv-A2.log && [ $rc -ne 0 ]; then
+    echo "A2: PASS q4_0 still refused at startup (rc=$rc)" | tee -a "$OUT"
 else
-    echo "A: FAIL guard did not fire (rc=$rc) -- a stale guard is worse than none" | tee -a "$OUT"
+    echo "A2: FAIL guard no longer fires for q4_0 (rc=$rc) -- 'q8_0 works' became 'nothing is checked'" | tee -a "$OUT"
     fails=$((fails+1))
 fi
 
@@ -78,7 +122,7 @@ echo "C: $c" | tee -a "$OUT"
 
 echo "--- D PAGED q8_0 (THE TEST) ---" | tee -a "$OUT"
 d=$(run D "--kv-paged --kv-block-size 32 -ctk q8_0 -ctv q8_0" \
-          "LLAMA_BANDED_QUANT_KV=1 DS4P_PAGED_HYBRID=1 DS4P_PAGED_DRIVE=1")
+          "DS4P_PAGED_HYBRID=1 DS4P_PAGED_DRIVE=1")
 echo "D: $d" | tee -a "$OUT"
 
 # ---- presence marker: did the paged op actually dispatch in arm D? ----------------------------
@@ -121,9 +165,9 @@ fi
 
 echo "-----" | tee -a "$OUT"
 if [ "$fails" -eq 0 ]; then
-    echo "QUANT-KV E2E GATE: PASS -- refusal may be retired" | tee -a "$OUT"
+    echo "QUANT-KV E2E GATE: PASS -- q8_0 paged proven end-to-end, refusal RETIRED" | tee -a "$OUT"
 else
-    echo "QUANT-KV E2E GATE: FAIL ($fails) -- refusal STAYS UP" | tee -a "$OUT"
+    echo "QUANT-KV E2E GATE: FAIL ($fails) -- q8_0 paged NOT proven" | tee -a "$OUT"
 fi
 echo "log: $OUT"
 exit $fails
