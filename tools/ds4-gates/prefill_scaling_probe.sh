@@ -72,11 +72,7 @@ arm() { # $1 name  $2 server args
         echo "$1: NEVER_READY -- results unusable" | tee -a "$OUT"; return 1
     fi
     local marker; marker=$(grep -c "initializing paged KV cache" "$LOGDIR/$1.log")
-    if [ "$1" = paged ]; then
-        # TWO-SIDED PATH MARKER: the kernel prints ACTIVE or OFF, so the arm states which path it
-        # actually took rather than leaving it to be inferred from the env I meant to set.
-        echo "  [path] $(grep -oE "DS4P-MMA (ACTIVE|OFF \(scalar path\))" "$LOGDIR/$1.log" | sort -u | tr '\n' ' ')" | tee -a "$OUT"
-    fi
+
     case "$1" in
         paged)  [ "$marker" -lt 1 ] && { echo "paged: FAIL no pool built" | tee -a "$OUT"; pkill -f "$SRV"; return 1; } ;;
         static) [ "$marker" -gt 0 ] && { echo "static: FAIL built a paged pool" | tee -a "$OUT"; pkill -f "$SRV"; return 1; } ;;
@@ -107,6 +103,20 @@ except Exception: print(-1)')
         fi
         printf "  %-6s lines=%-5s tokens=%-6s prefill=%ss\n" "$1" "$L" "$toks" "$best" | tee -a "$OUT"
     done
+    # ⚠ TWO-SIDED PATH MARKER, AND IT MUST BE READ *AFTER* THE REQUESTS. The kernel prints
+    # "DS4P-MMA ACTIVE" or "DS4P-MMA OFF (scalar path)" from inside ggml_metal_op_paged_attn, so
+    # the line does not exist until work has actually run. The first version of this marker sat
+    # right after the health check and printed EMPTY every time -- the signal was real, sampled at
+    # the wrong moment. Startup-emitted markers (the paged-pool line above) may be read at startup;
+    # work-emitted ones may not.
+    if [ "$1" = paged ]; then
+        local path; path=$(grep -oE "DS4P-MMA (ACTIVE|OFF \(scalar path\))" "$LOGDIR/$1.log" | sort -u | tr '\n' ' ')
+        if [ -z "$path" ]; then
+            echo "  [path] ⚠ NO PATH LINE -- cannot say which kernel ran; treat these timings as unattributed" | tee -a "$OUT"
+        else
+            echo "  [path] $path" | tee -a "$OUT"
+        fi
+    fi
     pkill -f "$SRV" >/dev/null 2>&1; sleep 2
 }
 
