@@ -71,8 +71,18 @@ for l in txt:
         lens = [int(x) for x in m.group(2).split()]
         dispatches.append((cur_n, lens)); cur_n = None
 
-multi = [(n, L) for n, L in dispatches if len(L) >= 2]
-print(f"dispatches captured: {len(dispatches)}   multi-sequence: {len(multi)}")
+# ⚠ FIXED 2026-08-06. This line was `if len(L) >= 2`, which is the ARRAY LENGTH -- and the array has
+# one entry per configured sequence, so it is 2 on EVERY dispatch even when only one sequence carries
+# tokens. The gate therefore counted 600 single-sequence dispatches as multi-sequence, checked
+# sum(batch_lens) == n_tokens (trivially true when one sequence holds all of them), and printed
+# PASS 600/600 while the regime was never entered ONCE.
+#
+# That is the exact failure this gate was written to prevent, committed by the gate itself: the
+# presence check was aimed at the wrong quantity. A dispatch is multi-sequence when TWO OR MORE
+# SEQUENCES CARRY TOKENS, which is a count of NONZERO entries.
+multi = [(n, L) for n, L in dispatches if sum(1 for x in L if x > 0) >= 2]
+single = len(dispatches) - len(multi)
+print(f"dispatches captured: {len(dispatches)}   multi-sequence: {len(multi)}   single-sequence: {single}")
 
 if not multi:
     print("INCONCLUSIVE: no multi-sequence dispatch was produced, so this gate proves NOTHING.")
