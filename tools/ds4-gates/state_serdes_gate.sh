@@ -29,9 +29,14 @@ echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git sta
 fails=0
 
 pkill -f "$SRV" >/dev/null 2>&1; sleep 2
-env DS4P_PAGED_HYBRID=1 DS4P_PAGED_DRIVE=1 nohup "$SRV" -m "$M" -ngl 99 -c 4096 -np 1 -b 512 -ub 512 \
+# ⚠ DRIVE IS A VARIABLE NOW. This gate has always pinned DS4P_PAGED_DRIVE=1, and self-drive is
+# known to allocate its own group and, when it cannot grow, FREE its own KV and fall back to the
+# static path. If that happens the sequence's KV is not in the pool at save time and state_write
+# has nothing to serialise -- which is exactly the 716-byte symptom this gate reports.
+# SS_DRIVE=0 tests that in one factor.
+env DS4P_PAGED_HYBRID=1 DS4P_PAGED_DRIVE=${SS_DRIVE:-1} nohup "$SRV" -m "$M" -ngl 99 -c 4096 -np 1 -b 512 -ub 512 \
     --port $P --no-warmup -lv 4 --kv-paged --kv-block-size 16 --slot-save-path "$SAVEDIR/" \
-    > /tmp/ss.log 2>&1 &
+    > ${SS_LOG:-/tmp/ss.log} 2>&1 &
 for _ in $(seq 1 300); do
     [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] && break
     sleep 1
@@ -41,7 +46,7 @@ if [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev
 fi
 
 # prove the attention-only filter is ACTIVE, or a pass proves nothing
-filt=$(grep -oE "attention-only pool: [0-9]+ of [0-9]+ layers hold KV" /tmp/ss.log | head -1)
+filt=$(grep -oE "attention-only pool: [0-9]+ of [0-9]+ layers hold KV" ${SS_LOG:-/tmp/ss.log} | head -1)
 echo "filter: ${filt:-NOT ACTIVE}" | tee -a "$OUT"
 if [ -z "$filt" ]; then
     echo "FAIL attention-only filter not active -- the nullptr guard would not be exercised" | tee -a "$OUT"

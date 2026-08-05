@@ -1,0 +1,17 @@
+tip: 53ed79e2 dirty=0
+filter: attention-only pool: 8 of 32 layers hold KV
+baseline continuation:  Berlin. The capital of Italy is Rome. The capital of Spain is Madrid.
+--- A SAVE ---
+{"id_slot":0,"filename":"ds4-state.bin","n_saved":27,"n_written":716,"timings":{"save_ms":0.142}}
+
+saved bytes: 716
+A: FAIL save produced 716B -- nothing was serialised
+--- B RESTORE ---
+{"error":{"code":400,"message":"Unable to restore slot, no available space in KV cache or invalid slot save file","type":"invalid_request_error"}}
+
+B: FAIL restore errored
+--- C CONTINUATION AFTER RESTORE (must equal baseline) ---
+after restore:        
+C: FAIL continuation DIFFERS -- serdes is not lossless
+-----
+STATE-SERDES GATE: FAIL (3)
