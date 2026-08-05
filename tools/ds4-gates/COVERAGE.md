@@ -8,14 +8,19 @@ the measuring apparatus reporting that things were fine.
 
 ## The three categories
 
-| Category | Count | Runs unattended? | Scoring |
-|---|---|---|---|
-| **GATE** — produces a verdict | 12 | yes | PASS / FAIL is meaningful |
-| **WALL** — produces numbers | 2 | yes | no verdict *by design*; do not score as vacuous |
-| **REFUSES** — needs args (7) or the box (4) | 11 | no, by design | exit 2 / exit 1 is CORRECT, and is **not coverage** |
+| Category | Runs unattended? | Scoring |
+|---|---|---|
+| **GATE** — produces a verdict | yes | PASS / FAIL is meaningful |
+| **WALL** — produces numbers | yes | no verdict *by design*; do not score as vacuous |
+| **REFUSES** — needs args or the box | no, by design | exit 2 / exit 1 is CORRECT, and is **not coverage** |
 
-So unattended coverage is **14 of 25**, not 25. Eleven scripts need a target or a machine they are not
-being given.
+⚠ **The counts are NOT written here — run `./coverage_census.sh`.** This section originally said
+"12 GATES / 2 WALLS / 11 REFUSES, unattended coverage 14 of 25". Four scripts were added the same
+night and that number silently became wrong (it is now 18 of 29). A count written once and never
+re-derived decays every time the thing it describes changes — which is the same failure this whole
+document is about. The census script derives it, so quoting it cannot go stale.
+
+Refusals still are not coverage: those scripts need a target or a machine they are not being given.
 
 ## Scoring rule (two of my scorers were wrong in one night — use this one)
 
