@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# DEFAULT-CONFIGURATION GATE -- the coverage hole every other gate in this lane shares.
+#
+# ⚠ WHY THIS EXISTS: all six gates I built pin cache_prompt:false. The server default is TRUE, and
+# it is what real clients send. I did not choose that; I copied the flag from the first gate into
+# every later one because it made runs deterministic. The determinism I optimised for became
+# coverage I never had -- six gates, all green, none able to see the default path's failures.
+#
+# This gate tests ONLY the default: repeated prompts with the prompt cache ON. Its job is to be a
+# standing, visible measurement of whether --kv-paged is usable the way people actually call it.
+#
+# ⚠ IT IS EXPECTED TO FAIL TODAY, and that is the point. cache_prompt on the paged path is broken
+# (pre-existing, independently recorded in memory: "--kv-paged leaves slot.prompt.tokens empty so
+# prompt_save bails"). A red line that names a real defect on the default path is worth more than
+# six green ones that agree about a configuration nobody runs.
+#
+# ARMS -- static is the CONTROL, and without it "paged is broken" cannot be separated from
+# "prompt caching is broken":
+#   STATIC  repeated prompt, cache on -> MUST reuse (prompt_n drops) and stay correct
+#   PAGED   repeated prompt, cache on -> currently returns an EMPTY body on repeat
+set -uo pipefail
+WT=$HOME/Documents/GitHub/llama.cpp-ds4ports
+SRV=$WT/build-metal/bin/llama-server
+M=$HOME/Documents/GitHub/ornith-models/Ornith-1.0-9B-1M-GGUF/ornith-1.0-9b-1M-IQ2_M.gguf
+P=9020
+OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/default-config-$(date +%Y%m%d-%H%M).txt
+mkdir -p "$(dirname "$OUT")"
+PROMPT='The capital of France is Paris and the capital of Germany is Berlin and the capital of Italy is Rome and the capital of Spain is'
+
+echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')" | tee "$OUT"
+fails=0
+
+probe() { # $1 label  $2 server args  $3 env
+    pkill -f "$SRV" >/dev/null 2>&1; sleep 2
+    # shellcheck disable=SC2086
+    env $3 nohup "$SRV" -m "$M" -ngl 99 -c 4096 -np 1 -b 512 -ub 512 --port $P --no-warmup \
+        $2 > "/tmp/dc-$1.log" 2>&1 &
+    for _ in $(seq 1 300); do
+        [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] && break
+        sleep 1
+    done
+    if [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" != "200" ]; then
+        echo "NEVER_READY|NEVER_READY|NEVER_READY"; return
+    fi
+    # THREE identical requests with the cache ON. Run 1 seeds; runs 2-3 must hit the cache.
+    local out=""
+    for _ in 1 2 3; do
+        r=$(curl -s --max-time 90 -X POST http://127.0.0.1:$P/completion -H 'Content-Type: application/json' \
+            -d "{\"prompt\":\"$PROMPT\",\"n_predict\":4,\"temperature\":0,\"seed\":1,\"cache_prompt\":true}" \
+            | python3 "$(dirname "$0")/probe_parse.py" 2>/dev/null || echo "PARSE_FAIL#-1#")
+        out="$out|$r"
+    done
+    pkill -f "$SRV" >/dev/null 2>&1; sleep 2
+    echo "${out#|}"
+}
+
+echo "--- STATIC (control) ---" | tee -a "$OUT"
+st=$(probe static "" "")
+echo "$st" | tr '|' '\n' | nl | tee -a "$OUT"
+
+echo "--- PAGED (the default configuration under test) ---" | tee -a "$OUT"
+pg=$(probe paged "--kv-paged --kv-block-size 16" "DS4P_PAGED_HYBRID=1 DS4P_PAGED_DRIVE=1")
+echo "$pg" | tr '|' '\n' | nl | tee -a "$OUT"
+
+# ---- verdicts -------------------------------------------------------------------------------
+# Content must be NON-EMPTY on every run. An empty body with HTTP 200 is the silent failure this
+# gate exists to catch -- checking only for "no error" would pass it.
+# field 2 is now a LENGTH: <1 means empty or absent. Numeric, so there is no string that can
+# accidentally look like content.
+st_empty=$(echo "$st" | tr '|' '\n' | awk -F'#' '{if ($2+0 < 1) c++} END{print c+0}')
+pg_empty=$(echo "$pg" | tr '|' '\n' | awk -F'#' '{if ($2+0 < 1) c++} END{print c+0}')
+echo "empty responses: STATIC=$st_empty  PAGED=$pg_empty" | tee -a "$OUT"
+
+if [ "$st_empty" -ne 0 ]; then
+    echo "STATIC: FAIL control returned $st_empty empty response(s) -- prompt caching itself is broken, PAGED result is uninterpretable" | tee -a "$OUT"
+    fails=$((fails+1))
+else
+    echo "STATIC: PASS all three runs returned content" | tee -a "$OUT"
+fi
+
+if [ "$pg_empty" -ne 0 ]; then
+    echo "PAGED: FAIL $pg_empty of 3 runs returned an EMPTY body on the DEFAULT configuration" | tee -a "$OUT"
+    fails=$((fails+1))
+else
+    echo "PAGED: PASS all three runs returned content" | tee -a "$OUT"
+fi
+
+echo "-----" | tee -a "$OUT"
+[ "$fails" -eq 0 ] && echo "DEFAULT-CONFIG GATE: PASS" | tee -a "$OUT" || echo "DEFAULT-CONFIG GATE: FAIL ($fails)" | tee -a "$OUT"
+echo "log: $OUT"
+exit $fails

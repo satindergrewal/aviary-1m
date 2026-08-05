@@ -1,0 +1,14 @@
+tip: 28df4256 dirty=0
+--- STATIC (control) ---
+     1	PARSE_FAIL#-1#
+     2	PARSE_FAIL#-1#
+     3	PARSE_FAIL#-1#
+--- PAGED (the default configuration under test) ---
+     1	PARSE_FAIL#-1#
+     2	PARSE_FAIL#-1#
+     3	PARSE_FAIL#-1#
+empty responses: STATIC=3  PAGED=3
+STATIC: FAIL control returned 3 empty response(s) -- prompt caching itself is broken, PAGED result is uninterpretable
+PAGED: FAIL 3 of 3 runs returned an EMPTY body on the DEFAULT configuration
+-----
+DEFAULT-CONFIG GATE: FAIL (2)

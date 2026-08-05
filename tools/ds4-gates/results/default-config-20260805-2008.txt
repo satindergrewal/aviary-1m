@@ -1,0 +1,14 @@
+tip: 28df4256 dirty=0
+--- STATIC (control) ---
+     1	26#23#' Madrid and the capi'
+     2	4#23#' Madrid and the capi'
+     3	4#23#' Madrid and the capi'
+--- PAGED (the default configuration under test) ---
+     1	26#23#' Madrid and the capi'
+     2	None#-1#''
+     3	None#-1#''
+empty responses: STATIC=0  PAGED=2
+STATIC: PASS all three runs returned content
+PAGED: FAIL 2 of 3 runs returned an EMPTY body on the DEFAULT configuration
+-----
+DEFAULT-CONFIG GATE: FAIL (1)
