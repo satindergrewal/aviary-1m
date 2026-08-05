@@ -1,0 +1,42 @@
+# DS4P_ARGDUMP, -np 2, two concurrent prefills, corruption reproduced in this run.
+# See commit message: a 14-token dispatch carries batch_offsets for the 29-token batch.
+n_tokens=15 head_dim=256 n_heads=16 n_heads_kv=8 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
+n_tokens=15 head_dim=256 n_heads=16 n_heads_kv=8 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
+n_tokens=15 head_dim=256 n_heads=16 n_heads_kv=8 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
+n_tokens=15 head_dim=256 n_heads=16 n_heads_kv=8 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
+n_tokens=15 head_dim=256 n_heads=16 n_heads_kv=8 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
+n_tokens=15 head_dim=512 n_heads=16 n_heads_kv=2 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
+n_tokens=15 head_dim=256 n_heads=16 n_heads_kv=8 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
+n_tokens=15 head_dim=256 n_heads=16 n_heads_kv=8 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
+n_tokens=15 head_dim=256 n_heads=16 n_heads_kv=8 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
+n_tokens=15 head_dim=256 n_heads=16 n_heads_kv=8 block_size=16 n_blocks=1 kv_type=f16 kv_q8=0
+block_table[2] = 511 510
+batch_offs[2] = 0 15
+batch_lens[2] = 15 14
