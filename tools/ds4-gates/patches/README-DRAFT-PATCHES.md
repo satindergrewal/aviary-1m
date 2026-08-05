@@ -32,3 +32,28 @@ vectors hold plain pointers with trivial destruction and nothing dereferences th
 If either ever gains a non-trivial destructor, this ordering becomes load-bearing.
 
 **Acceptance:** apply → build → `./rset_leak_probe.sh` → arm 3 `rset_assert=0`, arms 1–2 unchanged.
+
+## `DRAFT-defect3-slotsave-refuse.patch`
+
+Fixes FINDINGS defect **#3** — `/slots/N?action=save` answers **200** with `n_saved=27,
+n_written=716` for a save that saved nothing (expected ~864 KB).
+
+18 additions, 0 deletions, one file.
+
+**Why a refusal and not a repair.** The paged path runs `finish() -> free_blocks()` and returns a
+sequence's blocks to the pool the moment it completes — *"holding a finished sequence's blocks would
+fight the entire point of paging"* (`server-context.cpp:3229`). This endpoint runs **after** the
+completion returns, so there is no KV left to serialise. The caller is wired and `state_write` is
+correct; the endpoint is the thing making a false claim.
+
+Gated on `paged_sched`, which is non-null exactly when the server owns a paged scheduler — a
+**structural** test, not a heuristic on the byte count. This lane has a scar from a guard that rested
+on a heuristic and failed where it was tested.
+
+**Verified:** `git apply --check` passes; anchor asserted unique before editing.
+**NOT verified:** not compile-tested; not run against `state_serdes_gate.sh`.
+
+**Acceptance:** apply → build → `./state_serdes_gate.sh` → arm A must report a **refusal**, not
+`n_written=716`. ⚠ The gate currently expects a *successful* save, so it will need its arm-A bar
+inverted to "refuses cleanly" — the same correction already applied to the eviction gate's
+single-sequence arm when the design intent was established.

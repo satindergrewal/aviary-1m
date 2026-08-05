@@ -1,0 +1,28 @@
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -2797,6 +2797,25 @@
+                     std::string filename = task.slot_action.filename;
+                     std::string filepath = task.slot_action.filepath;
+ 
++                    // ⚠ THE PAGED PATH CANNOT SATISFY THIS REQUEST, BY DESIGN. finish() ->
++                    // free_blocks() returns a sequence's blocks to the pool the moment it
++                    // completes (see the note at the P1-5 capture site) -- "holding a finished
++                    // sequence's blocks would fight the entire point of paging". This endpoint
++                    // runs AFTER the completion returns, so the pool no longer holds the KV:
++                    // llama_state_seq_save_file writes only metadata and reports success.
++                    // Measured: n_saved=27, n_written=716 against an expected ~864 KB, HTTP 200.
++                    // An endpoint that cannot do the job must REFUSE, not answer 200 with a
++                    // plausible byte count. Do NOT "fix" this by making state_write retain
++                    // blocks -- that fights the design; route through the finish-window capture
++                    // instead if slot-save is wanted on this path.
++                    if (paged_sched) {
++                        send_error(task, "slot save is not supported on the paged KV path: blocks are "
++                                         "returned to the pool when a request finishes, so there is no "
++                                         "KV left to serialise by the time this endpoint runs",
++                                   ERROR_TYPE_INVALID_REQUEST);
++                        break;
++                    }
++
+                     const llama_tokens tokens = slot->prompt.tokens.get_text_tokens();
+                     const size_t token_count = tokens.size();
+                     const size_t nwrite = llama_state_seq_save_file(ctx_tgt, filepath.c_str(), slot->id, tokens.data(), token_count);
