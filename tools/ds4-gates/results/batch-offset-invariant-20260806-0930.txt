@@ -1,0 +1,3 @@
+tip: b8e89ee4 dirty=5
+dispatches captured: 600   multi-sequence: 600
+BATCH-OFFSET INVARIANT: PASS  every multi-sequence dispatch has sum(batch_lens) == n_tokens

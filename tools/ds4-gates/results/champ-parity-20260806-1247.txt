@@ -1,0 +1,16 @@
+tip: ad34b7747 dirty=0  reps=3 ntok=6000
+  STATIC      r1  prompt_eval=35342.72 ms  out=[ the quick brown fox jumps over the lazy] 
+  PAGED_BS16  r1  prompt_eval=NEVER_READY ms  out=[] 
+  CHAMP_BS64  r1  prompt_eval=NEVER_READY ms  out=[] ⚠ NO CHAMP MARKER (arm UNUSABLE -- may be the ordinary paged kernel)
+  STATIC      r2  prompt_eval=33894.60 ms  out=[ the quick brown fox jumps over the lazy] 
+  PAGED_BS16  r2  prompt_eval=NEVER_READY ms  out=[] 
+  CHAMP_BS64  r2  prompt_eval=NA ms  out=[MALFORMED] ⚠ NO CHAMP MARKER (arm UNUSABLE -- may be the ordinary paged kernel)
+  STATIC      r3  prompt_eval=33763.81 ms  out=[ the quick brown fox jumps over the lazy] 
+  PAGED_BS16  r3  prompt_eval=NA ms  out=[MALFORMED] 
+  CHAMP_BS64  r3  prompt_eval=NA ms  out=[MALFORMED] ⚠ NO CHAMP MARKER (arm UNUSABLE -- may be the ordinary paged kernel)
+-----
+median prompt-eval ms:  STATIC=33894.60  PAGED_BS16=NEVER_READY  CHAMP_BS64=NEVER_READY
+⚠ OUTPUT MISMATCH static vs champion -- TIMING VERDICT VOID until this is explained:
+   static:  the quick brown fox jumps over the lazy dog and then keeps 
+   champ : NA
+INCONCLUSIVE: an arm produced no timing.

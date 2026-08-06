@@ -1,0 +1,12 @@
+tip: 55ccb2bfa dirty=6
+shared prefix: 5160 chars
+-----
+requests admitted:            2   (need 2)
+checkouts before B admitted:  2
+checkouts attributable to B:  1
+'admitted SHARED' lines:      1
+0.08.129.337 I queue_request: request 0 admitted SHARED: 960 of 960 prompt tokens inherited from live request 1 (60 blocks), 0 left to prefill
+
+prompt tokens actually evaluated (request A): unknown
+INCONCLUSIVE: the stimulus was only 0 tokens -- too short to span enough blocks
+  at block_size 16 for block-level sharing to be observable. Fix the gate, not the feature.

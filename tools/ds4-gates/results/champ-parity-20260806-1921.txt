@@ -1,0 +1,17 @@
+tip: aacb3ed21 dirty=5  reps=3 ntok=6000
+  STATIC      r1  prompt_eval=5645.62 ms  out=[100% of the people who have tried it, ha] 
+  PAGED_BS16  r1  prompt_eval=13816.22 ms  out=[100% of the people who have ever used a ] 
+  CHAMP_BS64  r1  prompt_eval=5417.38 ms  out=[100% of the people who have tried it, ha] ⚠ NO CHAMP MARKER (arm UNUSABLE -- may be the ordinary paged kernel)
+  STATIC      r2  prompt_eval=5468.33 ms  out=[100% of the people who have tried it, ha] 
+  PAGED_BS16  r2  prompt_eval=13808.25 ms  out=[100% of the people who have ever used a ] 
+  CHAMP_BS64  r2  prompt_eval=5430.57 ms  out=[100% of the people who have tried it, ha] ⚠ NO CHAMP MARKER (arm UNUSABLE -- may be the ordinary paged kernel)
+  STATIC      r3  prompt_eval=5630.18 ms  out=[100% of the people who have tried it, ha] 
+  PAGED_BS16  r3  prompt_eval=13777.46 ms  out=[100% of the people who have ever used a ] 
+  CHAMP_BS64  r3  prompt_eval=5804.82 ms  out=[100% of the people who have tried it, ha] ⚠ NO CHAMP MARKER (arm UNUSABLE -- may be the ordinary paged kernel)
+-----
+median prompt-eval ms:  STATIC=5630.18  PAGED_BS16=13808.25  CHAMP_BS64=5430.57
+  PAGED_BS16 vs static : 2.453x
+  CHAMP_BS64 vs static : 0.965x   <- THE BAR IS <= 1.000x
+  CHAMP  vs PAGED_BS16 : 2.543x speedup
+
+RESULT: BAR MET on Metal prefill. Verify decode and correctness before claiming it.

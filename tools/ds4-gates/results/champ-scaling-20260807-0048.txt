@@ -1,0 +1,2 @@
+tip: c10126ad8 dirty=0  counts=2048 4608 8192 12288 reps=2
+FAIL: static server never became healthy

@@ -1,0 +1,23 @@
+tip: 8005f3594 dirty=3  reps=3
+  STATIC     r1  prefill=8955.67    ms  decode=68.69   tok/s  marker=0  out=[ Dublin is the capital of Norway. Pa]
+  CHAMP_ON   r1  prefill=11717.74   ms  decode=49.85   tok/s  marker=1  out=[ Madrid is the capital of Norway. Du]
+  CHAMP_OFF  r1  prefill=14535.00   ms  decode=54.30   tok/s  marker=1  out=[ Madrid is the capital of Norway. Du]
+  STATIC     r2  prefill=9881.68    ms  decode=67.06   tok/s  marker=0  out=[ Dublin is the capital of Norway. Pa]
+  CHAMP_ON   r2  prefill=11987.13   ms  decode=61.86   tok/s  marker=1  out=[ Madrid is the capital of Norway. Du]
+  CHAMP_OFF  r2  prefill=15073.66   ms  decode=57.50   tok/s  marker=1  out=[ Madrid is the capital of Norway. Du]
+  STATIC     r3  prefill=9573.95    ms  decode=75.52   tok/s  marker=0  out=[ Dublin is the capital of Norway. Pa]
+  CHAMP_ON   r3  prefill=11530.72   ms  decode=52.63   tok/s  marker=1  out=[ Madrid is the capital of Norway. Du]
+  CHAMP_OFF  r3  prefill=14446.60   ms  decode=44.67   tok/s  marker=1  out=[ Madrid is the capital of Norway. Du]
+-----
+⚠ OUTPUT MISMATCH rep1 static vs CHAMP_ON -- TIMING VOID
+   static:  Dublin is the capital of Norway. Paris is the capital o
+   champ :  Madrid is the capital of Norway. Dublin is the capital 
+⚠ OUTPUT MISMATCH rep2 static vs CHAMP_ON -- TIMING VOID
+   static:  Dublin is the capital of Norway. Paris is the capital o
+   champ :  Madrid is the capital of Norway. Dublin is the capital 
+⚠ OUTPUT MISMATCH rep3 static vs CHAMP_ON -- TIMING VOID
+   static:  Dublin is the capital of Norway. Paris is the capital o
+   champ :  Madrid is the capital of Norway. Dublin is the capital 
+median prefill ms:   STATIC=8955.67  CHAMP_ON=11530.72  CHAMP_OFF=14446.60
+median decode tok/s: STATIC=67.06  CHAMP_ON=49.85  CHAMP_OFF=44.67
+VERDICT VOID: a champion arm disagreed with static.

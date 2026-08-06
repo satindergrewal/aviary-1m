@@ -1,0 +1,20 @@
+tip: a2f1752c8 dirty=0  reps=6
+  warm-r1 (prior finish on slot 0): GARBAGE
+  cold-r1 (no prior request):      CLEAN
+  warm-r2 (prior finish on slot 0): CLEAN
+  cold-r2 (no prior request):      CLEAN
+  warm-r3 (prior finish on slot 0): GARBAGE
+  cold-r3 (no prior request):      CLEAN
+  warm-r4 (prior finish on slot 0): GARBAGE
+  cold-r4 (no prior request):      CLEAN
+  warm-r5 (prior finish on slot 0): CLEAN
+  cold-r5 (no prior request):      CLEAN
+  warm-r6 (prior finish on slot 0): GARBAGE
+  cold-r6 (no prior request):      CLEAN
+-----
+warm: GARBAGE CLEAN GARBAGE GARBAGE CLEAN GARBAGE   (4/6 not clean)
+cold: CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN   (0/6 not clean)
+
+RESULT: corruption requires a PRIOR FINISHED request on the slot. The slot-id reuse path
+  (free_blocks -> seq_rm/erase on request_id, unguarded) is IMPLICATED.
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/slot-reuse-20260806-1038.txt

@@ -1,0 +1,24 @@
+tip: c10126ad8 dirty=1  counts=32768 65536 131072 reps=1
+  static n=32768  r1  prompt_eval=56635.42 ms
+  static n=65536  r1  prompt_eval=148002.42 ms
+  static n=131072 r1  prompt_eval=450317.62 ms
+  champ  n=32768  r1  prompt_eval=65540.73 ms
+  champ  n=65536  r1  prompt_eval=174956.15 ms
+  champ  n=131072 r1  prompt_eval=525155.10 ms
+-----
+champion markers: ACTIVE=1 REFUSED=0
+measured memory (server's own breakdown, champ arm):
+  | memory breakdown [MiB]  |  total    free     self   model   context   compute    unaccounted |
+  |   - MTL0 (Apple M3 Max) | 110100 = 89527 + (16220 =  3429 +    4402 +    8388) +        4352 |
+  |   - Host                |                    1024 =   416 +       0 +     608                |
+   T        static ms    champ ms    ratio
+  32768       56635.4     65540.7    1.157x
+  65536      148002.4    174956.1    1.182x
+  131072     450317.6    525155.1    1.166x
+
+  static  linear 1.1101 ms/tok   quadratic 1.7734e-05   worst residual 2.2%
+  champ   linear 1.3321 ms/tok   quadratic 2.0405e-05   worst residual 0.0%
+  -> linear ratio 1.200x, quadratic ratio 1.151x
+
+MODEL HOLDS across all lengths. The quadratic ratio above is the real target;
+  the linear ratio says whether per-token work is already competitive.

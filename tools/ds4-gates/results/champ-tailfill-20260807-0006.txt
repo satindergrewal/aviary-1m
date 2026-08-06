@@ -1,0 +1,36 @@
+tip: 9b3da8b57 dirty=1
+counts: 4609 4619 4641 4653 4670   n_predict=8
+filler tokenised: 17304 tokens
+  STATIC  n=4609   tail=1   out=[ of Spain. Madrid is the capital of]
+  STATIC  n=4619   tail=11  out=[. Paris was founded before Spain. Lisbon]
+  STATIC  n=4641   tail=33  out=[ heavily with Italy. Prague is the capital]
+  STATIC  n=4653   tail=45  out=[ is the capital of Spain. Berlin is]
+  STATIC  n=4670   tail=62  out=[ Norway. Paris is the capital of Spain]
+  CHAMP   n=4609   tail=1   out=[ of Austria. Madrid is the capital of]
+  CHAMP   n=4619   tail=11  out=[. Prague is the capital of Norway.]
+  CHAMP   n=4641   tail=33  out=[ heavily traded heavily with Austria. Madrid.]
+  CHAMP   n=4653   tail=45  out=[ is the capital of Austria. Madrid.]
+  CHAMP   n=4670   tail=62  out=[ Norway. Paris Rome Berlin Madrid Oslo Vienna]
+-----
+champion marker: 0.02.421.142 I ggml_metal_op_paged_attn: CHAMP-PAGED ACTIVE D=256 bs=64 nsg=4 Q=8 C=64 smem=16384/32
+refusal lines:   0
+comparator negative control: ok (must be 'ok')
+  MISMATCH n=4609 tail=1
+     static:  of Spain. Madrid is the capital of
+     champ :  of Austria. Madrid is the capital of
+  MISMATCH n=4619 tail=11
+     static: . Paris was founded before Spain. Lisbon
+     champ : . Prague is the capital of Norway.
+  MISMATCH n=4641 tail=33
+     static:  heavily with Italy. Prague is the capital
+     champ :  heavily traded heavily with Austria. Madrid.
+  MISMATCH n=4653 tail=45
+     static:  is the capital of Spain. Berlin is
+     champ :  is the capital of Austria. Madrid.
+  MISMATCH n=4670 tail=62
+     static:  Norway. Paris is the capital of Spain
+     champ :  Norway. Paris Rome Berlin Madrid Oslo Vienna
+
+CHAMPION TAIL-FILL GATE: FAIL -- 5/5 counts still disagree with static.
+  The blk fix was necessary but not sufficient. Record the surviving pattern; do NOT call it
+  a tail-fill law again without varying tail fill at FIXED total length.

@@ -1,0 +1,13 @@
+tip: 8005f3594 dirty=0  reps=3 ntok=6000
+  STATIC      r1  prompt_eval=8955.82 ms  out=[orde de France. Dublin is the capital of] 
+  PAGED_BS16  r1  prompt_eval=NA ms  out=[] 
+  CHAMP_BS64  r1  prompt_eval=14532.04 ms  out=[orde de France. Dublin is the capital of] 0.16.659.623 I ggml_metal_op_paged_attn: CHAMP-VEC ACTIVE (decode) D=256 bs=64 nsg=4 nwg=1
+  STATIC      r2  prompt_eval=10026.94 ms  out=[orde de France. Dublin is the capital of] 
+  PAGED_BS16  r2  prompt_eval=NA ms  out=[] 
+  CHAMP_BS64  r2  prompt_eval=15341.61 ms  out=[orde de France. Dublin is the capital of] 0.17.452.786 I ggml_metal_op_paged_attn: CHAMP-VEC ACTIVE (decode) D=256 bs=64 nsg=4 nwg=1
+  STATIC      r3  prompt_eval=10102.91 ms  out=[orde de France. Dublin is the capital of] 
+  PAGED_BS16  r3  prompt_eval=NA ms  out=[] 
+  CHAMP_BS64  r3  prompt_eval=14744.43 ms  out=[orde de France. Dublin is the capital of] 0.16.882.746 I ggml_metal_op_paged_attn: CHAMP-VEC ACTIVE (decode) D=256 bs=64 nsg=4 nwg=1
+-----
+median prompt-eval ms:  STATIC=10026.94  PAGED_BS16=NA  CHAMP_BS64=14744.43
+INCONCLUSIVE: an arm produced no timing.

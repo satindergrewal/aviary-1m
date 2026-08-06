@@ -1,0 +1,31 @@
+tip: 68d90ad6d dirty=3  reps=12
+  warm-r1 (prior finish on slot 0): CLEAN
+  cold-r1 (no prior request):      CLEAN
+  warm-r2 (prior finish on slot 0): CLEAN
+  cold-r2 (no prior request):      CLEAN
+  warm-r3 (prior finish on slot 0): CLEAN
+  cold-r3 (no prior request):      CLEAN
+  warm-r4 (prior finish on slot 0): CLEAN
+  cold-r4 (no prior request):      CLEAN
+  warm-r5 (prior finish on slot 0): CLEAN
+  cold-r5 (no prior request):      CLEAN
+  warm-r6 (prior finish on slot 0): CLEAN
+  cold-r6 (no prior request):      CLEAN
+  warm-r7 (prior finish on slot 0): CLEAN
+  cold-r7 (no prior request):      CLEAN
+  warm-r8 (prior finish on slot 0): CLEAN
+  cold-r8 (no prior request):      CLEAN
+  warm-r9 (prior finish on slot 0): CLEAN
+  cold-r9 (no prior request):      CLEAN
+  warm-r10 (prior finish on slot 0): CLEAN
+  cold-r10 (no prior request):      CLEAN
+  warm-r11 (prior finish on slot 0): CLEAN
+  cold-r11 (no prior request):      CLEAN
+  warm-r12 (prior finish on slot 0): CLEAN
+  cold-r12 (no prior request):      CLEAN
+-----
+warm: CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN   (0/12 not clean)
+cold: CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN   (0/12 not clean)
+
+INCONCLUSIVE: the WARM control did not reproduce the corruption, so the COLD arm is
+  uninterpretable -- 'clean' here would only mean the bug did not fire today.

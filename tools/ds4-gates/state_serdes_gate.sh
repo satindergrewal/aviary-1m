@@ -81,8 +81,19 @@ sa=$(curl -s -X POST "http://127.0.0.1:$P/slots/0?action=save" -H 'Content-Type:
 echo "$sa" | head -c 300 | tee -a "$OUT"; echo | tee -a "$OUT"
 sz=$(stat -f%z "$SAVEDIR/ds4-state.bin" 2>/dev/null || echo 0)
 echo "saved bytes: $sz" | tee -a "$OUT"
-if [ "$sz" -lt 1024 ]; then
-    echo "A: FAIL save produced ${sz}B -- nothing was serialised" | tee -a "$OUT"; fails=$((fails+1))
+# ⚠ THE BAR HERE IS A REFUSAL, NOT A SUCCESSFUL SAVE -- flipped when the design intent was
+# established. The paged path frees a sequence's blocks at finish BY DESIGN, and this endpoint runs
+# after the completion returns, so there is no KV left to serialise. A successful save on the paged
+# path is therefore NOT the correct outcome; a clean refusal is. Arm A originally required
+# sz >= 1024 and correctly FAILED at 716 B, which is how the defect was found -- but once the
+# endpoint refuses, that same bar would fail a CORRECT fix.
+#   PAIRED WITH: patches/DRAFT-defect3-slotsave-refuse.patch. Apply both or neither: this gate
+#   inverted without the patch fails on the unfixed tree for the wrong reason, and the patch without
+#   this gate turns a good fix red and looks like a regression.
+if echo "$sa" | grep -qi "not supported on the paged KV path"; then
+    echo "A: PASS endpoint REFUSED cleanly on the paged path -- correct, there is no KV to save" | tee -a "$OUT"
+elif [ "$sz" -lt 1024 ]; then
+    echo "A: FAIL save produced ${sz}B and did NOT refuse -- silently reported success for a no-op" | tee -a "$OUT"; fails=$((fails+1))
 else
     echo "A: PASS save produced $sz bytes" | tee -a "$OUT"
 fi
@@ -91,10 +102,15 @@ echo "--- B RESTORE ---" | tee -a "$OUT"
 rs=$(curl -s -X POST "http://127.0.0.1:$P/slots/0?action=restore" -H 'Content-Type: application/json' \
      -d '{"filename":"ds4-state.bin"}')
 echo "$rs" | head -c 300 | tee -a "$OUT"; echo | tee -a "$OUT"
-if echo "$rs" | grep -qi "error"; then
-    echo "B: FAIL restore errored" | tee -a "$OUT"; fails=$((fails+1))
+# ⚠ SYMMETRIC WITH ARM A. If save correctly refuses on the paged path, there is no file to restore
+# and restore must refuse too -- accepting it would be the second half of a broken pair pretending to
+# work. So a refusal here is the PASS, and "restore accepted" on the paged path is the failure.
+if echo "$rs" | grep -qi "not supported on the paged KV path"; then
+    echo "B: PASS restore REFUSED cleanly on the paged path -- symmetric with save" | tee -a "$OUT"
+elif echo "$rs" | grep -qi "error"; then
+    echo "B: FAIL restore errored for some OTHER reason (not the paged refusal)" | tee -a "$OUT"; fails=$((fails+1))
 else
-    echo "B: PASS restore accepted" | tee -a "$OUT"
+    echo "B: FAIL restore ACCEPTED on the paged path -- there is no KV behind it" | tee -a "$OUT"; fails=$((fails+1))
 fi
 
 echo "--- C CONTINUATION AFTER RESTORE (must equal baseline) ---" | tee -a "$OUT"
@@ -102,7 +118,13 @@ aft=$(curl -s -X POST http://127.0.0.1:$P/completion -H 'Content-Type: applicati
   -d "{\"prompt\":\"$PROMPT\",\"n_predict\":16,\"temperature\":0,\"seed\":1,\"cache_prompt\":true}" \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["content"].replace(chr(10)," ")[:120])')
 echo "after restore:        $aft" | tee -a "$OUT"
-if [ "$aft" = "$base" ]; then
+# ⚠ ARM C IS ONLY MEANINGFUL IF A SAVE/RESTORE ACTUALLY HAPPENED. On the paged path both refuse by
+# design, so there is no round trip to be lossless about -- comparing continuations here would be
+# measuring ordinary generation, and calling that a PASS would be the vacuous-gate failure this
+# suite already found elsewhere.
+if echo "$sa$rs" | grep -qi "not supported on the paged KV path"; then
+    echo "C: N/A save+restore refused by design -- no round trip to verify, not scored" | tee -a "$OUT"
+elif [ "$aft" = "$base" ]; then
     echo "C: PASS continuation identical across save/restore" | tee -a "$OUT"
 else
     echo "C: FAIL continuation DIFFERS -- serdes is not lossless" | tee -a "$OUT"; fails=$((fails+1))

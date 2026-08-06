@@ -1,0 +1,13 @@
+tip: 47caa36ef dirty=4  reps=2 ntok=6000
+  STATIC      r1  prompt_eval=9051.41 ms  out=[orde de France. Dublin is the capital of] 
+  PAGED_BS16  r1  prompt_eval=NA ms  out=[] 
+  CHAMP_BS64  r1  prompt_eval=12543.95 ms  out=[.] 0.14.644.391 I ggml_metal_op_paged_attn: CHAMP-VEC ACTIVE (decode) D=256 bs=64 nsg=4 nwg=1
+  STATIC      r2  prompt_eval=9042.87 ms  out=[orde de France. Dublin is the capital of] 
+  PAGED_BS16  r2  prompt_eval=NA ms  out=[] 
+  CHAMP_BS64  r2  prompt_eval=12720.87 ms  out=[.] 0.14.833.797 I ggml_metal_op_paged_attn: CHAMP-VEC ACTIVE (decode) D=256 bs=64 nsg=4 nwg=1
+-----
+median prompt-eval ms:  STATIC=9042.87  PAGED_BS16=NA  CHAMP_BS64=12543.95
+⚠ OUTPUT MISMATCH static vs champion -- TIMING VERDICT VOID until this is explained:
+   static: orde de France. Dublin is the capital of Ireland. Paris is t
+   champ : .
+INCONCLUSIVE: an arm produced no timing.

@@ -70,7 +70,12 @@ run_arm() { # $1 label  $2 mode(static|paged|champ)
     local envs=(DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1) flags=()
     case "$2" in
         static) flags=() ;;
-        paged)  flags=(--kv-paged --kv-block-size 16 -ngpub 512 -ncpub 128) ;;
+        # ⚠ POOL CAPACITY IS EQUALISED IN TOKENS, NOT BLOCKS. Both paged arms used -ngpub 512,
+        # which is 8,192 tokens at bs=16 and 32,768 at bs=64 -- a 4x difference in the pool ON TOP
+        # of the thing under test. The small arm then DEADLOCKED on a 10k prompt ("scheduler cannot
+        # make progress with the available block pool") and reported no timing in all 3 reps, which
+        # read as a broken feature rather than a broken arm. 32,768 tokens each.
+        paged)  flags=(--kv-paged --kv-block-size 16 -ngpub 2048 -ncpub 512) ;;
         champ)  envs+=(DS4P_METAL_CHAMP=1); flags=(--kv-paged --kv-block-size 64 -ngpub 512 -ncpub 128) ;;
     esac
     env "${envs[@]}" nohup "$SRV" -m "$M" -ngl 99 -c 16384 -np 1 -b 2048 -ub 2048 \

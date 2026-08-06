@@ -1,0 +1,17 @@
+tip: 53ed79e2 dirty=3
+filter: attention-only pool: 8 of 32 layers hold KV
+baseline continuation:  Berlin. The capital of Italy is Rome. The capital of Spain is Madrid.
+--- A SAVE ---
+{"error":{"code":400,"message":"slot save is not supported on the paged KV path: blocks are returned to the pool when a request finishes, so there is no KV left to serialise by the time this endpoint runs","type":"invalid_request_error"}}
+
+saved bytes: 0
+A: PASS endpoint REFUSED cleanly on the paged path -- correct, there is no KV to save
+--- B RESTORE ---
+{"error":{"code":400,"message":"Unable to restore slot, no available space in KV cache or invalid slot save file","type":"invalid_request_error"}}
+
+B: FAIL restore errored
+--- C CONTINUATION AFTER RESTORE (must equal baseline) ---
+after restore:        
+C: FAIL continuation DIFFERS -- serdes is not lossless
+-----
+STATE-SERDES GATE: FAIL (2)

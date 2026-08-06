@@ -1,0 +1,8 @@
+tip: 53ed79e2 dirty=3
+1-static-noenv         paged_pool=0  rset_assert=0
+2-static-withenv       paged_pool=0  rset_assert=0
+3-paged-norequest      paged_pool=1  rset_assert=0
+4-paged-request        paged_pool=1  rset_assert=0
+5-paged-nocpupool: NEVER_READY (result unusable, not a clean arm)
+-----
+read arm 3 first: an assert there means the leak is in POOL CONSTRUCTION, not in serving

@@ -1,0 +1,18 @@
+tip: ad34b7747 dirty=0  reps=3 ntok=6000
+  SCALAR       r1  prompt_eval=13986.49 ms / 6343 tok   DS4P-MMA OFF (scalar path) D=512 bs=16 n_tokens=199 lpk=off(not requested) VSTAGE=on
+  MMA          r1  prompt_eval=26175.95 ms / 6343 tok   nsg=1 QR=8 KSTAGE=on smem=21056
+  MMA_NOSTAGE  r1  prompt_eval=21393.44 ms / 6343 tok   ⚠ NO MARKER (arm UNUSABLE)
+  SCALAR       r2  prompt_eval=13727.54 ms / 6343 tok   DS4P-MMA OFF (scalar path) D=512 bs=16 n_tokens=199 lpk=off(not requested) VSTAGE=on
+  MMA          r2  prompt_eval=21919.89 ms / 6343 tok   nsg=1 QR=8 KSTAGE=on smem=21056
+  MMA_NOSTAGE  r2  prompt_eval=15996.23 ms / 6343 tok   ⚠ NO MARKER (arm UNUSABLE)
+  SCALAR       r3  prompt_eval=14020.68 ms / 6343 tok   DS4P-MMA OFF (scalar path) D=512 bs=16 n_tokens=199 lpk=off(not requested) VSTAGE=on
+  MMA          r3  prompt_eval=22014.84 ms / 6343 tok   nsg=1 QR=8 KSTAGE=on smem=21056
+  MMA_NOSTAGE  r3  prompt_eval=16293.93 ms / 6343 tok   ⚠ NO MARKER (arm UNUSABLE)
+-----
+median prompt-eval ms:  SCALAR=13986.49  MMA=22014.84  MMA_NOSTAGE=16293.93
+  MMA vs scalar         : 0.635x   (MMA slower)
+  MMA_NOSTAGE vs scalar : 0.858x   (slower)
+  NOSTAGE vs staged MMA : 1.351x   (destaging helps)
+
+RESULT: destaging K helps MMA but MMA still loses to scalar. Occupancy is A constraint,
+  not THE constraint -- the per-key quadratic lives somewhere else too.

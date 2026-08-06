@@ -1,0 +1,19 @@
+tip: b8e89ee4 dirty=5  model=gemma4-26b-a4b-uncensored-1M-Q4_K_M.gguf  reps=3  env=[DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1]
+--- static-r1  swaps=0  bytes=differs  -> CLEAN
+--- paged-r1  swaps=0  bytes=differs  -> GARBAGE
+    soloA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    concA: CONTENT# commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas:
+    soloB: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    concB: CONTENT#: <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+--- paged-r2  swaps=0  bytes=differs  -> GARBAGE
+    soloA: CONTENT# One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty. ```  ### Task
+    concA: CONTENT# commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas: commas:
+    soloB: CONTENT# <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+    concB: CONTENT#: <|channel>thought <channel|>A, B, C, D, E, F, G, H, I, J, K, L
+--- static-r2  swaps=0  bytes=differs  -> CLEAN
+--- static-r3  swaps=0  bytes=differs  -> CLEAN
+--- paged-r3  swaps=0  bytes=exact  -> CLEAN
+-----
+static: 3 clean / 0 bad     paged: 1 clean / 2 bad
+verdicts: static:CLEAN paged:GARBAGE paged:GARBAGE static:CLEAN static:CLEAN paged:CLEAN
+RESULT: PAGED-SPECIFIC multi-slot corruption (2/3 reps) while static is clean 3/3. This is ours.

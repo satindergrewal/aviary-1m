@@ -1,0 +1,17 @@
+tip: c2f28a79d dirty=204  model=gemma4-26b-a4b-uncensored-1M-Q4_K_M.gguf  reps=6  env=[DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1]
+--- static-r1  swaps=0  bytes=differs  -> CLEAN
+--- paged-r1  swaps=0  bytes=exact  -> CLEAN
+--- paged-r2  swaps=0  bytes=exact  -> CLEAN
+--- static-r2  swaps=0  bytes=differs  -> CLEAN
+--- static-r3  swaps=0  bytes=differs  -> CLEAN
+--- paged-r3  swaps=0  bytes=exact  -> CLEAN
+--- paged-r4  swaps=0  bytes=exact  -> CLEAN
+--- static-r4  swaps=0  bytes=differs  -> CLEAN
+--- static-r5  swaps=0  bytes=differs  -> CLEAN
+--- paged-r5  swaps=0  bytes=exact  -> CLEAN
+--- paged-r6  swaps=0  bytes=differs  -> CLEAN
+--- static-r6  swaps=0  bytes=differs  -> CLEAN
+-----
+static: 6 clean / 0 bad     paged: 6 clean / 0 bad
+verdicts: static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN
+MULTI-SLOT GATE: PASS both paths clean across 6 reps

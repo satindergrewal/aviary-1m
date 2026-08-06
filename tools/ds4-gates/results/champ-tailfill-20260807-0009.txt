@@ -1,0 +1,31 @@
+tip: d46479d03 dirty=0
+counts: 640 1280 2560 4608   n_predict=8
+filler tokenised: 17304 tokens
+  STATIC  n=640    tail=0   out=[. Vienna lies north of Italy. Rome]
+  STATIC  n=1280   tail=0   out=[. Rome is the capital of Norway.]
+  STATIC  n=2560   tail=0   out=[. Dublin is the capital of Norway.]
+  STATIC  n=4608   tail=0   out=[ capital of Spain. Madrid is the capital]
+  CHAMP   n=640    tail=0   out=[........]
+  CHAMP   n=1280   tail=0   out=[.]
+  CHAMP   n=2560   tail=0   out=[. (Note: The user's]
+  CHAMP   n=4608   tail=0   out=[ capital.]
+-----
+champion marker: 0.02.115.271 I ggml_metal_op_paged_attn: CHAMP-PAGED ACTIVE D=256 bs=64 nsg=4 Q=8 C=64 smem=16384/32
+refusal lines:   0
+comparator negative control: ok (must be 'ok')
+  MISMATCH n=640 tail=0
+     static: . Vienna lies north of Italy. Rome
+     champ : ........
+  MISMATCH n=1280 tail=0
+     static: . Rome is the capital of Norway.
+     champ : .
+  MISMATCH n=2560 tail=0
+     static: . Dublin is the capital of Norway.
+     champ : . (Note: The user's
+  MISMATCH n=4608 tail=0
+     static:  capital of Spain. Madrid is the capital
+     champ :  capital.
+
+CHAMPION TAIL-FILL GATE: FAIL -- 4/4 counts still disagree with static.
+  The blk fix was necessary but not sufficient. Record the surviving pattern; do NOT call it
+  a tail-fill law again without varying tail fill at FIXED total length.

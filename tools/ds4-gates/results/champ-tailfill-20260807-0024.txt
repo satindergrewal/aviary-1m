@@ -1,0 +1,20 @@
+tip: d46479d03 dirty=3
+counts: 640 1280 2560 4608   n_predict=8
+filler tokenised: 17304 tokens
+  STATIC  n=640    tail=0   out=[. Vienna lies north of Italy. Rome]
+  STATIC  n=1280   tail=0   out=[. Rome is the capital of Norway.]
+  STATIC  n=2560   tail=0   out=[. Dublin is the capital of Norway.]
+  STATIC  n=4608   tail=0   out=[ capital of Spain. Madrid is the capital]
+  CHAMP   n=640    tail=0   out=[. Vienna lies north of Italy. Rome]
+  CHAMP   n=1280   tail=0   out=[. Rome is the capital of Norway.]
+  CHAMP   n=2560   tail=0   out=[. Dublin is the capital of Norway.]
+  CHAMP   n=4608   tail=0   out=[ capital of Spain. Madrid is the capital]
+-----
+champion marker: 0.02.114.661 I ggml_metal_op_paged_attn: CHAMP-PAGED ACTIVE D=256 bs=64 nsg=4 Q=8 C=64 smem=16384/32
+refusal lines:   0
+comparator negative control: ok (must be 'ok')
+
+CHAMPION TAIL-FILL GATE: PASS -- 4/4 token-exact counts agree with static.
+  Correctness at these counts only. This gate does NOT name a cause: the blk-layout fix
+  did not move it, and what did was the decode kernel's C=64-vs-NW=32 defect plus a
+  missing mask/attention barrier. Speed is a separate bar.

@@ -1,0 +1,16 @@
+tip: c10126ad8 dirty=0  reps=2
+  STATIC     r1  prefill=3925.55    ms  decode=98.28   tok/s  marker=0  out=[ Tokyo]
+  CHAMP_ON   r1  prefill=4358.34    ms  decode=69.50   tok/s  marker=1  out=[ Tokyo]
+  CHAMP_OFF  r1  prefill=4902.16    ms  decode=115.29  tok/s  marker=1  out=[ Tokyo]
+  STATIC     r2  prefill=3919.93    ms  decode=124.63  tok/s  marker=0  out=[ Tokyo]
+  CHAMP_ON   r2  prefill=4392.74    ms  decode=84.95   tok/s  marker=1  out=[ Tokyo]
+  CHAMP_OFF  r2  prefill=4913.92    ms  decode=68.43   tok/s  marker=1  out=[ Tokyo]
+-----
+median prefill ms:   STATIC=3919.93  CHAMP_ON=4358.34  CHAMP_OFF=4902.16
+median decode tok/s: STATIC=98.28  CHAMP_ON=69.50  CHAMP_OFF=68.43
+  prefill  CHAMP_OFF vs static = 1.251x
+  prefill  CHAMP_ON  vs static = 1.112x   <- THE BAR IS <= 1.000x
+  prefill  classification gain = 1.125x
+  decode   CHAMP_ON  vs static = 1.414x   <- THE BAR IS <= 1.000x
+
+RESULT: classification is a real gain, bar not met. Report the number; not done.

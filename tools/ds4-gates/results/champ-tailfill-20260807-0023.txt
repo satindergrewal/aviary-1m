@@ -1,0 +1,20 @@
+tip: d46479d03 dirty=3
+counts: 4609 4619 4641 4653 4670   n_predict=8
+filler tokenised: 17304 tokens
+  STATIC  n=4609   tail=1   out=[ of Spain. Madrid is the capital of]
+  STATIC  n=4619   tail=11  out=[. Paris was founded before Spain. Lisbon]
+  STATIC  n=4641   tail=33  out=[ heavily with Italy. Prague is the capital]
+  STATIC  n=4653   tail=45  out=[ is the capital of Spain. Berlin is]
+  STATIC  n=4670   tail=62  out=[ Norway. Paris is the capital of Spain]
+  CHAMP   n=4609   tail=1   out=[ of Spain. Madrid is the capital of]
+  CHAMP   n=4619   tail=11  out=[. Paris was founded before Spain. Lisbon]
+  CHAMP   n=4641   tail=33  out=[ heavily with Italy. Prague is the capital]
+  CHAMP   n=4653   tail=45  out=[ is the capital of Spain. Berlin is]
+  CHAMP   n=4670   tail=62  out=[ Norway. Paris is the capital of Spain]
+-----
+champion marker: 0.02.119.104 I ggml_metal_op_paged_attn: CHAMP-PAGED ACTIVE D=256 bs=64 nsg=4 Q=8 C=64 smem=16384/32
+refusal lines:   0
+comparator negative control: ok (must be 'ok')
+
+CHAMPION TAIL-FILL GATE: PASS -- 5/5 token-exact counts agree with static.
+  The blk-layout defect was the cause. Correctness closed; speed is a separate bar.

@@ -1,0 +1,16 @@
+tip: 8005f3594 dirty=0  reps=2
+  STATIC16  r1  prompt_eval=3863.58    ms  tokens=4591   champ_marker=0
+  CHAMP16   r1  prompt_eval=4819.36    ms  tokens=4591   champ_marker=1
+  STATIC08  r1  prompt_eval=3860.72    ms  tokens=4591   champ_marker=0
+  CHAMP08   r1  prompt_eval=4842.28    ms  tokens=4591   champ_marker=1
+  STATIC16  r2  prompt_eval=3843.32    ms  tokens=4591   champ_marker=0
+  CHAMP16   r2  prompt_eval=4816.71    ms  tokens=4591   champ_marker=1
+  STATIC08  r2  prompt_eval=3859.57    ms  tokens=4591   champ_marker=0
+  CHAMP08   r2  prompt_eval=4938.25    ms  tokens=4591   champ_marker=1
+-----
+median prompt-eval ms:  STATIC c16384=3843.32  c8192=3859.57   CHAMP c16384=4816.71  c8192=4842.28
+  STATIC  c16384/c8192 = 0.996x   <- control: should be ~1.00
+  CHAMP   c16384/c8192 = 0.995x   <- doubling the pool doubles the mask if the fill dominates
+
+RESULT: champion prefill is FLAT in pool capacity. The mask fill is NOT the cost.
+  Hypothesis dead. Do not touch the mask kernel; profile the attention body instead.

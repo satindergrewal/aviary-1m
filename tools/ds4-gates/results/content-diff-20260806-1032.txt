@@ -1,0 +1,20 @@
+tip: a2f1752c dirty=0  reps=6
+  rep1: CLEAN
+    argdump lines: 4201
+  rep2: CLEAN
+    argdump lines: 4201
+  rep3: CLEAN
+    argdump lines: 4201
+  rep4: CLEAN
+    argdump lines: 4201
+  rep5: CLEAN
+    argdump lines: 4201
+  rep6: CLEAN
+    argdump lines: 4201
+-----
+verdicts: CLEAN CLEAN CLEAN CLEAN CLEAN CLEAN
+clean reps: 1 2 3 4 5 6
+dirty reps:
+
+INCONCLUSIVE: need at least one CLEAN and one DIRTY rep to diff; got clean=[ 1 2 3 4 5 6]
+  dirty=[]. All-clean means the bug did not fire this run, NOT that it is fixed.

@@ -1,0 +1,31 @@
+tip: c10126ad8 dirty=1  counts=2048 4608 8192 12288 reps=2
+  static n=2048   r1  prompt_eval=2873.29 ms
+  static n=4608   r1  prompt_eval=6359.62 ms
+  static n=8192   r1  prompt_eval=11789.83 ms
+  static n=12288  r1  prompt_eval=20616.55 ms
+  static n=2048   r2  prompt_eval=3288.33 ms
+  static n=4608   r2  prompt_eval=7352.13 ms
+  static n=8192   r2  prompt_eval=13151.50 ms
+  static n=12288  r2  prompt_eval=19954.26 ms
+  champ  n=2048   r1  prompt_eval=2804.09 ms
+  champ  n=4608   r1  prompt_eval=6566.04 ms
+  champ  n=8192   r1  prompt_eval=12664.87 ms
+  champ  n=12288  r1  prompt_eval=20006.78 ms
+  champ  n=2048   r2  prompt_eval=2916.06 ms
+  champ  n=4608   r2  prompt_eval=6797.50 ms
+  champ  n=8192   r2  prompt_eval=12689.01 ms
+  champ  n=12288  r2  prompt_eval=19857.29 ms
+-----
+champion markers: ACTIVE=1 REFUSED=0
+   T        static ms    champ ms    ratio
+  2048         3288.3      2916.1    0.887x
+  4608         7352.1      6797.5    0.925x
+  8192        13151.5     12689.0    0.965x
+  12288       20616.5     20006.8    0.970x
+
+  static  linear 1.5237 ms/tok   quadratic 1.2186e-05   worst residual 3.5%
+  champ   linear 1.3858 ms/tok   quadratic 1.9745e-05   worst residual 0.2%
+  -> linear ratio 0.909x, quadratic ratio 1.620x
+
+MODEL HOLDS across all lengths. The quadratic ratio above is the real target;
+  the linear ratio says whether per-token work is already competitive.

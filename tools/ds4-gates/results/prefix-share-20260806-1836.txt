@@ -1,0 +1,11 @@
+tip: 55ccb2bfa dirty=6
+shared prefix: 5160 chars
+-----
+requests admitted:            2   (need 2)
+checkouts before B admitted:  2
+checkouts attributable to B:  2
+'admitted SHARED' lines:      0
+
+prompt tokens actually evaluated (request A): 970
+PREFIX-SHARING GATE: FAIL -- no 'admitted SHARED' line. Discovery never fired: the second
+  request re-prefilled a prefix that was live in the pool. The feature is DARK.

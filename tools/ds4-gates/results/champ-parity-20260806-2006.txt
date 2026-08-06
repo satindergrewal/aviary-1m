@@ -1,0 +1,20 @@
+tip: aacb3ed21 dirty=7  reps=3 ntok=6000
+  STATIC      r1  prompt_eval=5387.33 ms  out=[100% of the people who have tried it, ha] 
+  PAGED_BS16  r1  prompt_eval=13547.60 ms  out=[100% of the people who have ever used a ] 
+  CHAMP_BS64  r1  prompt_eval=6632.99 ms  out=[0.00000000000000] 0.08.735.085 I ggml_metal_op_paged_attn: CHAMP-VEC ACTIVE (decode) D=256 bs=64 nsg=4 nwg=1
+  STATIC      r2  prompt_eval=5481.97 ms  out=[100% of the people who have tried it, ha] 
+  PAGED_BS16  r2  prompt_eval=13601.80 ms  out=[100% of the people who have ever used a ] 
+  CHAMP_BS64  r2  prompt_eval=6707.95 ms  out=[0.00000000000000] 0.08.850.478 I ggml_metal_op_paged_attn: CHAMP-VEC ACTIVE (decode) D=256 bs=64 nsg=4 nwg=1
+  STATIC      r3  prompt_eval=5819.72 ms  out=[100% of the people who have tried it, ha] 
+  PAGED_BS16  r3  prompt_eval=13750.19 ms  out=[100% of the people who have ever used a ] 
+  CHAMP_BS64  r3  prompt_eval=6788.99 ms  out=[0.00000000000000] 0.08.920.390 I ggml_metal_op_paged_attn: CHAMP-VEC ACTIVE (decode) D=256 bs=64 nsg=4 nwg=1
+-----
+median prompt-eval ms:  STATIC=5481.97  PAGED_BS16=13601.80  CHAMP_BS64=6707.95
+⚠ OUTPUT MISMATCH static vs champion -- TIMING VERDICT VOID until this is explained:
+   static: 100% of the people who have tried it, have tried it.
+   champ : 0.00000000000000
+  PAGED_BS16 vs static : 2.481x
+  CHAMP_BS64 vs static : 1.224x   <- THE BAR IS <= 1.000x
+  CHAMP  vs PAGED_BS16 : 2.028x speedup
+
+RESULT: real gain, BAR NOT MET. Report the number; this is not done.
