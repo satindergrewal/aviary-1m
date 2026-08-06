@@ -1,0 +1,36 @@
+tip: 146e2ec3e dirty=3  reps=6 ntok=32768
+  STATIC_A   r1  prefill=57777.42   decode=48.45    out=[ is the capital of France. Prague is the cap]
+  STATIC_A   r2  prefill=61782.70   decode=46.31    out=[ is the capital of France. Prague is the cap]
+  STATIC_A   r3  prefill=57712.93   decode=46.62    out=[ is the capital of France. Prague is the cap]
+  STATIC_A   r4  prefill=59338.06   decode=46.71    out=[ is the capital of France. Prague is the cap]
+  STATIC_A   r5  prefill=59267.28   decode=49.17    out=[ is the capital of France. Prague is the cap]
+  STATIC_A   r6  prefill=59452.86   decode=47.06    out=[ is the capital of France. Prague is the cap]
+  CHAMP_A    r1  prefill=59493.26   decode=39.72    out=[ is the capital of France. Prague is the cap]
+  CHAMP_A    r2  prefill=58205.95   decode=45.62    out=[ is the capital of France. Prague is the cap]
+  CHAMP_A    r3  prefill=57927.44   decode=48.17    out=[ is the capital of France. Prague is the cap]
+  CHAMP_A    r4  prefill=57274.44   decode=48.68    out=[ is the capital of France. Prague is the cap]
+  CHAMP_A    r5  prefill=57851.95   decode=43.79    out=[ is the capital of France. Prague is the cap]
+  CHAMP_A    r6  prefill=56944.78   decode=44.93    out=[ is the capital of France. Prague is the cap]
+  CHAMP_A champion marker count: 1
+  CHAMP_B    r1  prefill=55936.23   decode=42.97    out=[ is the capital of France. Prague is the cap]
+  CHAMP_B    r2  prefill=58441.65   decode=44.76    out=[ is the capital of France. Prague is the cap]
+  CHAMP_B    r3  prefill=56510.64   decode=47.06    out=[ is the capital of France. Prague is the cap]
+  CHAMP_B    r4  prefill=56368.75   decode=43.57    out=[ is the capital of France. Prague is the cap]
+  CHAMP_B    r5  prefill=56591.76   decode=43.98    out=[ is the capital of France. Prague is the cap]
+  CHAMP_B    r6  prefill=57892.40   decode=44.70    out=[ is the capital of France. Prague is the cap]
+  CHAMP_B champion marker count: 1
+  STATIC_B   r1  prefill=55995.54   decode=48.24    out=[ is the capital of France. Prague is the cap]
+  STATIC_B   r2  prefill=56502.01   decode=48.84    out=[ is the capital of France. Prague is the cap]
+  STATIC_B   r3  prefill=56741.71   decode=50.43    out=[ is the capital of France. Prague is the cap]
+  STATIC_B   r4  prefill=58207.29   decode=48.67    out=[ is the capital of France. Prague is the cap]
+  STATIC_B   r5  prefill=58248.22   decode=46.78    out=[ is the capital of France. Prague is the cap]
+  STATIC_B   r6  prefill=57823.15   decode=45.63    out=[ is the capital of France. Prague is the cap]
+-----
+  half 1 (STATIC_A -> CHAMP_A) : champ/static = 0.976x
+  half 2 (CHAMP_B -> STATIC_B) : champ/static = 0.987x
+  pooled medians               : champ 57563.2 ms / static 58015.2 ms = 0.992x
+  spread                       : champ 55936-59493  static 55996-61783
+  decode  half1 1.036x  half2 1.093x  pooled 1.065x  (static tok/s over champ tok/s)
+
+RESULT: champion prefill at or under static at this length (0.992x), and both
+  halves agree in sign. The provisional 0.98x stands.

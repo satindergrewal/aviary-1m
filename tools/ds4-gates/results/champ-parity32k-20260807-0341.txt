@@ -1,0 +1,12 @@
+tip: afb2dd9d6 dirty=0  reps=6 ntok=32768
+  WARMUP     r1  prefill=56800.18   decode=50.44    out=[ is the capital of France. Prague is the cap]
+  WARMUP     r2  prefill=58571.18   decode=50.68    out=[ is the capital of France. Prague is the cap]
+  WARMUP     r3  prefill=58745.56   decode=50.75    out=[ is the capital of France. Prague is the cap]
+  WARMUP     r4  prefill=58650.94   decode=49.44    out=[ is the capital of France. Prague is the cap]
+  WARMUP     r5  prefill=58257.81   decode=50.89    out=[ is the capital of France. Prague is the cap]
+  WARMUP     r6  prefill=58060.03   decode=46.69    out=[ is the capital of France. Prague is the cap]
+  (warm-up half above is DISCARDED -- it measures the machine, not the kernel)
+  STATIC_A   r1  prefill=57320.14   decode=51.31    out=[ is the capital of France. Prague is the cap]
+  STATIC_A   r2  prefill=57931.82   decode=48.95    out=[ is the capital of France. Prague is the cap]
+  STATIC_A   r3  prefill=58542.52   decode=48.01    out=[ is the capital of France. Prague is the cap]
+  STATIC_A   r4  prefill=58481.01   decode=40.66    out=[ is the capital of France. Prague is the cap]

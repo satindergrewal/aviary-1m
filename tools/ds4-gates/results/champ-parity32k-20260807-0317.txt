@@ -1,0 +1,36 @@
+tip: afb2dd9d6 dirty=0  reps=6 ntok=32768
+  STATIC_A   r1  prefill=57351.57   decode=55.12    out=[ is the capital of France.]
+  STATIC_A   r2  prefill=58941.15   decode=56.26    out=[ is the capital of France.]
+  STATIC_A   r3  prefill=57966.65   decode=54.07    out=[ is the capital of France.]
+  STATIC_A   r4  prefill=58992.83   decode=51.88    out=[ is the capital of France.]
+  STATIC_A   r5  prefill=61444.45   decode=49.93    out=[ is the capital of France.]
+  STATIC_A   r6  prefill=65049.32   decode=50.04    out=[ is the capital of France.]
+  CHAMP_A    r1  prefill=64584.13   decode=43.71    out=[ is the capital of France.]
+  CHAMP_A    r2  prefill=62091.13   decode=48.53    out=[ is the capital of France.]
+  CHAMP_A    r3  prefill=60833.90   decode=49.08    out=[ is the capital of France.]
+  CHAMP_A    r4  prefill=59611.53   decode=45.43    out=[ is the capital of France.]
+  CHAMP_A    r5  prefill=58997.29   decode=46.44    out=[ is the capital of France.]
+  CHAMP_A    r6  prefill=58257.87   decode=47.55    out=[ is the capital of France.]
+  CHAMP_A champion marker count: 1
+  CHAMP_B    r1  prefill=58035.40   decode=46.12    out=[ is the capital of France.]
+  CHAMP_B    r2  prefill=58266.89   decode=49.15    out=[ is the capital of France.]
+  CHAMP_B    r3  prefill=58320.20   decode=44.38    out=[ is the capital of France.]
+  CHAMP_B    r4  prefill=58306.07   decode=48.63    out=[ is the capital of France.]
+  CHAMP_B    r5  prefill=58256.10   decode=47.07    out=[ is the capital of France.]
+  CHAMP_B    r6  prefill=58407.67   decode=46.79    out=[ is the capital of France.]
+  CHAMP_B champion marker count: 1
+  STATIC_B   r1  prefill=57700.79   decode=52.61    out=[ is the capital of France.]
+  STATIC_B   r2  prefill=58784.85   decode=50.61    out=[ is the capital of France.]
+  STATIC_B   r3  prefill=58871.36   decode=55.61    out=[ is the capital of France.]
+  STATIC_B   r4  prefill=59788.35   decode=55.08    out=[ is the capital of France.]
+  STATIC_B   r5  prefill=58510.07   decode=56.84    out=[ is the capital of France.]
+  STATIC_B   r6  prefill=58485.14   decode=53.77    out=[ is the capital of France.]
+-----
+  half 1 (STATIC_A -> CHAMP_A) : champ/static = 1.021x
+  half 2 (CHAMP_B -> STATIC_B) : champ/static = 0.994x
+  pooled medians               : champ 58363.9 ms / static 58828.1 ms = 0.992x
+  spread                       : champ 58035-64584  static 57352-65049
+  decode  half1 1.127x  half2 1.160x  pooled 1.149x  (static tok/s over champ tok/s)
+
+INCONCLUSIVE: the two halves disagree in SIGN, so the difference is order or drift,
+  not the kernel. More reps, or a finer interleave, before any claim.

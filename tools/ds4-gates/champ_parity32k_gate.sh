@@ -55,11 +55,17 @@ out=[]
 while len(' '.join(out)) < $NTOK*8: out.append('%s %s %s.' % (random.choice(s),random.choice(v),random.choice(o)))
 open('$LOGDIR/f.txt','w').write(' '.join(out))"
 
+# ⚠ PT_CHAMP_ENV lets the same ABBA machinery measure any champion variant against static without
+# a second gate: decode nwg arms, ablation arms, kernel one-factor arms. The balancing is the whole
+# value here, and every comparison this lane makes needs it -- a single-run ratio against static is
+# worth nothing on a box whose first six reps drift 8%.
 half() { # $1 label  $2 mode -> appends "ms" lines to $LOGDIR/$1.ms and text to $1.txt
     pkill -f "$SRV" >/dev/null 2>&1; sleep 2
     local envs=(DS4P_PAGED_HYBRID=1) flags=()
     if [ "$2" = champ ]; then
         envs+=(DS4P_METAL_CHAMP=1)
+        # shellcheck disable=SC2206
+        [ -n "${PT_CHAMP_ENV:-}" ] && envs+=(${PT_CHAMP_ENV})
         flags=(--kv-paged --kv-block-size 64 -ngpub $(( (CTX + 63)/64 )) -ncpub 256)
     fi
     env "${envs[@]}" nohup "$SRV" -m "$M" -ngl 99 -c "$CTX" -np 1 -b 2048 -ub 2048 \
@@ -83,19 +89,21 @@ open('$LOGDIR/toks.json','w').write(json.dumps(t));print('  filler tokens:',len(
     fi
     python3 -c "
 import json;t=json.load(open('$LOGDIR/toks.json'))[:$NTOK]
-print(json.dumps({'prompt':t,'n_predict':6,'temperature':0,'seed':1,'cache_prompt':False}))" > "$LOGDIR/$1.req"
-    : > "$LOGDIR/$1.ms"; : > "$LOGDIR/$1.txt"
+print(json.dumps({'prompt':t,'n_predict':${PT_NPRED:-24},'temperature':0,'seed':1,'cache_prompt':False}))" > "$LOGDIR/$1.req"
+    : > "$LOGDIR/$1.ms"; : > "$LOGDIR/$1.txt"; : > "$LOGDIR/$1.tps"
     for r in $(seq 1 "$REPS"); do
         curl -s --max-time 900 -X POST http://127.0.0.1:$P/completion -H 'Content-Type: application/json' \
             -d @"$LOGDIR/$1.req" > "$LOGDIR/$1-$r.json"
-        local ms txt
+        local ms txt dtp
         ms=$(grep -a "prompt eval time" "$LOGDIR/$1.log" | tail -1 | grep -oE "= *[0-9.]+ ms" | grep -oE "[0-9.]+" | head -1)
+        dtp=$(grep -a "        eval time" "$LOGDIR/$1.log" | tail -1 | grep -oE "[0-9.]+ tokens per" | grep -oE "[0-9.]+" | head -1)
+        echo "${dtp:-NA}" >> "$LOGDIR/$1.tps"
         txt=$(python3 -c "
 import json
 try: print(json.load(open('$LOGDIR/$1-$r.json')).get('content','')[:44].replace(chr(10),' '))
 except Exception: print('MALFORMED')")
         echo "${ms:-NA}" >> "$LOGDIR/$1.ms"; echo "$txt" >> "$LOGDIR/$1.txt"
-        printf "  %-10s r%s  prefill=%-10s  out=[%s]\n" "$1" "$r" "${ms:-NA}" "$txt" | tee -a "$OUT"
+        printf "  %-10s r%s  prefill=%-10s decode=%-7s  out=[%s]\n" "$1" "$r" "${ms:-NA}" "${dtp:-NA}" "$txt" | tee -a "$OUT"
     done
     if [ "$2" = champ ]; then
         local mk; mk=$(grep -aci "CHAMP-PAGED ACTIVE" "$LOGDIR/$1.log")
@@ -105,7 +113,16 @@ except Exception: print('MALFORMED')")
     return 0
 }
 
-# ABBA: any monotonic drift cancels between halves instead of loading onto one arm.
+# ⚠ WARM-UP HALF, MEASURED AND DISCARDED. ABBA cancels a LINEAR drift; what this box actually does
+# is a warm-up TRANSIENT that has mostly finished by the third half. Measured in one run: STATIC_A
+# from cold drifted 61444 -> 65049 between two adjacent reps, while CHAMP_B at steady state produced
+# 58035 58267 58320 58306 58256 58408 -- six reps inside 373 ms. Averaging a transient against a
+# steady state is not balancing, it is diluting, and it is why two balanced runs of the same code
+# path came out 1.152x and 0.992x. The first half now exists only to heat the machine.
+half WARMUP  static || exit 1
+echo "  (warm-up half above is DISCARDED -- it measures the machine, not the kernel)" | tee -a "$OUT"
+
+# ABBA: any residual monotonic drift cancels between halves instead of loading onto one arm.
 half STATIC_A static || exit 1
 half CHAMP_A  champ  || exit 1
 half CHAMP_B  champ  || exit 1
@@ -116,8 +133,10 @@ echo "-----" | tee -a "$OUT"
 python3 - "$LOGDIR" <<'PY' | tee -a "$OUT"
 import sys, statistics as st
 d = sys.argv[1]
+DROP = 1   # the first request in each server also pays pipeline compilation and graph warmup
 def rd(n):
-    return [float(x) for x in open(f"{d}/{n}.ms") if x.strip() and x.strip() != "NA"]
+    v = [float(x) for x in open(f"{d}/{n}.ms") if x.strip() and x.strip() != "NA"]
+    return v[DROP:] if len(v) > DROP + 1 else v
 def tx(n):
     return [l.rstrip("\n") for l in open(f"{d}/{n}.txt")]
 sa, ca, cb, sb = rd("STATIC_A"), rd("CHAMP_A"), rd("CHAMP_B"), rd("STATIC_B")
@@ -138,6 +157,16 @@ print(f"  half 1 (STATIC_A -> CHAMP_A) : champ/static = {h1:.3f}x")
 print(f"  half 2 (CHAMP_B -> STATIC_B) : champ/static = {h2:.3f}x")
 print(f"  pooled medians               : champ {allc:.1f} ms / static {alls:.1f} ms = {allc/alls:.3f}x")
 print(f"  spread                       : champ {min(ca+cb):.0f}-{max(ca+cb):.0f}  static {min(sa+sb):.0f}-{max(sa+sb):.0f}")
+def rdt(n):
+    try: v = [float(x) for x in open(f"{d}/{n}.tps") if x.strip() and x.strip() != "NA"]
+    except OSError: return []
+    return v[DROP:] if len(v) > DROP + 1 else v
+dca, dcb, dsa, dsb = rdt("CHAMP_A"), rdt("CHAMP_B"), rdt("STATIC_A"), rdt("STATIC_B")
+if dca and dsa and dcb and dsb:
+    dh1 = st.median(dsa)/st.median(dca)
+    dh2 = st.median(dsb)/st.median(dcb)
+    dall = st.median(dsa+dsb)/st.median(dca+dcb)
+    print(f"  decode  half1 {dh1:.3f}x  half2 {dh2:.3f}x  pooled {dall:.3f}x  (static tok/s over champ tok/s)")
 print()
 if (h1 - 1.0) * (h2 - 1.0) < 0:
     print("INCONCLUSIVE: the two halves disagree in SIGN, so the difference is order or drift,")
