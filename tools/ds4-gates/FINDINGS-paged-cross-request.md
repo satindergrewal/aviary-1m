@@ -1,176 +1,106 @@
-# Paged KV: one graded correctness defect with a single-token onset
+# Paged KV: an INTERMITTENT correctness failure near ~50k tokens
 
-**Status: OPEN, blocking, NOT champion-specific, predates the 2026-08-06/07 kernel work.**
+**Status: OPEN. Real, reproduced dozens of times, NOT champion-specific, predates the
+2026-08-06/07 kernel work. Rate unmeasured. Every length-based conclusion previously in this
+document is WITHDRAWN — see "What was withdrawn and why".**
 
-Reproduced on the **default paged path with `DS4P_METAL_CHAMP` unset**, at `--kv-block-size 16`,
-Ornith-1.0-9B-1M IQ2_M, `-c 73728 -np 1 -b 2048 -ub 2048 -cram 0`, `cache_prompt: false`,
-`temperature 0`, `seed 1`. Each length is `toks[:N]` from one token list with the length **asserted**
-in the harness, not labelled.
+Config where it was observed: default paged path with `DS4P_METAL_CHAMP` **unset**,
+`--kv-block-size 16 -ngpub 4608 -ncpub 512`, Ornith-1.0-9B-1M IQ2_M,
+`-c 73728 -np 1 -b 2048 -ub 2048 -cram 0`, `cache_prompt: false`, `temperature 0`, `seed 1`,
+prompt `toks[:N]` with N asserted in the harness.
 
-## The onset is a single token
+## What the failure looks like
 
-Bisected with a **static reference measured in the same run** at every point, lengths asserted in the
-harness, `toks[:N]` from one token list:
+Static is the reference and was **coherent in every single measurement**, so this is not the model or
+its YaRN extension.
 
-| N | paged vs static | paged output |
-|---|---|---|
-| 49,996 | matches, char for char | ` Dublin is the capital of Spain. Prague is t` |
-| **49,997** | **matches** | ` is the capital of Germany. Prague is the ca` |
-| **49,998** | **differs** | ` H and 和Q of/路 ） NOTE –` |
-| 49,999 | differs | ` before Germany. Berlin was founded before G` (fluent) |
-| 50,000 | differs | ` Germany was the - - - - ` |
-| 50,008 | differs | `. - - - - - ` |
+- Paged output ranges from *fluent but different from static* to outright degenerate
+  (`' H and 和Q of/路 ） NOTE –'`, `'. - - - - - '`, `' is the 1 - - - -'`).
+- In one stretch it also showed a **first-request-correct, all-later-requests-wrong** pattern that
+  survived an intervening unrelated prompt.
 
-**Clean at 49,997, broken at 49,998.** Static is coherent on both sides.
+## ⚠ It is intermittent across windows, not across configurations
 
-### Confirmed as a LENGTH, on an unrelated prompt
+The single most important fact, and the one that invalidates most of the original analysis:
 
-The onset reproduces at the **identical token** on a second stimulus with a different seed *and* a
-different vocabulary (people/verbs/CS-objects — no cities, no countries, no shared prefix):
+| | |
+|---|---|
+| Earlier in the session | the config above failed repeatedly, ~30 observations, always the same wrong text |
+| Later, same binary, same flags, same prompt, same N | **0 failures in 6 independent server starts** |
 
-| N | static | paged | verdict |
-|---|---|---|---|
-| 49,997 | ` formalised a type system. Barbara formalise` | same | **matches** |
-| 49,998 | `ised a type system. Barbara formalised a typ` | ` /f ,  s, -在家之间的` | **differs** |
+Same everything. It failed in one window and will not fail in another.
 
-Two unrelated prompts, one onset. This is a property of the code, not of a prompt.
+**Strongest correlate, filed as a lead and not a finding:** the failing stretch overlapped hours when
+this box ran concurrent heavy GPU work (a lurking probe doing repeated 50k inferences, plus other
+jobs). The clean stretch had one server at a time under a lock. That is a correlation across two
+windows — weak evidence. Memory pressure or allocator interaction would fit everything observed:
+intermittent, config-independent, content-independent, and invisible to both the poison test and the
+slot-coverage invariant because none of the paged bookkeeping is wrong.
 
-This test was pre-registered to be able to demote the finding — a clean alt result would have made
-the edge "the onset *for this prompt*" and required a second correction here. It broke at the same
-token instead.
+## What survives — eliminations that were repeated, not sampled
 
-The edge sits on nothing structural. 49,997 is odd — not a multiple of the block size (16), the
-ubatch (2,048), or any power of two — and the path handles it perfectly. Both 49,997 and 49,998
-require the same 3,125 blocks at bs=16, so it is not the cache geometry. `grep` for a matching
-constant in `src/` and `tools/server/` returns nothing but an unrelated RoPE θ and a comment.
-
-Something counts tokens and stops being right one token before 50,000.
-
-Past the edge the corruption is **graded but not monotonic**: 49,998 is severe garbage, 49,999 is
-fluent and merely wrong, 50,000 degenerates again. Severity past the onset appears data-dependent.
-
-### Correction to an earlier reading
-
-This document previously claimed **two** distinct defects — "A degenerate, including request 1" and
-"B cross-request, request 1 correct". That split came from a comparator that only asked `r1 == r2`,
-before a static column existed at every point. 49,999 is fluent-and-wrong **on request 1**, which
-breaks the dividing line. One graded defect fits all the data; two defects fit only the subset
-available when the split was written.
-
-The cross-request pattern at 50,473 is most likely the same fault far enough past the onset that
-request 1 still survives and later ones do not.
-
-## The failures as originally observed
-
-Static is the reference and is **fluent and coherent at every length below**, so neither failure is
-the model or its YaRN extension.
-
-| N | static | paged | class |
-|---|---|---|---|
-| 49,920 | `. Dublin is the capital of Spain. Prague is` | r1 = r2 = matches static | clean |
-| 50,048 | ` is the capital of France. Dublin is the cap` | r1 = r2 = ` is the 1 - - - -` | **A: degenerate** |
-| 50,176 | `. Prague is the capital of France. Prague wa` | r1 = `. - - - - - ` | **A: degenerate** |
-| 50,473 | (64k gate: 4 identical static reps) | r1 matches, r2+ fluent-different | **B: cross-request** |
-| 50,480 | ` was founded before Italy. Prague was founde` | r1 matches static, r2 = ` was founded before Germany. Berlin was` | **B: cross-request** |
-
-- **A — degenerate output, first request included.** Bracketed to 128 tokens: clean at 49,920,
-  degenerate at 50,048. Needs no cross-request state to explain, so it is the cheaper target.
-- **B — cross-request corruption.** The first request after server start matches static exactly;
-  every later one is fluent and different, identically so across repeats, regardless of intervening
-  content (an intervening reversed-token prompt does not clear it).
-
-Both are **non-monotonic in length**: clean at 65,536 (32 ubatches, 4,096 blocks) with both failures
-present below it.
-
-## The onset moves with block size
-
-| config | 49,997 | 49,998 | |
-|---|---|---|---|
-| `--kv-block-size 16 -ub 2048` | CLEAN | **BROKEN** | onset here |
-| `--kv-block-size 64 -ub 2048` | CLEAN | CLEAN | onset elsewhere |
-
-At bs=64 the path is correct at **65,536 / 80,000 / 95,000** as well — every length reachable with
-this filler (100,833 tokens) and this `-c`. So the bs=64 onset is **above 95,000**, at least 1.9×
-past where bs=16 fails.
-
-**This is a lower bound, not a law.** It is consistent with the limit scaling with block size
-(4 × 49,998 = 199,992, unreachable here), and it is equally consistent with any other relation whose
-bs=64 value exceeds 95,000. "Clean everywhere reachable" bounds the onset from below and does
-nothing more.
-
-### Practical consequence, stated carefully
-
-`--kv-block-size 64` pushes the correctness limit past 95,000 tokens, where `--kv-block-size 16`
-fails at 49,998. That is a **mitigation, not a fix** — the onset still exists at bs=64, it has only
-been shown to be somewhere above 95,000. Do not read this as "bs=64 is safe".
-
-### The arithmetic that is still unexplained
-
-At bs=16, **both** 49,997 and 49,998 require 3,125 blocks (`ceil(n/16)`, and per-ubatch rounding
-gives `24×128 + 53 = 3,125` either way), and both pad to `n_kv = 50,000`. The block *count* cannot
-separate them. Yet the block *size* moves the onset by at least 1.9×. Something scales with block
-size without being the number of blocks.
-
-### The ubatch arm could not be run
-
-`llama-paged-scheduler.cpp:82` asserts `n_batch == ctx->n_ubatch()` — "kv_paged requires
-n_batch == n_ubatch" — so `-b 2048 -ub 512` aborts at startup. Varying the ubatch requires moving
-`-b` with it, which makes the arm two-factor. **Untested, not null.**
-
-## Ruled out, with the test that ruled it out
-
-Each of these varied the factor and confirmed it varied before the outcome was read.
+Each varied the factor, confirmed it varied, and held across multiple arms.
 
 | Candidate | Test | Result |
 |---|---|---|
 | Block content / stale KV | `DS4P_KV_POISON=1` fills the pool with `0xFF` (every fp16 a NaN) | request 1 still correct; failure unchanged |
-| Write/read slot mapping | `DS4P_SLOT_COVER=1` asserts `slots[t] == btab[pos/bs]*bs + pos%bs` for every token | 0 mismatches, both requests |
+| Write/read slot mapping | `DS4P_SLOT_COVER=1` asserts `slots[t] == btab[pos/bs]*bs + pos%bs` for every token | 0 mismatches over ~50,000 tokens, both requests |
 | Block accounting | checkout log | identical across requests: `n=3155 free_before=4608`, three releases for three requests |
-| Block identity / free-list order | `DS4P_FREELIST_FIFO=1`, with `DS4P_METADUMP` confirming the block IDs moved | req1 blocks `0..3154`, req2 blocks `3238+` — **disjoint** — and it still fails identically |
-| Partial final block | N = 50,480 with the length asserted (remainder 0) | fails |
-| Partial final ubatch | N = 49,152 (24 ubatches exact) vs 49,160 (partial), same 3,072 blocks | both clean |
-| Block-count band | N = 49,152 = 3,072 blocks, inside the supposed band | clean |
+| Block identity / free-list order | `DS4P_FREELIST_FIFO=1`, with `DS4P_METADUMP` confirming the IDs moved | req1 blocks `0..3154`, req2 blocks `3238+` — **disjoint** — still failed identically |
 | The champion | reproduces with `DS4P_METAL_CHAMP` unset at bs=16 | not champion-specific |
 | Decode `nwg` path | `DS4P_CHAMP_VEC_NWG=1` | unchanged |
-| The model | static reference at 49,920 / 50,048 / 50,176 / 50,480 | static fluent at all four |
+| The model | static reference at every length measured | static coherent everywhere |
 
-**Not ruled out — the earlier control was vacuous:** graph reuse.
+**Not ruled out — control was vacuous:** graph reuse.
 `llm_graph_input_attn_kv_paged::can_reuse()` returns false unconditionally, so
-`LLAMA_GRAPH_REUSE_DISABLE=1` could not vary anything on this path. That test proved nothing and the
-candidate is untested, not refuted.
+`LLAMA_GRAPH_REUSE_DISABLE=1` could not vary anything on this path.
 
-## Probes added for this
+**Could not be tested:** the ubatch. `llama-paged-scheduler.cpp:82` asserts
+`n_batch == ctx->n_ubatch()`, so `-b 2048 -ub 512` aborts at startup; varying `-ub` requires moving
+`-b` with it, which makes the arm two-factor.
+
+## What was withdrawn and why
+
+All of the following were measured **n=1 per point** on a failure now known to be intermittent. They
+are not evidence.
+
+- A single-token onset at 49,997 (clean) → 49,998 (broken).
+- Its "confirmation" on a second, unrelated prompt breaking at the identical token.
+- The block-size dependence (`bs=64` clean through 95,000).
+- The `-c` dependence.
+- The earlier "two distinct defects" split (already retracted once, for a different reason).
+
+The n=1 design came from observing ~30 agreeing failures **all at one length inside one window** and
+generalising determinism from that. The caveat was written into this document and committed — and
+then three further experiments were built on the number it warned about instead of re-testing it.
+**Publishing a limitation is not respecting it.**
+
+## Probes
 
 - `DS4P_METADUMP=N` — first N ubatches: `n_tokens`, `n_seq`, `ctx_lens[0]`, `offs[0]`, `lens[0]`,
   `slots[0..3]`, `btab[0..3]`. Prints the cap it is using.
-- `DS4P_SLOT_COVER=1` — the write/read invariant above, as an assertion rather than a dump.
+- `DS4P_SLOT_COVER=1` — the write/read invariant, as an assertion rather than a dump.
 - `DS4P_KV_POISON=1` — pre-existing; fills the pool with `0xFF`.
+
+## Next step, and it is the only one worth taking first
+
+**Measure the rate under load.** Reproduce the failing window deliberately — a second heavy GPU
+consumer running alongside — and count failures per N server starts at one fixed config. Without a
+rate, no bisect is valid and no length result means anything. With one, the whole characterisation
+can be redone at whatever rep count the rate demands.
 
 ## Harness rules this hunt paid for
 
-1. **Confirm the independent variable changed before interpreting the dependent one.** Two vacuous
-   controls were read as refutations.
-2. **Assert lengths, do not label them.** `toks[:50480]` on a 50,473-token list silently ran 50,473
-   while the output said `rem=0`.
+1. **Confirm the independent variable changed before interpreting the dependent one.** Three controls
+   this session could not vary their factor and were read as refutations.
+2. **Assert lengths, do not label them.** `toks[:50480]` on a 50,473-token list ran 50,473 while the
+   output said `rem=0`.
 3. **Key caches on their inputs.** A fixed `LOGDIR` reused a 32k token file for a 64k run.
 4. **One probe at a time, kill by PID.** Detached scripts sharing `pkill -f llama-server` destroyed
-   each other's servers; one lurked for hours.
+   each other's servers; one lurked for hours — and is the leading suspect for the load correlation
+   above.
 5. **A comparator needs an external reference.** `r1 == r2` reported CLEAN for two requests agreeing
-   on garbage. One static column re-interpreted an entire sweep — and then overturned the
-   two-defect reading above.
-6. **Bisection beat reasoning twice in one session, on the same lane.** Ten mechanisms proposed and
-   refuted over hours; six bisect steps in ~90 minutes produced a single-token edge. The one earlier
-   diagnosis that worked — the decode kernel — also fell out of a split (prefill passes, incremental
-   fails), not out of theory.
-
-## Stated limits
-
-- Every bisect point is **n=1 per length**. The defect was deterministic across ~30 arms (identical
-  wrong text under poison, under FIFO, across disjoint block ranges), so n=1 is defensible — but the
-  exact edge is where that assumption bites hardest, and it is the first thing to re-test.
-- ~~The edge was found on one token list.~~ **Tested and resolved:** a second, unrelated stimulus
-  breaks at the identical token. The onset is a length.
-- ~~Whether the onset moves with block size, `-ub` or `-c` is untested.~~ **Block size: tested, it
-  moves.** `-ub`: cannot be varied alone (assert above). `-c`: untested.
-- The bs=64 onset is bounded below at 95,000 and otherwise unknown. Reaching it needs a longer filler
-  and a larger `-c` than this box was configured with here.
+   on garbage.
+6. **Include a control arm that reproduces the KNOWN result.** The `-c` sweep's baseline came back
+   clean, which is the only reason the intermittency was caught at all.
+7. **Never build on an n=1 result you have already flagged as n=1.**
