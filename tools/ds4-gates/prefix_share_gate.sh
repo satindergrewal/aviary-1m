@@ -87,7 +87,17 @@ echo | tee -a "$OUT"
 
 # ⚠ STIMULUS CHECK, before any verdict. If the prompt the model actually saw is too short to span
 # several blocks, a null tells us nothing about sharing.
-PROMPT_N=$(grep -aoE "prompt eval time.*/ +[0-9]+ tokens" "$LOGDIR/srv.log" | grep -oE "[0-9]+ tokens" | grep -oE "[0-9]+" | head -1)
+# ⚠ FEATURE-INDEPENDENT STIMULUS PROBE. The first version parsed "prompt eval time / N tokens", which
+# DISAPPEARS once sharing works -- a shared request does not prefill, so it emits no such line. That
+# made the gate report INCONCLUSIVE precisely when the feature succeeded: a probe that breaks when the
+# thing it measures starts working is measuring the wrong thing.
+#
+# my_prompt on the scheduler's own scan line is the INCOMING prompt length, logged at admission before
+# any sharing decision, so it is identical whether sharing fires or not.
+PROMPT_N=$(grep -aoE "my_prompt=[0-9]+" "$LOGDIR/srv.log" | grep -oE "[0-9]+" | sort -rn | head -1)
+if [ -z "${PROMPT_N:-}" ]; then
+    PROMPT_N=$(grep -aoE "prompt eval time.*/ +[0-9]+ tokens" "$LOGDIR/srv.log" | grep -oE "[0-9]+ tokens" | grep -oE "[0-9]+" | head -1)
+fi
 echo "prompt tokens actually evaluated (request A): ${PROMPT_N:-unknown}" | tee -a "$OUT"
 if [ -z "${PROMPT_N:-}" ] || [ "${PROMPT_N:-0}" -lt 64 ]; then
     echo "INCONCLUSIVE: the stimulus was only ${PROMPT_N:-0} tokens -- too short to span enough blocks" | tee -a "$OUT"
