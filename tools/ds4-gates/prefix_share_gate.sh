@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # PREFIX-SHARING GATE -- do two INDEPENDENT requests with a common prefix actually share blocks?
 #
+# ⚠ -cram 0 DISABLES THE SERVER PROMPT CACHE, and that is load-bearing. Measured without it: request B
+# arrived with n_warm=968 of 970 tokens already matched by the prompt cache, took the WARM admission
+# branch, and never reached the block-sharing scan at all. The prefix WAS reused -- by a different,
+# pre-existing mechanism -- so the gate was scoring a feature that never ran. Cross-request reuse on
+# the CACHED path already works; this gate exists to test the BLOCK-LEVEL path that covers the
+# cache's misses, so the cache must be off for the result to be attributable.
+#
 # ⚠ THE BAR IS CHECKOUT COUNT, NOT OUTPUT TEXT. Both requests produce correct output whether sharing
 # happened or not, so scoring on text would pass on a completely unwired feature. That exact trap
 # cost an hour on Qwen3.6 today: it built a paged pool, served perfect text, and never paged.
@@ -43,7 +50,7 @@ echo "shared prefix: $PREFIX_CHARS chars" | tee -a "$OUT"
 
 pkill -f "$SRV" >/dev/null 2>&1; sleep 2
 env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 nohup "$SRV" -m "$M" -ngl 99 -c 8192 -np 2 -b 512 -ub 512 \
-    --port $P --no-warmup -lv 4 --kv-paged --kv-block-size 16 -ngpub 512 -ncpub 128 \
+    --port $P --no-warmup -lv 4 --kv-paged --kv-block-size 16 -ngpub 512 -ncpub 128 -cram 0 \
     > "$LOGDIR/srv.log" 2>&1 &
 for _ in $(seq 1 200); do
     [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] && break
@@ -64,12 +71,24 @@ print(json.dumps({'prompt': p, 'n_predict': int(os.environ['NPRED']),
 }
 
 # A runs long so it is still in `running` when B is admitted.
-ask " Now write a long essay about rivers." 200 A &
+# ⚠ A MUST STILL BE LIVE WHEN B IS ADMITTED. This header has always said so; the first version used a
+# fixed 6s sleep and never CHECKED it. A finished in 4.8s, B was admitted 1.2s later, they never
+# overlapped -- and the resulting empty block tables sent me through four layers of the engine
+# chasing a defect that did not exist. n_predict is now large enough that A cannot finish early, and
+# the overlap is ASSERTED against A's release line rather than assumed.
+ask " Now write a long essay about rivers." 2000 A &
 pa=$!
-sleep 6                                  # let A finish prefill and enter decode
+# wait for A to actually be generating (prefill done), not a fixed sleep
+for _ in $(seq 1 60); do
+    grep -aq "paged: request registered" "$LOGDIR/srv.log" && break
+    sleep 1
+done
+sleep 4
+A_RELEASED_BEFORE=$(grep -ac "release: id" "$LOGDIR/srv.log")
 MARK=$(grep -ac "DS4P-CHECKOUT" "$LOGDIR/srv.log")
 ask " Now write a long essay about mountains." 16 B
-wait $pa 2>/dev/null
+A_RELEASED_AT_B=$A_RELEASED_BEFORE
+kill $pa 2>/dev/null; wait $pa 2>/dev/null
 pkill -f "$SRV" >/dev/null 2>&1; sleep 1
 
 echo "-----" | tee -a "$OUT"
@@ -102,6 +121,13 @@ echo "prompt tokens actually evaluated (request A): ${PROMPT_N:-unknown}" | tee 
 if [ -z "${PROMPT_N:-}" ] || [ "${PROMPT_N:-0}" -lt 64 ]; then
     echo "INCONCLUSIVE: the stimulus was only ${PROMPT_N:-0} tokens -- too short to span enough blocks" | tee -a "$OUT"
     echo "  at block_size 16 for block-level sharing to be observable. Fix the gate, not the feature." | tee -a "$OUT"
+    echo "log: $OUT"; exit 2
+fi
+
+# ⚠ OVERLAP PRECONDITION -- the one this gate always demanded and never enforced.
+if [ "${A_RELEASED_AT_B:-1}" -ne 0 ]; then
+    echo "INCONCLUSIVE: request A had already been released when B was admitted, so the two never" | tee -a "$OUT"
+    echo "  overlapped. Sharing scans LIVE sequences; with no live source this proves nothing." | tee -a "$OUT"
     echo "log: $OUT"; exit 2
 fi
 
