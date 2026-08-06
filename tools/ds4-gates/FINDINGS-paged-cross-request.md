@@ -82,6 +82,41 @@ the model or its YaRN extension.
 Both are **non-monotonic in length**: clean at 65,536 (32 ubatches, 4,096 blocks) with both failures
 present below it.
 
+## The onset moves with block size
+
+| config | 49,997 | 49,998 | |
+|---|---|---|---|
+| `--kv-block-size 16 -ub 2048` | CLEAN | **BROKEN** | onset here |
+| `--kv-block-size 64 -ub 2048` | CLEAN | CLEAN | onset elsewhere |
+
+At bs=64 the path is correct at **65,536 / 80,000 / 95,000** as well — every length reachable with
+this filler (100,833 tokens) and this `-c`. So the bs=64 onset is **above 95,000**, at least 1.9×
+past where bs=16 fails.
+
+**This is a lower bound, not a law.** It is consistent with the limit scaling with block size
+(4 × 49,998 = 199,992, unreachable here), and it is equally consistent with any other relation whose
+bs=64 value exceeds 95,000. "Clean everywhere reachable" bounds the onset from below and does
+nothing more.
+
+### Practical consequence, stated carefully
+
+`--kv-block-size 64` pushes the correctness limit past 95,000 tokens, where `--kv-block-size 16`
+fails at 49,998. That is a **mitigation, not a fix** — the onset still exists at bs=64, it has only
+been shown to be somewhere above 95,000. Do not read this as "bs=64 is safe".
+
+### The arithmetic that is still unexplained
+
+At bs=16, **both** 49,997 and 49,998 require 3,125 blocks (`ceil(n/16)`, and per-ubatch rounding
+gives `24×128 + 53 = 3,125` either way), and both pad to `n_kv = 50,000`. The block *count* cannot
+separate them. Yet the block *size* moves the onset by at least 1.9×. Something scales with block
+size without being the number of blocks.
+
+### The ubatch arm could not be run
+
+`llama-paged-scheduler.cpp:82` asserts `n_batch == ctx->n_ubatch()` — "kv_paged requires
+n_batch == n_ubatch" — so `-b 2048 -ub 512` aborts at startup. Varying the ubatch requires moving
+`-b` with it, which makes the arm two-factor. **Untested, not null.**
+
 ## Ruled out, with the test that ruled it out
 
 Each of these varied the factor and confirmed it varied before the outcome was read.
@@ -135,6 +170,7 @@ candidate is untested, not refuted.
   exact edge is where that assumption bites hardest, and it is the first thing to re-test.
 - ~~The edge was found on one token list.~~ **Tested and resolved:** a second, unrelated stimulus
   breaks at the identical token. The onset is a length.
-- The onset was measured at `--kv-block-size 16` on one config. Whether it moves with block size,
-  `-ub`, or `-c` is untested, and *that* is now the highest-value remaining experiment: if 49,998 is
-  invariant to all three, the count that matters is not any of them.
+- ~~Whether the onset moves with block size, `-ub` or `-c` is untested.~~ **Block size: tested, it
+  moves.** `-ub`: cannot be varied alone (assert above). `-c`: untested.
+- The bs=64 onset is bounded below at 95,000 and otherwise unknown. Reaching it needs a longer filler
+  and a larger `-c` than this box was configured with here.
