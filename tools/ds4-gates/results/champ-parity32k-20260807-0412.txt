@@ -1,0 +1,28 @@
+tip: afb2dd9d6 dirty=0  reps=4 ntok=65536
+  WARMUP     r1  prefill=102501.49  decode=41.61    out=[ Prague is the capital of France. Prague is ]
+  WARMUP     r2  prefill=102161.67  decode=45.00    out=[ Prague is the capital of France. Prague is ]
+  WARMUP     r3  prefill=101384.28  decode=41.10    out=[ Prague is the capital of France. Prague is ]
+  WARMUP     r4  prefill=102117.29  decode=43.42    out=[ Prague is the capital of France. Prague is ]
+  (warm-up half above is DISCARDED -- it measures the machine, not the kernel)
+  STATIC_A   r1  prefill=100835.87  decode=43.70    out=[ Prague is the capital of France. Prague is ]
+  STATIC_A   r2  prefill=101103.53  decode=42.05    out=[ Prague is the capital of France. Prague is ]
+  STATIC_A   r3  prefill=101990.84  decode=42.25    out=[ Prague is the capital of France. Prague is ]
+  STATIC_A   r4  prefill=101428.35  decode=43.56    out=[ Prague is the capital of France. Prague is ]
+  CHAMP_A    r1  prefill=101454.98  decode=44.67    out=[ Prague is the capital of France. Prague is ]
+  CHAMP_A    r2  prefill=99985.36   decode=43.07    out=[ Berlin was founded before Spain. Berlin was]
+  CHAMP_A    r3  prefill=101023.66  decode=42.37    out=[ Berlin was founded before Spain. Berlin was]
+  CHAMP_A    r4  prefill=101272.04  decode=41.98    out=[ Berlin was founded before Spain. Berlin was]
+  CHAMP_A champion marker count: 1
+  CHAMP_B    r1  prefill=100652.78  decode=40.08    out=[ Prague is the capital of France. Prague is ]
+  CHAMP_B    r2  prefill=99762.62   decode=41.77    out=[ Berlin was founded before Spain. Berlin was]
+  CHAMP_B    r3  prefill=101872.04  decode=40.23    out=[ Berlin was founded before Spain. Berlin was]
+  CHAMP_B    r4  prefill=100494.76  decode=44.49    out=[ Berlin was founded before Spain. Berlin was]
+  CHAMP_B champion marker count: 1
+  STATIC_B   r1  prefill=100790.42  decode=44.83    out=[ Prague is the capital of France. Prague is ]
+  STATIC_B   r2  prefill=100790.42  decode=44.83    out=[MALFORMED]
+  STATIC_B   r3  prefill=100790.42  decode=44.83    out=[MALFORMED]
+  STATIC_B   r4  prefill=100790.42  decode=44.83    out=[MALFORMED]
+-----
+VOID: 9 response(s) differ from the static reference.
+  reference:  Prague is the capital of France. Prague is 
+  first differing:  Berlin was founded before Spain. Berlin was

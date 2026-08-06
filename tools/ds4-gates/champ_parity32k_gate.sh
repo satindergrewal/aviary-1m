@@ -79,16 +79,20 @@ half() { # $1 label  $2 mode -> appends "ms" lines to $LOGDIR/$1.ms and text to 
         tail -10 "$LOGDIR/$1.log" | sed 's/^/  | /' | tee -a "$OUT"
         return 1
     fi
-    if [ ! -s "$LOGDIR/toks.json" ]; then
+    # ⚠ CACHE KEYED ON THE STIMULUS, NOT ON NOTHING. This was "if the file is missing, tokenise",
+    # with a fixed LOGDIR -- so a 64k invocation silently reused the 32k run's 50,473-token file and
+    # prefilled 50.5k while every line of output said 65,536. A cache keyed on nothing lies the moment
+    # you vary what it depends on.
+    if [ ! -s "$LOGDIR/toks-$NTOK.json" ]; then
         python3 -c "
 import json;print(json.dumps({'content':open('$LOGDIR/f.txt').read()}))" > "$LOGDIR/t.req"
         curl -s --max-time 300 -X POST http://127.0.0.1:$P/tokenize -H 'Content-Type: application/json' -d @"$LOGDIR/t.req" > "$LOGDIR/t.json"
         python3 -c "
 import json;t=json.load(open('$LOGDIR/t.json'))['tokens']
-open('$LOGDIR/toks.json','w').write(json.dumps(t));print('  filler tokens:',len(t))" | tee -a "$OUT"
+open('$LOGDIR/toks-$NTOK.json','w').write(json.dumps(t));print('  filler tokens:',len(t))" | tee -a "$OUT"
     fi
     python3 -c "
-import json;t=json.load(open('$LOGDIR/toks.json'))[:$NTOK]
+import json;t=json.load(open('$LOGDIR/toks-$NTOK.json'))[:$NTOK]
 print(json.dumps({'prompt':t,'n_predict':${PT_NPRED:-24},'temperature':0,'seed':1,'cache_prompt':False}))" > "$LOGDIR/$1.req"
     : > "$LOGDIR/$1.ms"; : > "$LOGDIR/$1.txt"; : > "$LOGDIR/$1.tps"
     for r in $(seq 1 "$REPS"); do
