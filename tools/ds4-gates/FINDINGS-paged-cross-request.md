@@ -23,9 +23,28 @@ harness, `toks[:N]` from one token list:
 
 **Clean at 49,997, broken at 49,998.** Static is coherent on both sides.
 
+### Confirmed as a LENGTH, on an unrelated prompt
+
+The onset reproduces at the **identical token** on a second stimulus with a different seed *and* a
+different vocabulary (people/verbs/CS-objects — no cities, no countries, no shared prefix):
+
+| N | static | paged | verdict |
+|---|---|---|---|
+| 49,997 | ` formalised a type system. Barbara formalise` | same | **matches** |
+| 49,998 | `ised a type system. Barbara formalised a typ` | ` /f ,  s, -在家之间的` | **differs** |
+
+Two unrelated prompts, one onset. This is a property of the code, not of a prompt.
+
+This test was pre-registered to be able to demote the finding — a clean alt result would have made
+the edge "the onset *for this prompt*" and required a second correction here. It broke at the same
+token instead.
+
 The edge sits on nothing structural. 49,997 is odd — not a multiple of the block size (16), the
-ubatch (2,048), or any power of two — and the path handles it perfectly. `grep` for a matching
+ubatch (2,048), or any power of two — and the path handles it perfectly. Both 49,997 and 49,998
+require the same 3,125 blocks at bs=16, so it is not the cache geometry. `grep` for a matching
 constant in `src/` and `tools/server/` returns nothing but an unrelated RoPE θ and a comment.
+
+Something counts tokens and stops being right one token before 50,000.
 
 Past the edge the corruption is **graded but not monotonic**: 49,998 is severe garbage, 49,999 is
 fluent and merely wrong, 50,000 degenerates again. Severity past the onset appears data-dependent.
@@ -114,5 +133,8 @@ candidate is untested, not refuted.
 - Every bisect point is **n=1 per length**. The defect was deterministic across ~30 arms (identical
   wrong text under poison, under FIFO, across disjoint block ranges), so n=1 is defensible — but the
   exact edge is where that assumption bites hardest, and it is the first thing to re-test.
-- The edge was found on **one token list**. Whether a different stimulus has its edge at the same N is
-  untested. If it does not, the onset is not a length at all and that reframes the whole search.
+- ~~The edge was found on one token list.~~ **Tested and resolved:** a second, unrelated stimulus
+  breaks at the identical token. The onset is a length.
+- The onset was measured at `--kv-block-size 16` on one config. Whether it moves with block size,
+  `-ub`, or `-c` is untested, and *that* is now the highest-value remaining experiment: if 49,998 is
+  invariant to all three, the count that matters is not any of them.
