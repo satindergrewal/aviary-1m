@@ -1,4 +1,4 @@
-# Paged KV: two correctness defects past ~50k tokens
+# Paged KV: one graded correctness defect with a single-token onset
 
 **Status: OPEN, blocking, NOT champion-specific, predates the 2026-08-06/07 kernel work.**
 
@@ -7,7 +7,41 @@ Ornith-1.0-9B-1M IQ2_M, `-c 73728 -np 1 -b 2048 -ub 2048 -cram 0`, `cache_prompt
 `temperature 0`, `seed 1`. Each length is `toks[:N]` from one token list with the length **asserted**
 in the harness, not labelled.
 
-## The two failures
+## The onset is a single token
+
+Bisected with a **static reference measured in the same run** at every point, lengths asserted in the
+harness, `toks[:N]` from one token list:
+
+| N | paged vs static | paged output |
+|---|---|---|
+| 49,996 | matches, char for char | ` Dublin is the capital of Spain. Prague is t` |
+| **49,997** | **matches** | ` is the capital of Germany. Prague is the ca` |
+| **49,998** | **differs** | ` H and 和Q of/路 ） NOTE –` |
+| 49,999 | differs | ` before Germany. Berlin was founded before G` (fluent) |
+| 50,000 | differs | ` Germany was the - - - - ` |
+| 50,008 | differs | `. - - - - - ` |
+
+**Clean at 49,997, broken at 49,998.** Static is coherent on both sides.
+
+The edge sits on nothing structural. 49,997 is odd — not a multiple of the block size (16), the
+ubatch (2,048), or any power of two — and the path handles it perfectly. `grep` for a matching
+constant in `src/` and `tools/server/` returns nothing but an unrelated RoPE θ and a comment.
+
+Past the edge the corruption is **graded but not monotonic**: 49,998 is severe garbage, 49,999 is
+fluent and merely wrong, 50,000 degenerates again. Severity past the onset appears data-dependent.
+
+### Correction to an earlier reading
+
+This document previously claimed **two** distinct defects — "A degenerate, including request 1" and
+"B cross-request, request 1 correct". That split came from a comparator that only asked `r1 == r2`,
+before a static column existed at every point. 49,999 is fluent-and-wrong **on request 1**, which
+breaks the dividing line. One graded defect fits all the data; two defects fit only the subset
+available when the split was written.
+
+The cross-request pattern at 50,473 is most likely the same fault far enough past the onset that
+request 1 still survives and later ones do not.
+
+## The failures as originally observed
 
 Static is the reference and is **fluent and coherent at every length below**, so neither failure is
 the model or its YaRN extension.
@@ -68,4 +102,17 @@ candidate is untested, not refuted.
 4. **One probe at a time, kill by PID.** Detached scripts sharing `pkill -f llama-server` destroyed
    each other's servers; one lurked for hours.
 5. **A comparator needs an external reference.** `r1 == r2` reported CLEAN for two requests agreeing
-   on garbage. One static column re-interpreted an entire sweep.
+   on garbage. One static column re-interpreted an entire sweep — and then overturned the
+   two-defect reading above.
+6. **Bisection beat reasoning twice in one session, on the same lane.** Ten mechanisms proposed and
+   refuted over hours; six bisect steps in ~90 minutes produced a single-token edge. The one earlier
+   diagnosis that worked — the decode kernel — also fell out of a split (prefill passes, incremental
+   fails), not out of theory.
+
+## Stated limits
+
+- Every bisect point is **n=1 per length**. The defect was deterministic across ~30 arms (identical
+  wrong text under poison, under FIFO, across disjoint block ranges), so n=1 is defensible — but the
+  exact edge is where that assumption bites hardest, and it is the first thing to re-test.
+- The edge was found on **one token list**. Whether a different stimulus has its edge at the same N is
+  untested. If it does not, the onset is not a length at all and that reframes the whole search.
