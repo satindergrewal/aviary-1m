@@ -153,6 +153,13 @@ downloaded before its serve check can run.
 | arch | vehicle | static | paged | paged markers | static-path fallbacks |
 |---|---|---|---|---|---|
 | `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | ` Paris.` | ` Paris.` | **3** | **0** |
+| `qwen3vl` | Qwen3-VL-4B-Instruct Q4_K_M | ` Tokyo, and the capital city of China` | identical | **3** | **0** |
+
+⚠ **Read the arch from `print_info`, never from the repo name.** A StarCoder2-3B download loaded as
+`arch = starcoder2` → `starcoder2.cpp`, which is *not* the file that was wired (`starcoder.cpp`). That
+run looked like a pass — correct output — and verified nothing. The tell was `static-path-warns = 0`
+in the **static** arm, meaning the wired file was never in the graph at all. A fallback counter that
+can only read 0 proves nothing; `ernie4-5` read 234 and `qwen3vl` 468 before reading 0 under paging.
 
 Both parts of the closure criterion met: correct text **and** the paged path confirmed active, with
 zero layers falling back. The static arm's 234 fallback warnings are the negative control — the
@@ -221,7 +228,7 @@ silently wrong at long context.
 
 | phase | status | what is NOT verifiably closed |
 |---|---|---|
-| 3b hybrid paging | **PARTIAL** — 15 of 19 wired, **1 serve-verified** (`ernie4-5`), 22 archs total | none is serve-verified; no local GGUFs; `gemma4-assistant` blocked on read-only; 3 specials need their own cache work |
+| 3b hybrid paging | **PARTIAL** — 15 of 19 wired, **2 serve-verified** (`ernie4-5`, `qwen3vl`), 22 archs total | none is serve-verified; no local GGUFs; `gemma4-assistant` blocked on read-only; 3 specials need their own cache work |
 | B4 arcs 2-3 (q8 banded) | **CLOSED** — `test-paged-vs-cpu` ALL PASSED, q8_0 at the f16 error scale, champion marker asserted | q8_0 end-to-end on a real model; anything about speed |
 | paged op: attention sinks | **CLOSED on the champion**, verified | scalar-kernel sinks (ABORT-guarded); no end-to-end model run |
 | paged op: non-causal mode | **CLOSED**, verified with a differs-from-causal control | no end-to-end model run |
