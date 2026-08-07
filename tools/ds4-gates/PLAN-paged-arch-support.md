@@ -293,7 +293,8 @@ Every row below has its arch read out of the candidate GGUF's own header by
 | `dflash` | Qwen3.5-4B-DFlash Q4_K_M · MATCH | 0.38 GB | ⛔ **BLOCKED — paged loop cannot speculate** (harness ran; see FINDINGS) | Mac |
 | `eagle3` | Qwen3-8B-EAGLE3-Speculator F16 · MATCH | 2.05 GB | ⛔ **BLOCKED — paged loop cannot speculate.** 2.05 GB deliberately UNSPENT, see below | Mac |
 | `gemma4-assistant` | gemma-4-E2B-it-assistant F16 · MATCH | 0.17 GB | ⛔ **BLOCKED — paged loop cannot speculate** (wiring done, serve-untested) | Mac |
-| `gemma4` *(bonus, NOT on the 19)* | Gemma4-26B-A4B-Uncensored-1M Q4_K_M (local) | 16.80 GB | ⚠ **PASS under `DS4P_PAGED_SWA=1` only** | Mac |
+| `gemma4` *(bonus, NOT on the 19)* | Gemma4-26B-A4B-Uncensored-1M Q4_K_M | 16.80 GB | ⚠ **PASS under `DS4P_PAGED_SWA=1`, and CHECKPOINT-SPECIFIC** — see below | Mac |
+| `gemma4` *(E2B class)* | gemma-4-E2B-it Q4_K_M | 3.11 GB | ⛔ **REFUSED — KV-sharing split-brain** (`FINDINGS-paged-kv-sharing-splitbrain.md`) | Mac |
 | `ernie4_5-moe` | ERNIE-4.5-21B-A3B-Thinking **Q4_K_M** · MATCH | **13.33 GB** | ✅ **SERVE-VERIFIED** | Mac |
 | `qwen3vlmoe` ⚠ | Qwen3-VL-30B-A3B-Instruct **Q4_K_M** · MATCH | **18.56 GB** | ✅ **SERVE-VERIFIED (TEXT ONLY)** | Mac |
 | `laguna` | Laguna-S-2.1 Q8_0, 4 shards · MATCH | 256×4.5B | searched | **box** |
@@ -317,6 +318,28 @@ sorting a list by size. The anchor was in this file: `qwen3vlmoe` is the same 30
 `general.architecture = dflash-draft` in the header — an arch string that **does not exist in
 `llama-arch.cpp` at all**. It would not have loaded as anything, after 5.54 GB. Same shape as the
 starcoder2 mistake with different nouns.
+
+### ⛔ DEFECT 5: KV-sharing architectures run split-brain under `--kv-paged`
+
+Full write-up: **`FINDINGS-paged-kv-sharing-splitbrain.md`**. Guarded in the fork (`49b93a15c`) —
+`--kv-paged` is now REFUSED when only some layers own KV, instead of answering wrong.
+
+```
+gemma-4-E2B-it   15 of 35 layers own KV    static " Paris."   paged " a."     REFUSED now
+gemma4-26B-A4B   all 30 own KV             PASSES, 240 consume events
+```
+
+⚠ **This makes the `gemma4` bonus row checkpoint-specific.** "gemma4 passes" was true of the 26B and
+false of the E2B class, on the same binary — the second time in one day the discriminating fact lived
+in the **checkpoint** rather than the code (the first was fused-QKV on `starcoder`).
+
+⚠ **And it adds a second dependency to `gemma4-assistant`.** Its only viable target is
+`gemma-4-E2B-it` — `embedding_length_out = 1536` hard-couples them — so that row now needs *both*
+paged speculation *and* this defect fixed.
+
+**The real fix is scoped to machinery that already exists:** route shared layers to the paged pool as
+**read-only** calls at the reuse index. Read-only paged attention landed the same day (`cce5d6959`),
+and the index mapping is already implemented as the `layer_reuse_cb` at `llama-model.cpp:2431`.
 
 ### ⛔ The three draft-head rows are BLOCKED on a MISSING FEATURE, not on a harness
 
