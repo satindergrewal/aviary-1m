@@ -148,14 +148,31 @@ Locally present under `ornith-models/`:
 directory**, which is the special case above. So every one of the 16 standard wirings needs a quant
 downloaded before its serve check can run.
 
-**TO MEASURE, not to estimate** — for each of the 16, before any wiring:
-1. smallest published GGUF that exercises the arch (the wiring is arch-shaped, not size-shaped, so the
-   *smallest* variant is the right test vehicle)
-2. its on-disk size
-3. whether it fits this Mac's working set alongside a paged pool
+### Test-vehicle sizing — the wiring is arch-shaped, not size-shaped
 
-That list is the input to the box schedule and it does not exist yet. **It is the next measurement,
-and it is cheap** — a search per model, no GPU time.
+The paged consumer is per-architecture, so the **smallest published variant of each family** is the
+correct serve-check vehicle. A 0.3B ERNIE exercises `ernie4-5.cpp` exactly as a 21B does.
+
+| arch | smallest published GGUF vehicle | approx size | verified | side |
+|---|---|---|---|---|
+| `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | **241 MB** | ✅ searched | Mac |
+| `qwen3vl` / `qwen3vlmoe` | Qwen3-VL-4B-Instruct Q4_K_M | **~2.5 GB** (Q3_K_M ~2.08 GB) | ✅ searched | Mac |
+| `hunyuan-moe` | Hunyuan-A13B-Instruct — 80B total / 13B active | **~34 GiB** at IQ3_KS | ✅ searched | **box** |
+| `qwen3moe` | Qwen3-30B-A3B class | not yet searched | ❌ | probably Mac |
+| `qwen3next` | — | not yet searched | ❌ | ? |
+| `nemotron` | — | not yet searched | ❌ | ? |
+| `starcoder` | — | not yet searched | ❌ | probably Mac |
+| `grok` | Grok-1 class | not yet searched | ❌ | **box** |
+| `eagle3` | draft-head arch, pairs with a target | not yet searched | ❌ | ? |
+| `laguna` `mimo2` `step35` `dflash` `hunyuan-vl` `ernie4-5-moe` | — | not yet searched | ❌ | ? |
+
+**Three verified, twelve not.** The three that are verified came from one search each and took a
+couple of minutes; the rest is the same work, not harder work. Recorded as ❌ rather than filled with
+plausible numbers — an invented size is worse than a blank, because it silently becomes a schedule.
+
+**Mac/box split, from what is verified:** ERNIE-4.5-0.3B and Qwen3-VL-4B run here comfortably.
+Hunyuan-A13B at ~34 GiB does not leave room for a paged pool alongside on a 128 GB box shared with
+other work — that one is a box job.
 
 ### Closure criteria per model
 
