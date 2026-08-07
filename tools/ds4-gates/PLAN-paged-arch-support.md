@@ -283,15 +283,15 @@ Every row below has its arch read out of the candidate GGUF's own header by
 | `eagle3` | Qwen3-8B-EAGLE3-Speculator F16 · MATCH | 2.05 GB | ⛔ **UNANSWERED — draft head** (same code path; not downloaded) | Mac |
 | `gemma4-assistant` | gemma-4-E2B-it-assistant **F16** · MATCH | **0.17 GB** | 🔧 WIRED + read-only done — **but it is a DRAFT HEAD**, needs the target+draft harness | Mac |
 | `gemma4` *(bonus, NOT on the 19)* | Gemma4-26B-A4B-Uncensored-1M Q4_K_M (local) | 16.80 GB | ⚠ **PASS under `DS4P_PAGED_SWA=1` only** | Mac |
-| `ernie4_5-moe` | ERNIE-4.5-21B-A3B-Thinking **Q4_K_M** · MATCH | **13.33 GB** | ready to fetch | Mac |
-| `qwen3vlmoe` | Qwen3-VL-30B-A3B-Instruct **Q4_K_M** · MATCH | **18.56 GB** | ready to fetch | Mac |
+| `ernie4_5-moe` | ERNIE-4.5-21B-A3B-Thinking **Q4_K_M** · MATCH | **13.33 GB** | ✅ **SERVE-VERIFIED** | Mac |
+| `qwen3vlmoe` | Qwen3-VL-30B-A3B-Instruct **Q4_K_M** · MATCH | **18.56 GB** | ✅ **SERVE-VERIFIED** | Mac |
 | `laguna` | Laguna-S-2.1 Q8_0, 4 shards · MATCH | 256×4.5B | searched | **box** |
 | `mimo2` | MiMo-V2.5 UD-Q4_K_S, 5 shards · MATCH | 256×8.2B | searched | **box** |
 | `step35` | Step-3.5-Flash Q4_K · MATCH | 118.71 GB | searched | **box** |
 | `hunyuan-moe` | Hunyuan-A13B-Instruct | ~34 GiB IQ3_KS | searched | **box** |
-| `qwen3next` | Qwen3-Next-80B-A3B | 80B | searched | **box** |
-| `grok` | Grok-1 class | 314B | searched | **box** |
-| `minimax-m3` | MiniMax-M3 | large | searched | **box** |
+| `qwen3next` | Qwen3-Next-80B-A3B · **MATCH** | 80B | probed | **box** |
+| `grok` | Arki05/Grok-1-GGUF · **MATCH** | 314B | probed | **box** |
+| `minimax-m3` | unsloth/MiniMax-M3-GGUF · **MATCH** | large | probed | **box** |
 | `deepseek4` | DeepSeek-V4-Flash-0731 | large | searched | **box** |
 
 ⚠ **The MoE sizes above are Q4-class and that correction matters.** They were first recorded as
