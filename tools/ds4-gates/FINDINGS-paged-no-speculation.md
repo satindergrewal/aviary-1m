@@ -222,8 +222,33 @@ The discriminating check is **arm (c) paged acceptance ≈ arm (b) static accept
 | `dflash` + Qwen3.5-4B | **13 / 27** |
 | `gemma4-assistant` + gemma-4-E2B-it | **11 / 33** |
 
-Materially below that = mirror or context bug, **not noise**. On record before the feature exists so
-it can embarrass me.
+**⚠ "Comparable" is not a criterion. The tolerance is fixed HERE, before the feature exists:**
+
+> **PASS** = arm (c) paged acceptance ratio within **±0.15 absolute** of arm (b) static acceptance
+> ratio, over **3 reps at fixed seed** on the same pair. Outside that = FAIL, investigate the mirror
+> or the context, not the noise.
+
+Those baselines are single samples (13/27 = 0.48, 11/33 = 0.33) on 24-token greedy runs, so the gate
+must also **measure arm (b)'s own rep-to-rep spread before the feature lands** — if static acceptance
+itself varies by more than ±0.15 across reps, the tolerance is too tight and must be widened *on that
+measurement*, not on the paged result.
+
+Leaving "comparable" undefined until after the run means defining the bar while looking at the answer.
+That is the impossible-bar scar from the other direction, and it is the easiest one to walk into
+because it never feels like cheating.
+
+**Pre-registered mutation test** — the one that could not be built for read-only, and can be built
+here. Temporarily force `accepted = submitted` (accept everything, verify nothing). Output MUST
+diverge from static within a few tokens, because the `dflash` baseline says roughly half its proposals
+are wrong. Three states, same shape as the contiguity assert:
+
+| state | expected |
+|---|---|
+| feature + check | PASS, output identical to static |
+| accept-everything mutation | check goes RED |
+| no check at all | silently wrong, which is today |
+
+On record before the feature exists so it can embarrass me.
 
 ⚠ The `gemma4-assistant` pair additionally needs the KV-sharing fix — its only viable target is
 `gemma-4-E2B-it`, which is now REFUSED under `--kv-paged`. `dflash` + Qwen3.5-4B is the usable pair.
