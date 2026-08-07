@@ -409,3 +409,48 @@ demonstrably paged. Third instance tonight of reading a 0 from a filtered log li
 ⚠ Three runs tonight were silently killed by **zsh not word-splitting unquoted parameter expansions**
 (`DP_FLAGS`, the ngram `--spec-type`, and this `--kv-block-size 64`). The server rejected the joined
 argument and the run produced a plausible-looking zero. Pass server flags inline, never via `$var`.
+
+---
+
+# Champion verified on five architectures — the default-on case
+
+`--kv-block-size 64`, `DS4P_METAL_CHAMP=1`, `-lv 4`, `--no-kv-unified`, 4K context, greedy:
+
+| arch | pool | guard | `CHAMP-PAGED ACTIVE` | output |
+|---|---|---|---|---|
+| ornith9b | 1 | 0 | yes | coherent; **needle found at 225k** |
+| qwen35 | 1 | 0 | yes | **byte-identical to the static fallback** |
+| starcoder | 1 | 0 | yes | coherent code continuation |
+| ernie45 | 1 | 0 | yes | `[Paris, London, Berlin]` — correct |
+| nemotron | 1 | 0 | yes | coherent |
+
+Three of these (qwen35, starcoder, nemotron) the champion had never served before.
+
+## The trap generalises beyond one model
+`qwen35` at `--kv-block-size 64` **without** the champion is also `pool=1 guard=1` — pool built but
+dead. Second model, same failure. This kills the attention-sinks explanation offered earlier: it is a
+property of the **block size / kernel pairing**, not of one model's sinks.
+
+The failing arm logs `CHAMP-PAGED REFUSED`. So the champion is being *asked* and correctly declining —
+and then **nothing else serves bs=64**. The precise bug is not "the flag disables paging"; it is
+**no fallback exists for the geometry the champion declines.**
+
+## Recommendation (not applied — default-behaviour change, owner's call)
+Make `DS4P_METAL_CHAMP` default **true**, keep `=0` as explicit opt-out:
+
+```cpp
+ggml_metal_paged_champ_enabled() -> return e ? atoi(e) != 0 : true;
+```
+
+**For:** five archs page correctly under it · measured faster (decode 1.68x, n=2, both arm orders,
+prefill parity) · it is the only kernel that serves bs=64 · it already **fails safe**, declining to
+the scalar path when preconditions do not hold (that refusal machinery is already written and
+exercised) · the current default is the one that silently breaks.
+
+**Against:** these are 20-24 token greedy completions at 4K — a smoke test, not a correctness suite.
+One long-context correctness datapoint under champion (ornith9b, 225k) and none for the other four.
+A default flip changes the kernel for every paged request.
+
+With the default flipped, both geometries work: bs=16 → champion refuses → scalar serves;
+bs=64 → champion serves. The only broken combination today is the one the env var currently prevents
+fixing.
