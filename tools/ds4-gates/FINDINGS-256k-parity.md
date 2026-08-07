@@ -231,3 +231,64 @@ nothing later reads as an untried idea.
 - Graph reuse (`can_reuse` hard-returns false for paged) still **specified and unbuilt**.
 - Per-batch timing for the paged loop still missing, so the 20k-bin curve remains uncomputable there.
 - Metal/CUDA parity, 512k–1M ladder, multi-model: untouched.
+
+---
+
+# DRIFT MEASURED — cross-arm comparisons made hours apart are partly measuring the clock
+
+Replication in **reverse arm order** (paged first, static second) to test reproducibility and arm
+order together.
+
+| arm | position | wall | prefill | decode | needle |
+|---|---|---|---|---|---|
+| static | 1st (forward pair) | 1102 s | 204.4 tok/s | 15.0 tok/s | found |
+| static | **2nd (reverse pair)** | **1187 s** | 189.7 tok/s | 14.5 tok/s | found |
+| paged+champ | 2nd (forward pair) | 1091 s | 206.4 tok/s | 25.5 tok/s | found |
+| paged+champ | **1st (reverse pair)** | **1064 s** | 211.6 tok/s | 24.0 tok/s | found |
+
+**Position 2 costs 2.5% (paged) to 7.7% (static).** The box has drifted over ~15 hours at sustained
+99% GPU. This was pre-registered as the outcome that would invalidate banked results, *before* the
+number existed.
+
+## What survives
+
+**Paged wins in BOTH orders:**
+
+| pair | comparison | paged advantage |
+|---|---|---|
+| forward | static(pos1) 1102 vs paged(pos2) 1091 | 1.0% — **won from the disadvantaged slot** |
+| reverse | paged(pos1) 1064 vs static(pos2) 1187 | 10.4% |
+
+True wall advantage is roughly **5-6%**, not the 1% or 10% either single pair suggests.
+
+**Decode is robust to drift and is the largest effect:**
+static 15.0 / 14.5 tok/s vs paged 25.5 / 24.0 tok/s → **~1.68x, both orders, n=2 each.**
+
+## What this costs the champion attribution
+
+Arms A and B were one-variable by **configuration** but **hours apart** in wall clock, with unrelated
+runs between them. With drift now measured at 7.7%, that gap is a second variable and the attribution
+inherits it. Re-running A and B once more reproduces the same flaw with fresh numbers.
+
+**Fix is interleaving, not repetition:** `A B A B` back to back, reporting *paired differences*. Drift
+slow relative to a pair cancels in the difference; drift fast enough to matter shows up as
+disagreement between pair 1 and pair 2 — which is the detector. (This is what the lane's own scar file
+already prescribed: "interleave + rotate + fresh + repeat control". Reverse-order alone is half of it.)
+
+## The kernel assert reached iteration 6, and iteration 5 was a different axis
+
+| # | defeat | axis |
+|---|---|---|
+| 1 | wrong case (`champ` vs `CHAMP`) | how it reads |
+| 2 | wrong time (checked before any dispatch) | how it reads |
+| 3 | wrong variant (`CHAMP-PAGED ACTIVE` vs `CHAMP-VEC`) | how it reads |
+| 4 | no case for the STATIC arm (legitimately has no paged kernel) | how it reads |
+| 5 | **identify vs verify** — added an *expected* kernel per arm | **what it reads for** |
+| 6 | 1-token warmup takes the vec path; scalar emits no marker there | how it reads |
+
+Iterations 1-4 and 6 were all the same class: assumptions about a marker's exact form. **Iteration 5
+is the one that matters** — run 1's confounded verdict was not "we didn't know the kernel", it was
+"the arm ran a different kernel than I believed". Identification cannot catch that; only a declared
+expectation can. It would have aborted run 1 at minute one.
+
+**Zero false greens across all six.** Every failure was a refusal.
