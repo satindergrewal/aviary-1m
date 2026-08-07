@@ -1,0 +1,12 @@
+arch-serve gate: expected arch=gemma4  model=gemma4-26b-a4b-uncensored-1M-Q4_K_M.gguf
+tip: df17cee79 dirty=0  -c 4096
+  STATIC  arch=gemma4         out=[ Paris. <|channel>3.5.]
+          static-path warns=720    cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+  PAGED   arch=gemma4         out=[ Paris. <|channel>3.5.]
+          static-path warns=630    cap-fails=0     headdim-fails=0     pool=1
+          DS4P-CONSUME banded=240    auto=0
+-----
+  consumer funnel: banded
+*** PARTIAL: 630 layer-fallbacks under paging (nopg=630 cap=0 headdim=0).
+    The fallback path is correct BY DESIGN, so output may still match -- but this arch is
+    not fully carried by the paged path and must NOT be recorded as verified.
