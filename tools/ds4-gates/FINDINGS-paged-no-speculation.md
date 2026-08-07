@@ -240,6 +240,41 @@ Two placement failures on the way, both caught by the test rather than by inspec
 ⇒ **Make the run testify which branch it took.** One `printf` converts an inference into a
 measurement, and it found all four vacuities in this session.
 
+### The 68-line audit — sorted by WHICH CONTEXT each line touches
+
+The sort key that makes this tractable comes from a fix landed earlier the same day: `604c2858a`
+forces the **draft context static**. So draft-side machinery carries over nearly unchanged, and only
+target-side KV operations can be wrongly ported.
+
+| bucket | lines | verdict |
+|---|---|---|
+| `ctx_dft` — draft-context checkpoints, `use_ckpt_dft`, draft params | 17 | **applies ~unchanged** — that KV is static by construction |
+| `ctx_tgt` — target KV ops | 13 | **mostly DROPS OUT**, see below |
+| neither — draft generation + bookkeeping | 55 | the straightforward part (`common_speculative_draft`, draft params, partial-draft reuse) |
+
+**The `ctx_tgt` bucket largely evaporates, for two independent reasons:**
+
+1. **Context shift is not reachable on the paged path.** The cluster at `:3550`
+   (`seq_rm(slot.id, n_keep, n_keep + n_discard)` + `seq_add`) is the context-shift block. Measured on
+   `update_slots_paged()`:
+
+   | token | in the paged loop? |
+   |---|---|
+   | `n_keep` | **no** |
+   | `n_discard` | **no** |
+   | `shift` / "context shift" | **no** |
+
+   The scheduler owns positions and never shifts, so this whole cluster is out of scope. One read, one
+   decision, a third of the risky bucket gone.
+
+2. **Target-side rollback checkpoints are unnecessary.** `use_ckpt_tgt` exists because some contexts
+   cannot do a partial `seq_rm` and must snapshot instead — it is rollback machinery. The paged path
+   has **no rollback**: rejected tokens leave KV past the new `n_past` and the next step overwrites
+   them (`DS4P_SLOT_COVER`). The accepted count *is* the rollback.
+
+⇒ What remains is draft generation plus draft-context bookkeeping, on a context that is now static.
+**The audit collapsed the bucket that could have produced a wrong port.**
+
 ### ⚠ THE PREFIX-TRUNCATION CONTRACT — the loop half must size against `batch_lens`, never its own draft
 
 B's chunker **clamps**:
