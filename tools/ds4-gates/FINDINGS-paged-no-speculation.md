@@ -209,6 +209,37 @@ Every scoping claim on this rock has been true of the layer read and silent abou
 three times, in both directions. The response is not another qualified claim; it is to stop publishing
 scope until the layer below has been read.
 
+### ⚠ The scheduler half is exercised on BOTH branches — and getting there took two vacuities
+
+`test-paged-kv-e2e` stages real drafts and **prints which branch it took**:
+
+```
+draft probe took the REJECT branch (n_acc=1 of 2)
+multi-accept probe n_past 24 -> 26, logical 25 -> 27 (want +2, +2)
+```
+
+**The first probe covered only the reject shape.** It staged `draft_tok = next` — the token just
+appended — so acceptance needed the model to repeat itself immediately. The proof was already in the
+mutation result and went unread: `n_past += n_sub` went red, which is only possible when
+`n_acc != n_sub`, i.e. the reject branch.
+
+**And the multi-accept probe passed a mutation before it was finished.** Capping the append loop at
+one token still went green, because the probe only asserted `n_past` — which advances by `n_acc`
+*whatever the append does*. Advance-count and append-count are different quantities; a probe checking
+one is blind to the other. `llama_paged_seq_state::n_logical` exists for exactly this, and the header
+says so.
+
+Two placement failures on the way, both caught by the test rather than by inspection:
+
+| attempt | failure |
+|---|---|
+| gate the probe on "token stream complete" | **vacuous** — the reject probe runs early, when the stream is short, so the gate skipped the accept path on every run and printed PASSED |
+| fire it after the stopping `update()` | the group was already FINISHED and removed from `id_to_group`, so `set_draft` returned false |
+
+⇒ **Mutate each invariant separately.** A mutation of the counter says nothing about the append.
+⇒ **Make the run testify which branch it took.** One `printf` converts an inference into a
+measurement, and it found all four vacuities in this session.
+
 ### The server-loop half — read, not yet written
 
 The three consumption call sites, read before designing:
