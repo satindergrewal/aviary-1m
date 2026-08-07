@@ -262,22 +262,71 @@ the serve check reads `print_info: arch` rather than the filename.
 The paged consumer is per-architecture, so the **smallest published variant of each family** is the
 correct serve-check vehicle. A 0.3B ERNIE exercises `ernie4-5.cpp` exactly as a 21B does.
 
-| arch | smallest published GGUF vehicle | approx size | verified | side |
-|---|---|---|---|---|
-| `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | **241 MB** | ✅ **downloaded + SERVE-VERIFIED** | Mac |
-| `qwen3vl` / `qwen3vlmoe` | Qwen3-VL-4B-Instruct Q4_K_M | **~2.5 GB** (Q3_K_M ~2.08 GB) | ✅ searched | Mac |
-| `hunyuan-moe` | Hunyuan-A13B-Instruct — 80B total / 13B active | **~34 GiB** at IQ3_KS | ✅ searched | **box** |
-| `qwen3moe` | Qwen3-30B-A3B **Q4_K_M** (not Q2_K — see note) | **17.35 GB** | ✅ **downloaded + SERVE-VERIFIED** | Mac |
-| `qwen3next` | Qwen3-Next-80B-A3B | sizes not published in results | ⚠ partial | **box** (80B) |
-| `nemotron` | **Nemotron-Mini-4B-Instruct** Q4_K_M (not the Llama-derived Nano) | **2.51 GB** | ✅ **downloaded + SERVE-VERIFIED** | Mac |
-| `starcoder` | ~~StarCoder2-3B~~ → needs **StarCoder-1** | not yet sized | ⚠ arch corrected, size unsearched | Mac |
-| `grok` | Grok-1 class | not yet searched | ❌ | **box** |
-| `eagle3` | draft-head arch, pairs with a target | not yet searched | ❌ | ? |
-| `laguna` `mimo2` `step35` `dflash` `hunyuan-vl` `ernie4-5-moe` | — | not yet searched | ❌ | ? |
+Every row below has its arch read out of the candidate GGUF's own header by
+`gguf_arch_probe.py --expect <arch>` **before** any bytes were spent. `MATCH` means the file's
+`general.architecture` string was read and compared, not that the repo name looked right.
 
-**Four vehicles verified, two arch-corrected and unsized, one partial, eight not searched.** The three that are verified came from one search each and took a
-couple of minutes; the rest is the same work, not harder work. Recorded as ❌ rather than filled with
-plausible numbers — an invented size is worse than a blank, because it silently becomes a schedule.
+| arch | vehicle (arch probed in-header) | size | status | side |
+|---|---|---|---|---|
+| `ernie4_5` | ERNIE-4.5-0.3B-PT Q4_K_M | 241 MB | ✅ **SERVE-VERIFIED** | Mac |
+| `qwen3vl` | Qwen3-VL-4B-Instruct Q4_K_M | 2.50 GB | ✅ **SERVE-VERIFIED** | Mac |
+| `nemotron` | Nemotron-Mini-4B-Instruct Q4_K_M | 2.51 GB | ✅ **SERVE-VERIFIED** | Mac |
+| `qwen3moe` | Qwen3-30B-A3B Q4_K_M | 17.35 GB | ✅ **SERVE-VERIFIED** | Mac |
+| `starcoder` | StarCoderBase-1B Q8_0 · MATCH | 1.26 GB | ⬇ downloading | Mac |
+| `hunyuan_vl` | HunyuanOCR Q8_0 · MATCH | 0.58 GB | ⛔ **UNANSWERED — vehicle unusable**, see below | Mac |
+| `dflash` | Qwen3.5-4B-DFlash Q4_K_M · MATCH | 0.38 GB | ⛔ **UNANSWERED — draft head**, see below | Mac |
+| `eagle3` | Qwen3-8B-EAGLE3-Speculator F16 · MATCH | 2.05 GB | ⛔ **UNANSWERED — draft head** (same code path; not downloaded) | Mac |
+| `gemma4` | Gemma4-12B-Uncensored-1.5M Q4 (local) | 7.38 GB | ⛔ **UNANSWERED** — degenerate static reference **and** SWA-guarded | Mac |
+| `ernie4_5-moe` | ERNIE-4.5-21B-A3B-Thinking **Q4_K_M** · MATCH | **13.33 GB** | ready to fetch | Mac |
+| `qwen3vlmoe` | Qwen3-VL-30B-A3B-Instruct **Q4_K_M** · MATCH | **18.56 GB** | ready to fetch | Mac |
+| `laguna` | Laguna-S-2.1 Q8_0, 4 shards · MATCH | 256×4.5B | searched | **box** |
+| `mimo2` | MiMo-V2.5 UD-Q4_K_S, 5 shards · MATCH | 256×8.2B | searched | **box** |
+| `step35` | Step-3.5-Flash Q4_K · MATCH | 118.71 GB | searched | **box** |
+| `hunyuan-moe` | Hunyuan-A13B-Instruct | ~34 GiB IQ3_KS | searched | **box** |
+| `qwen3next` | Qwen3-Next-80B-A3B | 80B | searched | **box** |
+| `grok` | Grok-1 class | 314B | searched | **box** |
+| `minimax-m3` | MiniMax-M3 | large | searched | **box** |
+| `deepseek4` | DeepSeek-V4-Flash-0731 | large | searched | **box** |
+
+⚠ **The MoE sizes above are Q4-class and that correction matters.** They were first recorded as
+~7 GB and ~9 GB — the UD-TQ1_0 and IQ1_S files, sorted to the top of a size-ordered listing and read
+off. Those are **one-bit** quants, a full bit worse than the Q2_K deliberately rejected for `qwen3moe`
+so that a degenerate baseline could not masquerade as a paging fault. Same rule, same day, broken by
+sorting a list by size. The anchor was in this file: `qwen3vlmoe` is the same 30B-A3B base as
+`qwen3moe`, measured at 18.63 GB.
+
+⚠ **`mimo2`'s first candidate STRUCK, and the strike is the point.**
+`ji-farthing/MiMo-V2.5-Pro-DFlash-draft-ik-llama-GGUF` has "MiMo" in the name and
+`general.architecture = dflash-draft` in the header — an arch string that **does not exist in
+`llama-arch.cpp` at all**. It would not have loaded as anything, after 5.54 GB. Same shape as the
+starcoder2 mistake with different nouns.
+
+### Three archs the gate cannot answer in its current form
+
+These are **UNANSWERED**, which is neither verified nor broken. Recording them as failures would be
+wrong; recording them as pending without the reason would lose the work.
+
+| arch | why the gate cannot answer | what would answer it |
+|---|---|---|
+| `dflash`, `eagle3` | **Draft heads, not models.** `llama-context.cpp:187` throws `requires ctx_other to be set` when the GGUF carries no `tok_embd`/`output`. Confirmed empirically on `dflash` (0.38 GB, exit 3). `eagle3` is the same code path, so it was **not downloaded**. | A target+draft harness (`-md`), then the separate question of whether the *draft's* KV is paged at all |
+| `hunyuan_vl` | The only vehicle found is **HunyuanOCR**, an image model. Text-only prompts return `''` or `' $ $ $ $ …'`. The static reference is degenerate *by construction*, so there is nothing to arbitrate against. | mmproj + a real image, or a different `hunyuan_vl` text vehicle if one is published |
+| `gemma4` | **Two independent blocks.** (a) The local 12B-Uncensored-1.5M returns `01111133` under **static** — a broken arbiter before paging is involved. (b) Paged is refused by the SWA guard (`DS4P_PAGED_SWA=1`). | A gemma4 vehicle with a sane static reference, then re-run under `AG_ENV=DS4P_PAGED_SWA=1` |
+
+⚠ **Three archs carry per-layer attention geometry**, which is the same class as the `gemma4`
+`headdim` defect — an architecture with more than one head shape against a pool allocated once:
+
+| arch | header |
+|---|---|
+| `laguna` | `attention.head_count` = `<array n=48>` |
+| `step35` | `head_count` **and** `head_count_kv` both `<array n=45>` |
+| `mimo2` | `head_count_kv` = `<array n=51>` |
+
+Prediction on record before measurement: **PARTIAL with `headdim-fails` non-zero**, not PASS. The gate
+counts `headdim` separately from `nopg` and `cap` precisely so this shows as its own number.
+
+**Also on record:** `starcoderbase-1b` is `head_count=16, head_count_kv=1` — **multi-query**. Every
+arch verified so far has `n_kv_head > 1`. If `starcoder` diverges, first suspect is the KV-head stride
+in block-table addressing, not the arch wiring.
 
 **Mac/box split, from what is verified so far:**
 

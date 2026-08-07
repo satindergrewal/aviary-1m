@@ -1,0 +1,10 @@
+arch-serve gate: expected arch=hunyuan_vl  model=HunyuanOCR-Q8_0.gguf
+tip: df17cee79 dirty=0  -c 4096
+  STATIC  arch=hunyuan_vl     out=[]
+          static-path warns=528    cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+
+VOID: the STATIC reference is degenerate -- [] (0 letters, 0 distinct chars).
+  Static is the arbiter for this whole gate. A broken arbiter cannot judge the paged path:
+  if paged returns the same garbage the gate would print PASS on two broken runs agreeing.
+  Fix the VEHICLE first -- wrong chat template, damaged quant, or a base model that needs a
+  different prompt. This says nothing about paging either way.
