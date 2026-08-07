@@ -150,15 +150,20 @@ downloaded before its serve check can run.
 
 ### ✅ VERIFIED archs (serve check passed)
 
-All four re-run through `arch_serve_gate.sh` (the numbers below are that gate's, not the earlier
-inline shell's):
+All four re-run through `arch_serve_gate.sh` **with startup reserve passes excluded** — these are the
+sliced numbers, and the earlier unsliced ones (414/828/736/1104) should not be diffed against them:
 
-| arch | vehicle | funnel | warns static→paged | `DS4P-CONSUME` | output |
-|---|---|---|---|---|---|
-| `ernie4_5` | ERNIE-4.5-0.3B-PT Q4_K_M | banded | 414 → **0** | **576** | identical |
-| `qwen3vl` | Qwen3-VL-4B-Instruct Q4_K_M | banded | 828 → **0** | **1368** | identical |
-| `nemotron` | Nemotron-Mini-4B-Instruct Q4_K_M | banded | 736 → **0** | **1216** | identical |
-| `qwen3moe` | Qwen3-30B-A3B Q4_K_M | banded | 1104 → **0** | **1824** | identical |
+| arch | vehicle | funnel | warns static→paged | `DS4P-CONSUME` | startup excluded | output |
+|---|---|---|---|---|---|---|
+| `ernie4_5` | ERNIE-4.5-0.3B-PT Q4_K_M | banded | 36 → **0** | **180** | 0 | identical |
+| `qwen3vl` | Qwen3-VL-4B-Instruct Q4_K_M | banded | — → **0** | **576** | 0 | identical |
+| `nemotron` | Nemotron-Mini-4B-Instruct Q4_K_M | banded | — → **0** | **512** | 0 | identical |
+| `qwen3moe` | Qwen3-30B-A3B Q4_K_M | banded | 96 → **0** | **768** | 0 | identical |
+
+⚠ **The `startup excluded` column is the load-bearing one.** It reads 0 for all four, which turns
+"these four cannot have been contaminated by startup reserve passes" from an argument into a
+measurement. `gemma4` reads **630** in that column — 21 whole graph builds before the first request —
+and that is what produced a false PARTIAL until the counters were sliced.
 
 ⚠ **The arch string is `ernie4_5` with an underscore.** Earlier tables here wrote `ernie4-5`. Cosmetic
 in prose, not cosmetic in a gate that does a string compare.
