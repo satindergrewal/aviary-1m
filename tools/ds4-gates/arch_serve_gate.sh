@@ -123,17 +123,20 @@ start() { # $1 = static|paged   -> PORT, SRVPID
     # design" from "broken" is worse than no table -- the first arch it mislabels is gemma4, which has
     # SWA layers, and qwen3next/hunyuan are hybrids. Its sibling paged_multimodel_gate.sh has had this
     # branch since it was written; this gate shipped without it.
-    # ⚠ A DRAFT HEAD IS NOT A MODEL. llama-context.cpp:187 throws for EAGLE3 and DFLASH when the GGUF
-    # carries no tok_embd/output: they are speculative-decode drafters and need the TARGET model's
-    # context (ctx_other, i.e. served via -md). Reported as "did not serve" that reads like a paging
-    # defect. It is a category error in the vehicle, and the whole gate design -- compare two arms of
-    # ONE model -- does not apply to them without a target attached.
+    # ⚠ A DRAFT HEAD IS NOT A MODEL. THREE of the 19 are drafters, from two separate guards:
+    #   llama-context.cpp:182   Gemma4Assistant
+    #   llama-context.cpp:191   EAGLE3, DFLASH  (when the GGUF carries no tok_embd/output)
+    # They are speculative-decode heads and need the TARGET model's context (ctx_other, i.e. -md).
+    # Reported as "did not serve" that reads like a paging defect. It is a category error in the
+    # vehicle, and this gate's whole design -- compare two arms of ONE model -- does not apply to them
+    # without a target attached.
     if grep -qE "requires ctx_other to be set" "$LOGDIR/$1.log" 2>/dev/null; then
         echo "  $1 arm: THIS IS A DRAFT HEAD, not a standalone model." | tee -a "$OUT"
         grep -aE "requires ctx_other to be set" "$LOGDIR/$1.log" | head -1 | cut -c1-150 | sed 's/^/  | /' | tee -a "$OUT"
-        echo "  eagle3/dflash drafters need the target model's context (-md). This gate compares two" | tee -a "$OUT"
-        echo "  arms of ONE model and cannot answer for them in that form. Needs its own harness:" | tee -a "$OUT"
-        echo "  target + draft, and then the separate question of whether the DRAFT's KV is paged." | tee -a "$OUT"
+        echo "  gemma4-assistant / eagle3 / dflash need the target model's context (-md). This gate" | tee -a "$OUT"
+        echo "  compares two arms of ONE model and cannot answer for them in that form. Needs its own" | tee -a "$OUT"
+        echo "  harness: target + draft, then the separate question of whether the DRAFT's KV is" | tee -a "$OUT"
+        echo "  paged at all. One harness unblocks three of the nineteen." | tee -a "$OUT"
         return 3
     fi
     if grep -qE "not yet supported for hybrid architectures|needs DS4P_PAGED_SWA=1|requires DS4P_PAGED_HYBRID=1" \

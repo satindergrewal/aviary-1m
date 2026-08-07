@@ -1,0 +1,7 @@
+arch-serve gate: expected arch=gemma4-assistant  model=gemma-4-E2B-it-assistant.F16.gguf
+tip: 51d87602d dirty=0  -c 4096
+  static arm: THIS IS A DRAFT HEAD, not a standalone model.
+  | 0.00.307.556 E llama_init_from_model: failed to initialize the context: Gemma4Assistant requires ctx_other to be set (this warning is normal during me
+  eagle3/dflash drafters need the target model's context (-md). This gate compares two
+  arms of ONE model and cannot answer for them in that form. Needs its own harness:
+  target + draft, and then the separate question of whether the DRAFT's KV is paged.

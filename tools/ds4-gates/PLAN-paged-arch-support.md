@@ -277,11 +277,11 @@ Every row below has its arch read out of the candidate GGUF's own header by
 | `qwen3vl` | Qwen3-VL-4B-Instruct Q4_K_M | 2.50 GB | ✅ **SERVE-VERIFIED** | Mac |
 | `nemotron` | Nemotron-Mini-4B-Instruct Q4_K_M | 2.51 GB | ✅ **SERVE-VERIFIED** | Mac |
 | `qwen3moe` | Qwen3-30B-A3B Q4_K_M | 17.35 GB | ✅ **SERVE-VERIFIED** | Mac |
-| `starcoder` | StarCoderBase-1B Q8_0 · MATCH | 1.26 GB | ⬇ downloading | Mac |
+| `starcoder` | StarCoderBase-1B Q8_0 · MATCH | 1.26 GB | ✅ **SERVE-VERIFIED** — found + fixed a real paged bug, see below | Mac |
 | `hunyuan_vl` | HunyuanOCR Q8_0 · MATCH | 0.58 GB | ⛔ **UNANSWERED — vehicle unusable**, see below | Mac |
 | `dflash` | Qwen3.5-4B-DFlash Q4_K_M · MATCH | 0.38 GB | ⛔ **UNANSWERED — draft head**, see below | Mac |
 | `eagle3` | Qwen3-8B-EAGLE3-Speculator F16 · MATCH | 2.05 GB | ⛔ **UNANSWERED — draft head** (same code path; not downloaded) | Mac |
-| `gemma4-assistant` | gemma-4-E2B-it-assistant **F16** · MATCH | **0.17 GB** | 🔧 **WIRED, read-only blocker removed — compiles, untested** | Mac |
+| `gemma4-assistant` | gemma-4-E2B-it-assistant **F16** · MATCH | **0.17 GB** | 🔧 WIRED + read-only done — **but it is a DRAFT HEAD**, needs the target+draft harness | Mac |
 | `gemma4` *(bonus, NOT on the 19)* | Gemma4-26B-A4B-Uncensored-1M Q4_K_M (local) | 16.80 GB | ⚠ **PASS under `DS4P_PAGED_SWA=1` only** | Mac |
 | `ernie4_5-moe` | ERNIE-4.5-21B-A3B-Thinking **Q4_K_M** · MATCH | **13.33 GB** | ready to fetch | Mac |
 | `qwen3vlmoe` | Qwen3-VL-30B-A3B-Instruct **Q4_K_M** · MATCH | **18.56 GB** | ready to fetch | Mac |
