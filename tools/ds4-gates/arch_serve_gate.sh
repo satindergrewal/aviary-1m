@@ -8,21 +8,42 @@
 # not a style complaint, it is 15 chances to run a subtly different check and not notice.
 #
 # ⚠ THE RETRACTION THIS GATE IS BUILT AROUND. On 2026-08-06 I "verified" starcoder by downloading
-# StarCoder2, whose GGUF arch is `starcoder2` and whose model file is a DIFFERENT source file with no
-# paged consumer in it. The run looked clean. The tell was that the STATIC arm reported ZERO
-# static-path warnings -- impossible for an arch actually under test, because the static arm is where
-# every layer must announce it took the static path. A zero there does not mean "no fallbacks", it
-# means "nothing is wired and this gate is measuring nothing".
+# StarCoder2, whose GGUF arch is `starcoder2` and whose model file is a DIFFERENT source file. The run
+# looked clean. Step 1 below -- loader arch == expected -- is what catches that, and it is the only
+# leg that retraction ever stood on.
 #
-# So the negative control is load-bearing and comes FIRST:
+# ⚠⚠ AND THE FIRST VERSION OF THIS GATE GOT THE *MECHANISM* WRONG, WHICH IS WORSE THAN GETTING THE
+# VERDICT WRONG. It required the STATIC arm to log static-path warnings and VOIDed on zero, on the
+# theory that zero meant "no paged consumer in this arch's file". That is false. There are TWO paged
+# consumers in this fork:
 #
-#   static arm  static-path warnings MUST be > 0    <- proves the consumer exists in this arch's file
-#   paged arm   static-path warnings MUST be 0      <- only then is the zero a MEASUREMENT
-#   paged arm   DS4P-CHECKOUT markers MUST be > 0   <- proves the paged pool was actually exercised
-#   both arms   identical output text               <- proves it is not just running, but running RIGHT
+#   build_attn_paged_or_null -> ggml_paged_attn_banded   20 archs, warns on the failure side
+#   build_attn_inp_kv_auto   -> ggml_paged_attn          11 archs, warns NEVER, in either arm
 #
-# Miss the first line and the last three are theatre. A run with no paged dispatch agrees with static
-# trivially, and an arch with no consumer produces a perfect scorecard while testing nothing.
+# So the original rule would have FALSE-VOIDed all eleven auto-path architectures as unwired while
+# they were paging perfectly well. Reading "paged is live" out of a warning count is inferring a
+# positive from an absence, which is the root class in this lane's scar list.
+#
+# ★ THE FIX IS A POSITIVE MARKER AT BOTH CONSUMERS: DS4P-CONSUME <funnel> layer <il>, emitted per
+# layer per graph, requires -lv 5 (DEBUG). It also fills a real hole in the fork, not just in this
+# gate: DS4P-CHECKOUT proves the block pool served a request, never that a GRAPH consumed it, and
+# "correct producer, no consumer" is audit finding 5 verbatim -- paged context built, no graph reading
+# it, "Ornith now runs paged" retracted. Measured on the two funnels:
+#
+#            ernie4_5 (banded)   starcoder2 (auto)
+#   paged        540                   900
+#   static         0                     0        <- the marker can be zero, so >0 is a measurement
+#
+# Order of checks:
+#   1  loader arch == expected                     else STRIKE  (a filename is not evidence)
+#   2  STATIC arm DS4P-CONSUME == 0                else VOID    (marker must discriminate)
+#   3  PAGED  arm DS4P-CONSUME  > 0                else VOID    (arch-independent presence proof)
+#   4  banded funnel only: static-warns > 0 static, == 0 paged  else VOID / PARTIAL
+#   5  output identical                            else FAIL
+#
+# ⚠ STEP 4 CANNOT RUN ON THE AUTO FUNNEL. That funnel has no per-layer fallback at all, so this gate
+# is strictly WEAKER for those eleven archs: it can prove paged ran and produced identical text, but
+# it cannot prove every layer was carried. It says so on PASS rather than printing a clean row.
 #
 # usage:  arch_serve_gate.sh <expected-arch> <model.gguf> [extra-server-args...]
 set -uo pipefail
@@ -83,8 +104,12 @@ start() { # $1 = static|paged   -> PORT, SRVPID
     local flags=()
     [ "$1" = paged ] && flags=(--kv-paged)
     # shellcheck disable=SC2086
+    # ⚠ -lv 5, NOT 4. DS4P-CONSUME is LLAMA_LOG_DEBUG and common/log.cpp:85 drops DEBUG below
+    # verbosity 5. At -lv 4 the marker count read ZERO on an arch that was demonstrably paging -- the
+    # gate would have VOIDed a working arch because its own probe was filtered out. Caught only
+    # because the marker was verified for PRESENCE on a known-good model before being trusted.
     env ${AG_ENV:-} "$SRV" -m "$MODEL" -ngl 99 -c "$CTX" -np 1 -b 512 -ub 512 \
-        --port "$PORT" --no-warmup -lv 4 "${flags[@]}" "${EXTRA[@]}" > "$LOGDIR/$1.log" 2>&1 &
+        --port "$PORT" --no-warmup -lv 5 "${flags[@]}" "${EXTRA[@]}" > "$LOGDIR/$1.log" 2>&1 &
     SRVPID=$!
     local i
     for i in $(seq 1 300); do
@@ -115,7 +140,11 @@ except Exception: print('MALFORMED')"
 c_nopg()  { grep -ac "took the STATIC path -- no paged context"        "$1"; }
 c_cap()   { grep -ac "fails the paged capability contract"             "$1"; }
 c_hdim()  { grep -ac "does not match the paged pool's"                 "$1"; }
-c_mark()  { grep -ac "DS4P-CHECKOUT"                                   "$1"; }
+c_pool()  { grep -ac "DS4P-CHECKOUT"                                   "$1"; }
+# the two consumer funnels, counted apart: which one an arch uses decides which further checks the
+# gate is even ENTITLED to run.
+c_band()  { grep -ac "DS4P-CONSUME banded"                             "$1"; }
+c_auto()  { grep -ac "DS4P-CONSUME auto"                               "$1"; }
 
 # ---------------- static arm ----------------
 start static || exit 1
@@ -126,10 +155,11 @@ kill "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""; sleep 2
 # starcoder2 model, and the model file that gets compiled is chosen by THIS string.
 GOT_ARCH=$(grep -m1 "print_info: arch" "$LOGDIR/static.log" | sed 's/.*= *//' | tr -d ' \r')
 S_NOPG=$(c_nopg "$LOGDIR/static.log")
+S_CONS=$(( $(c_band "$LOGDIR/static.log") + $(c_auto "$LOGDIR/static.log") ))
 
 printf '  STATIC  arch=%-14s out=[%s]\n' "${GOT_ARCH:-<none>}" "$S_OUT" | tee -a "$OUT"
-printf '          static-path warns=%-6s cap-fails=%-5s headdim-fails=%s\n' \
-       "$S_NOPG" "$(c_cap "$LOGDIR/static.log")" "$(c_hdim "$LOGDIR/static.log")" | tee -a "$OUT"
+printf '          static-path warns=%-6s cap-fails=%-5s headdim-fails=%-5s DS4P-CONSUME=%s\n' \
+       "$S_NOPG" "$(c_cap "$LOGDIR/static.log")" "$(c_hdim "$LOGDIR/static.log")" "$S_CONS" | tee -a "$OUT"
 
 if [ "$GOT_ARCH" != "$ARCH" ]; then
     echo | tee -a "$OUT"
@@ -139,14 +169,14 @@ if [ "$GOT_ARCH" != "$ARCH" ]; then
     echo "log: $OUT"; exit 2
 fi
 
-# ⚠ NEGATIVE CONTROL, BEFORE ANY POSITIVE RESULT IS READ.
-if [ "${S_NOPG:-0}" -eq 0 ]; then
+# ⚠ NEGATIVE CONTROL ON THE PROBE ITSELF, BEFORE ANY POSITIVE RESULT IS READ. If DS4P-CONSUME is
+# non-zero WITHOUT --kv-paged, the marker does not discriminate and its count in the paged arm proves
+# nothing. Measured at 0 on both funnels; this asserts it rather than trusting the measurement.
+if [ "${S_CONS:-0}" -ne 0 ]; then
     echo | tee -a "$OUT"
-    echo "VOID: the STATIC arm logged ZERO static-path warnings." | tee -a "$OUT"
-    echo "  Every layer of an arch that HAS the paged consumer must announce the static path when no" | tee -a "$OUT"
-    echo "  paged context exists. Zero here means the consumer is absent from this arch's model file," | tee -a "$OUT"
-    echo "  so the paged arm's zero would be trivially true and this gate would measure nothing." | tee -a "$OUT"
-    echo "  This is exactly how the starcoder2 mis-verification passed on 2026-08-06." | tee -a "$OUT"
+    echo "VOID: DS4P-CONSUME fired $S_CONS times in the STATIC arm, where no paged context exists." | tee -a "$OUT"
+    echo "  The presence marker is not discriminating, so its count under paging cannot be read as" | tee -a "$OUT"
+    echo "  evidence of anything. Fix the marker before reading this gate." | tee -a "$OUT"
     echo "log: $OUT"; exit 2
 fi
 
@@ -157,37 +187,68 @@ kill "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""
 
 P_ARCH=$(grep -m1 "print_info: arch" "$LOGDIR/paged.log" | sed 's/.*= *//' | tr -d ' \r')
 P_NOPG=$(c_nopg "$LOGDIR/paged.log"); P_CAP=$(c_cap "$LOGDIR/paged.log")
-P_HDIM=$(c_hdim "$LOGDIR/paged.log"); P_MARK=$(c_mark "$LOGDIR/paged.log")
+P_HDIM=$(c_hdim "$LOGDIR/paged.log"); P_POOL=$(c_pool "$LOGDIR/paged.log")
+P_BAND=$(c_band "$LOGDIR/paged.log"); P_AUTO=$(c_auto "$LOGDIR/paged.log")
+P_CONS=$(( P_BAND + P_AUTO ))
 
 printf '  PAGED   arch=%-14s out=[%s]\n' "${P_ARCH:-<none>}" "$P_OUT" | tee -a "$OUT"
-printf '          static-path warns=%-6s cap-fails=%-5s headdim-fails=%-5s markers=%s\n' \
-       "$P_NOPG" "$P_CAP" "$P_HDIM" "$P_MARK" | tee -a "$OUT"
+printf '          static-path warns=%-6s cap-fails=%-5s headdim-fails=%-5s pool=%s\n' \
+       "$P_NOPG" "$P_CAP" "$P_HDIM" "$P_POOL" | tee -a "$OUT"
+printf '          DS4P-CONSUME banded=%-6s auto=%s\n' "$P_BAND" "$P_AUTO" | tee -a "$OUT"
 echo "-----" | tee -a "$OUT"
 
 rc=0
-if [ "${P_MARK:-0}" -eq 0 ]; then
-    echo "VOID: paged arm shows no DS4P-CHECKOUT activity -- the paged pool was never exercised," | tee -a "$OUT"
-    echo "  so identical output would prove only that two static runs agree." | tee -a "$OUT"
+# ⚠ POOL ACTIVITY IS NOT CONSUMPTION. DS4P-CHECKOUT says the block manager handed out blocks; it is
+# emitted by the scheduler and is true even if no graph reads them. That gap IS audit finding 5.
+if [ "${P_CONS:-0}" -eq 0 ]; then
+    echo "VOID: paged arm shows ZERO DS4P-CONSUME events -- no graph consumed the paged context." | tee -a "$OUT"
+    echo "  pool checkouts = $P_POOL, so the blocks were allocated and then read by nobody. Identical" | tee -a "$OUT"
+    echo "  output here proves only that two effectively-static runs agree. This is audit finding 5" | tee -a "$OUT"
+    echo "  reproducing, not a passing arch." | tee -a "$OUT"
     echo "log: $OUT"; exit 2
 fi
+
+# which funnel -- decides which further checks this gate is entitled to run
+FUNNEL=mixed
+[ "$P_BAND" -gt 0 ] && [ "$P_AUTO" -eq 0 ] && FUNNEL=banded
+[ "$P_AUTO" -gt 0 ] && [ "$P_BAND" -eq 0 ] && FUNNEL=auto
+echo "  consumer funnel: $FUNNEL" | tee -a "$OUT"
+
 if [ "$S_OUT" != "$P_OUT" ]; then
     echo "*** FAIL: OUTPUT DIVERGED. static and paged disagree on the same deterministic prompt. ***" | tee -a "$OUT"
     echo "    static [$S_OUT]" | tee -a "$OUT"
     echo "    paged  [$P_OUT]" | tee -a "$OUT"
     rc=1
 fi
-FB=$(( P_NOPG + P_CAP + P_HDIM ))
-if [ "$FB" -ne 0 ]; then
-    echo "*** PARTIAL: $FB layer-fallbacks under paging (nopg=$P_NOPG cap=$P_CAP headdim=$P_HDIM)." | tee -a "$OUT"
-    echo "    Output may still be correct -- the fallback path is correct BY DESIGN -- but this arch" | tee -a "$OUT"
-    echo "    is not fully carried by the paged path and must NOT be recorded as verified." | tee -a "$OUT"
-    rc=1
+
+if [ "$FUNNEL" = banded ] || [ "$FUNNEL" = mixed ]; then
+    # ⚠ ONLY MEANINGFUL ON THIS FUNNEL, and only after the static arm proved the counter can move.
+    if [ "${S_NOPG:-0}" -eq 0 ]; then
+        echo "VOID: banded funnel, but the STATIC arm logged zero static-path warnings, so a zero in" | tee -a "$OUT"
+        echo "  the paged arm is not a measurement -- the counter was never shown able to move." | tee -a "$OUT"
+        echo "log: $OUT"; exit 2
+    fi
+    FB=$(( P_NOPG + P_CAP + P_HDIM ))
+    if [ "$FB" -ne 0 ]; then
+        echo "*** PARTIAL: $FB layer-fallbacks under paging (nopg=$P_NOPG cap=$P_CAP headdim=$P_HDIM)." | tee -a "$OUT"
+        echo "    The fallback path is correct BY DESIGN, so output may still match -- but this arch is" | tee -a "$OUT"
+        echo "    not fully carried by the paged path and must NOT be recorded as verified." | tee -a "$OUT"
+        rc=1
+    fi
 fi
+
 if [ "$rc" -eq 0 ]; then
-    echo "PASS: arch=$ARCH  output identical  markers=$P_MARK  fallbacks ${S_NOPG} -> 0" | tee -a "$OUT"
-    echo "  ⚠ SCOPE: short prompt at -c $CTX. This says the arch is WIRED and CORRECT at small" | tee -a "$OUT"
-    echo "  context. It says nothing about long context, nothing about speed, and the ~50k" | tee -a "$OUT"
-    echo "  intermittent paged defect is open underneath every row of this table." | tee -a "$OUT"
+    echo "PASS: arch=$ARCH  output identical  DS4P-CONSUME=$P_CONS ($FUNNEL funnel)" | tee -a "$OUT"
+    if [ "$FUNNEL" = banded ]; then
+        echo "  fallbacks ${S_NOPG} -> 0, every layer carried by the paged path." | tee -a "$OUT"
+    else
+        echo "  ⚠ WEAKER RESULT THAN THE BANDED FUNNEL. The auto path has no per-layer fallback and" | tee -a "$OUT"
+        echo "  emits no static-path warning, so this gate CANNOT prove every layer was carried. It" | tee -a "$OUT"
+        echo "  proves paged ran ($P_CONS consume events) and the text matches. Record it that way." | tee -a "$OUT"
+    fi
+    echo "  ⚠ SCOPE: short prompt at -c $CTX. Says the arch is WIRED and CORRECT at small context." | tee -a "$OUT"
+    echo "  Says nothing about long context, nothing about speed, and the ~50k intermittent paged" | tee -a "$OUT"
+    echo "  defect is open underneath every row of this table." | tee -a "$OUT"
 fi
 echo "log: $OUT"
 exit $rc
