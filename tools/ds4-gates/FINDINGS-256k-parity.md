@@ -454,3 +454,56 @@ A default flip changes the kernel for every paged request.
 With the default flipped, both geometries work: bs=16 → champion refuses → scalar serves;
 bs=64 → champion serves. The only broken combination today is the one the env var currently prevents
 fixing.
+
+---
+
+# MECHANISM — it is a shared-memory budget boundary, and head_dim decides which side you land on
+
+The scalar paged kernel stages a tile in threadgroup memory (`ggml-metal-ops.cpp:5603`):
+
+```
+smem_stage = (stage_v ? 2 : 1) * block_size * head_dim * sizeof(uint16_t)     budget 32,768 B
+```
+
+| head_dim | block size | tile | vs budget |
+|---|---|---|---|
+| 256 | 16 | 16,384 B | fits |
+| 256 | **64** | **65,536 B** | **2x OVER** |
+| 128 | 64 | 32,768 B | exactly at budget — fits |
+
+Exceed the budget and the layer is **refused upstream**, so it takes the static path and the op never
+dispatches — which is why the kernel's own `"paged scalar tile exceeds threadgroup memory -- would
+corrupt silently"` assert never fires. The champion's layout is different (`smem=16384/32768` in its
+own log line), so it serves bs=64 where the scalar cannot.
+
+## Prediction, stated before testing, then measured
+
+Predicted from the arithmetic: D=256 refused, D=128 marginal, D=64 fits.
+
+| model | head_dim | bs=64, no champion | |
+|---|---|---|---|
+| ornith9b | 256 | `guard=1` | **TRAP** — pool built, dead |
+| qwen35 | 256 | `guard=1` | **TRAP** — pool built, dead |
+| starcoder | 128 | `guard=0` | no trap, pages on scalar |
+| ernie45 | 128 | `guard=0` | no trap, pages on scalar |
+
+Clean split on head_dim, exactly at the computed boundary.
+
+## The rule
+
+> `--kv-block-size 64` is **safe on head_dim ≤ 128** and **silently disables paging on head_dim 256**
+> unless `DS4P_METAL_CHAMP=1` is set.
+
+## What this does to the options
+- **"Make the scalar path serve bs=64"** — dead. The tile is 2x the hardware budget at D=256; it would
+  need a fundamentally different staging layout, which is what the champion already is.
+- **Default-on champion** — strengthened. On head_dim 256 it is the *only* way bs=64 works at all; on
+  head_dim 128 it costs nothing, since the champion serves bs=64 there too. **There is no
+  configuration where the flip makes things worse.**
+- **Refuse loudly at startup** — still the minimal alternative.
+
+## Method note
+Seven retractions this session came from generalising off observations. This finding went the other
+way: arithmetic from the source first, a falsifiable boundary stated with numbers, then the
+measurement. It is the only mode that produced durable results tonight — the same shape as the
+dose-response that settled the SSM mechanism.
