@@ -1,0 +1,10 @@
+arch-serve gate: expected arch=starcoder2  model=starcoder2-3b-Q4_K_M.gguf
+tip: 979d187ea dirty=0  -c 4096
+  STATIC  arch=starcoder2     out=[ Paris.",         "The capital of]
+          static-path warns=0      cap-fails=0     headdim-fails=0
+
+VOID: the STATIC arm logged ZERO static-path warnings.
+  Every layer of an arch that HAS the paged consumer must announce the static path when no
+  paged context exists. Zero here means the consumer is absent from this arch's model file,
+  so the paged arm's zero would be trivially true and this gate would measure nothing.
+  This is exactly how the starcoder2 mis-verification passed on 2026-08-06.
