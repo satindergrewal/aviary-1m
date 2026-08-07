@@ -155,6 +155,7 @@ downloaded before its serve check can run.
 | `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | ` Paris.` | ` Paris.` | **3** | **0** |
 | `qwen3vl` | Qwen3-VL-4B-Instruct Q4_K_M | ` Tokyo, and the capital city of China` | identical | **3** | **0** |
 | `nemotron` | Nemotron-Mini-4B-Instruct Q4_K_M | ` Paris.\n\n- The euro (` | identical | **3** | **0** |
+| `qwen3moe` | Qwen3-30B-A3B Q4_K_M | ` Paris. Which of the following is the` | identical | **3** | **0** |
 
 ⚠ **Read the arch from `print_info`, never from the repo name.** A StarCoder2-3B download loaded as
 `arch = starcoder2` → `starcoder2.cpp`, which is *not* the file that was wired (`starcoder.cpp`). That
@@ -166,10 +167,18 @@ Both parts of the closure criterion met: correct text **and** the paged path con
 zero layers falling back. The static arm's 234 fallback warnings are the negative control — the
 counter can be non-zero, so a 0 means something.
 
-**Three independent families, two `wo` conventions, one recipe.** `ernie4-5` is Baidu dense
+**Four independent families, two `wo` conventions, dense and MoE, one recipe.** `ernie4-5` is Baidu dense
 (`wo, NULL, wo_s`), `qwen3vl` is Qwen vision-language (`wo, wo_b, wo_s`), `nemotron` is NVIDIA dense
-GQA (`wo, wo_b, wo_s`). Nothing structural is shared between them, so the scripted recipe is
-arch-agnostic rather than accidentally fitted to one family.
+GQA (`wo, wo_b, wo_s`), `qwen3moe` is a 30B mixture-of-experts. Nothing structural is shared between
+them — and the MoE case matters because its FFN half is a different graph shape, which is the obvious
+place for an assumption about graph structure to surface. It did not. The recipe is arch-agnostic by
+evidence rather than by assertion.
+
+**Quant choice is part of the method.** `qwen3moe` was verified at Q4_K_M (17.35 GB), not the smaller
+Q2_K (11.4 GB), deliberately: a 2-bit quant of a 30B MoE can produce degenerate output for reasons
+that have nothing to do with paging, and then a paged-vs-static disagreement cannot distinguish a
+wiring fault from quantisation damage. Same principle as not scoring a kernel against a baseline that
+is itself looping — a broken reference cannot arbitrate.
 
 **Not verified by any of them:** long context (the ~50k defect applies here as everywhere), speed, and
 the other 19 archs.
@@ -201,7 +210,7 @@ correct serve-check vehicle. A 0.3B ERNIE exercises `ernie4-5.cpp` exactly as a 
 | `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | **241 MB** | ✅ **downloaded + SERVE-VERIFIED** | Mac |
 | `qwen3vl` / `qwen3vlmoe` | Qwen3-VL-4B-Instruct Q4_K_M | **~2.5 GB** (Q3_K_M ~2.08 GB) | ✅ searched | Mac |
 | `hunyuan-moe` | Hunyuan-A13B-Instruct — 80B total / 13B active | **~34 GiB** at IQ3_KS | ✅ searched | **box** |
-| `qwen3moe` | Qwen3-30B-A3B Q2_K | **~11.4 GB** (Q4_K_M 18.6 GB) | ✅ searched | Mac |
+| `qwen3moe` | Qwen3-30B-A3B **Q4_K_M** (not Q2_K — see note) | **17.35 GB** | ✅ **downloaded + SERVE-VERIFIED** | Mac |
 | `qwen3next` | Qwen3-Next-80B-A3B | sizes not published in results | ⚠ partial | **box** (80B) |
 | `nemotron` | **Nemotron-Mini-4B-Instruct** Q4_K_M (not the Llama-derived Nano) | **2.51 GB** | ✅ **downloaded + SERVE-VERIFIED** | Mac |
 | `starcoder` | ~~StarCoder2-3B~~ → needs **StarCoder-1** | not yet sized | ⚠ arch corrected, size unsearched | Mac |
@@ -249,7 +258,7 @@ silently wrong at long context.
 
 | phase | status | what is NOT verifiably closed |
 |---|---|---|
-| 3b hybrid paging | **PARTIAL** — 15 of 19 wired, **3 serve-verified** (`ernie4-5`, `qwen3vl`, `nemotron`), 22 archs total | none is serve-verified; no local GGUFs; `gemma4-assistant` blocked on read-only; 3 specials need their own cache work |
+| 3b hybrid paging | **PARTIAL** — 15 of 19 wired, **4 serve-verified** (`ernie4-5`, `qwen3vl`, `nemotron`, `qwen3moe`), 22 archs total | none is serve-verified; no local GGUFs; `gemma4-assistant` blocked on read-only; 3 specials need their own cache work |
 | B4 arcs 2-3 (q8 banded) | **CLOSED** — `test-paged-vs-cpu` ALL PASSED, q8_0 at the f16 error scale, champion marker asserted | q8_0 end-to-end on a real model; anything about speed |
 | paged op: attention sinks | **CLOSED on the champion**, verified | scalar-kernel sinks (ABORT-guarded); no end-to-end model run |
 | paged op: non-causal mode | **CLOSED**, verified with a differs-from-causal control | no end-to-end model run |
