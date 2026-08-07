@@ -1,0 +1,11 @@
+draft-pair gate: draft arch=gemma4-assistant
+  target=gemma-4-E2B-it-Q4_K_M.gguf  draft=gemma-4-E2B-it-assistant.F16.gguf
+  binary sha1=32ad398fc11e  -c 4096  n_predict=24
+  spec type: draft-mtp
+  a target-static        draft_n=0      accepted=0      out=[  1. **Paris, France:** The City of Lights is famous for its iconic landmarks like the Eiffel Tower and the]
+  b target+draft-static  draft_n=33     accepted=11     out=[  1. **Paris, France:** The City of Lights is famous for its iconic landmarks like the Eiffel Tower and the]
+  draft loader arch (last print_info): gemma4-assistant
+  c target+draft-paged   draft_n=0      accepted=0      out=[]
+  paged markers: DS4P-CONSUME=15  DS4P-READONLY=0
+-----
+VOID: draft_n = 0 under paging. The draft went inert exactly where it is under test.
