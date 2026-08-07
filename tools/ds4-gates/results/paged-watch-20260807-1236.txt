@@ -1,0 +1,13 @@
+tip: b46b5afc6 dirty=0
+lengths: 8192 32768 49998   reps: 3   -c 73728   --kv-block-size 16
+  static  N=8192    ref=[ was founded before France. Prague is the capital of France.]
+  static  N=32768   ref=[ is the capital of France. Prague is the capital of France]
+  static  N=49998   ref=[ founded before Italy. Prague is the capital of France. Rome]
+  paged   N=8192    r1  ok
+  paged   N=8192    r2  ok
+  paged   N=8192    r3  ok
+  paged   N=32768   r1  ok
+  paged   N=32768   r2  ok
+  paged   N=32768   r3  ok
+  paged   N=49998   r1  ok
+  paged   N=49998   r2  ok
