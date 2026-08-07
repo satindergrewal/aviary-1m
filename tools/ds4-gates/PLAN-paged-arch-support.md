@@ -150,22 +150,38 @@ downloaded before its serve check can run.
 
 ### ✅ VERIFIED archs (serve check passed)
 
-| arch | vehicle | static | paged | paged markers | static-path fallbacks |
+All four re-run through `arch_serve_gate.sh` (the numbers below are that gate's, not the earlier
+inline shell's):
+
+| arch | vehicle | funnel | warns static→paged | `DS4P-CONSUME` | output |
 |---|---|---|---|---|---|
-| `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | ` Paris.` | ` Paris.` | **3** | **0** |
-| `qwen3vl` | Qwen3-VL-4B-Instruct Q4_K_M | ` Tokyo, and the capital city of China` | identical | **3** | **0** |
-| `nemotron` | Nemotron-Mini-4B-Instruct Q4_K_M | ` Paris.\n\n- The euro (` | identical | **3** | **0** |
-| `qwen3moe` | Qwen3-30B-A3B Q4_K_M | ` Paris. Which of the following is the` | identical | **3** | **0** |
+| `ernie4_5` | ERNIE-4.5-0.3B-PT Q4_K_M | banded | 414 → **0** | **576** | identical |
+| `qwen3vl` | Qwen3-VL-4B-Instruct Q4_K_M | banded | 828 → **0** | **1368** | identical |
+| `nemotron` | Nemotron-Mini-4B-Instruct Q4_K_M | banded | 736 → **0** | **1216** | identical |
+| `qwen3moe` | Qwen3-30B-A3B Q4_K_M | banded | 1104 → **0** | **1824** | identical |
+
+⚠ **The arch string is `ernie4_5` with an underscore.** Earlier tables here wrote `ernie4-5`. Cosmetic
+in prose, not cosmetic in a gate that does a string compare.
+
+⚠ **These counts are NOT comparable across runs.** An earlier inline run of `ernie4_5` produced
+`234 → 0` and this one produces `414 → 0`; nothing changed in the code. The absolute count is
+warnings-per-layer × number of graph builds, and the graph-build count moves with verbosity, prompt
+length and `n_predict`. The only meaningful form is the **transition inside one gate invocation**:
+non-zero static, exactly zero paged, same binary, same model, minutes apart. A cross-run diff of these
+numbers measures the harness, not the code.
 
 ⚠ **Read the arch from `print_info`, never from the repo name.** A StarCoder2-3B download loaded as
 `arch = starcoder2` → `starcoder2.cpp`, which is *not* the file that was wired (`starcoder.cpp`). That
-run looked like a pass — correct output — and verified nothing. The tell was `static-path-warns = 0`
-in the **static** arm, meaning the wired file was never in the graph at all. A fallback counter that
-can only read 0 proves nothing; `ernie4-5` read 234 and `qwen3vl` 468 before reading 0 under paging.
+run looked like a pass — correct output — and verified nothing.
 
-Both parts of the closure criterion met: correct text **and** the paged path confirmed active, with
-zero layers falling back. The static arm's 234 fallback warnings are the negative control — the
-counter can be non-zero, so a 0 means something.
+⚠⚠ **The tell I originally recorded for that retraction was WRONG, and it was wrong in a way that
+would have broken eleven architectures.** I wrote that `static-path-warns = 0` proved `starcoder2.cpp`
+has no paged consumer. It has one — via `build_attn_inp_kv_auto()`, which reaches paged attention
+through a *different funnel* that never logs a static-path warning in either arm. Measured:
+`starcoder2` produces **1140 `DS4P-CONSUME` events** and text identical to static. The retraction's
+conclusion (wrong vehicle for arch `starcoder`) stands on arch identity alone; its stated *mechanism*
+did not generalise, and a right verdict from a wrong mechanism survives until the mechanism is asked
+to carry something else — which is exactly what happened when it was built into a gate.
 
 **Four independent families, two `wo` conventions, dense and MoE, one recipe.** `ernie4-5` is Baidu dense
 (`wo, NULL, wo_s`), `qwen3vl` is Qwen vision-language (`wo, wo_b, wo_s`), `nemotron` is NVIDIA dense
@@ -191,8 +207,49 @@ Cost: **241 MB, ~4 minutes.**
 
 | intended arch | wrong vehicle picked by name | what it actually loads as |
 |---|---|---|
-| `starcoder` | StarCoder2-3B | `starcoder2` — a *different file*, not wired |
+| `starcoder` | StarCoder2-3B | `starcoder2` — a *different file* (wired, but on the other funnel) |
 | `nemotron` | Llama-3.1-Nemotron-Nano-8B | `llama` — a Llama-3.1 derivative |
+
+### The two paged consumers — which one an arch uses changes what can be proved about it
+
+There is not one paged consumer in this fork, there are two, and they have different observability:
+
+| funnel | entry | op | archs | fallback warning |
+|---|---|---|---|---|
+| **banded** | `build_attn_paged_or_null` | `ggml_paged_attn_banded` | 20 | yes, per layer |
+| **auto** | `build_attn_inp_kv_auto` | `ggml_paged_attn` | 11 | **none, ever** |
+
+**banded (hand-wired):** `dflash` `ernie4-5` `ernie4-5-moe` `eagle3` `glm4-moe` `gemma4` `grok`
+`hy-v3` `hunyuan-moe` `hunyuan-vl` `laguna` `kimi-linear` `mimo2` `nemotron` `qwen3moe` `qwen35`
+`qwen3vlmoe` `starcoder` `step35` `qwen3vl`
+
+**auto (one-line):** `command-r` `gemma` `falcon` `gemma3` `internlm2` `llama` `mistral3` `phi3`
+`qwen2` `qwen3` `starcoder2`
+
+⚠ **The gate is strictly weaker on the auto funnel.** It has no per-layer fallback and no warning, so
+for those eleven the gate proves paged *ran* and the text *matches* — it cannot prove every layer was
+carried. That limitation is printed on every PASS rather than left implicit.
+
+### `DS4P-CONSUME` — presence asserted positively, at both funnels
+
+Before this marker existed, nothing in the fork could assert that a graph had *consumed* a paged
+context. `DS4P-CHECKOUT` says the block manager handed out blocks; it is emitted by the **scheduler**
+and stays true when no graph reads them. **That gap is audit finding 5 verbatim** — paged context
+produced correctly, nothing consuming it, "Ornith now runs paged" retracted, and no runtime signal
+that would catch a recurrence.
+
+Both funnels now emit one line per layer per graph. The static arm is the negative control on the
+marker itself:
+
+| | `ernie4_5` (banded) | `starcoder2` (auto) |
+|---|---|---|
+| paged arm | 540 | 900 |
+| static arm | **0** | **0** |
+
+Needs `-lv 5`: it is `LLAMA_LOG_DEBUG` and `common/log.cpp:85` drops DEBUG below verbosity 5. At
+`-lv 4` the count reads **zero on an arch that is demonstrably paging** — the gate would VOID a
+working arch because its own probe was filtered out of the log it greps. Caught only by checking the
+marker for *presence* on a known-good model before trusting it.
 
 The first cost a download and a retracted "verification". The second was caught **before** downloading,
 by asking which arch the repo loads as rather than trusting the brand in its name.
