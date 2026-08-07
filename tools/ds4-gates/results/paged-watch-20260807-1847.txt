@@ -1,0 +1,22 @@
+tip: f63886fde dirty=0
+lengths: 8192 32768 49998   reps: 2   -c 73728   --kv-block-size 16
+  [static arm binary sha1=32ad398fc11e]
+  static  N=8192    ref=[ was founded before France. Prague is the capital of France.]
+  static  N=32768   ref=[ is the capital of France. Prague is the capital of France]
+  static  N=49998   ref=[ founded before Italy. Prague is the capital of France. Rome]
+  [paged arm binary sha1=32ad398fc11e]
+  paged   N=8192    r1  ok
+  paged   N=8192    r2  ok
+  paged   N=32768   r1  ok
+  paged   N=32768   r2  ok
+  paged   N=49998   r1  ok
+  paged   N=49998   r2  ok
+-----
+paged activity markers: 14
+  N=8192    failures 0/2
+  N=32768   failures 0/2
+  N=49998   failures 0/2
+
+PAGED CORRECTNESS WATCH: no mismatches in 6 comparisons.
+  ⚠ NOT a certificate. The 2026-08-07 defect was clean 6/6 in one window and failed
+  repeatedly in another at the same config. This bounds the rate; it does not clear the path.
