@@ -199,6 +199,45 @@ Both halves now read. **The loop half is narrower than feared and the scheduler 
 | C | `:805` | logits only on the last batch row: `token_idx == new_tokens - 1` |
 | D | `:876–878` | appends one sampled token; advances `n_past` by tokens **SUBMITTED**, not **ACCEPTED** |
 
+### ⚠ A FIFTH piece the "four lines" scoping did not contain: the draft-token INPUT CHANNEL
+
+`step()` builds decode rows from `logical_seq.back()` — one token, from state the scheduler **already
+owns**. For B, the N drafted tokens have to get *into* the scheduler before `prepare_batch` runs.
+There is no entry point for that today.
+
+So B needs a per-group pending-draft buffer plus a way to set it: a **new public API surface**, larger
+than any single line in A–D. Naming it here so "four localised lines" does not get banked the way
+"the API is the work" almost did — the same error in the opposite direction.
+
+### ⚠ SEMANTICS DECISION THAT GATES B/C — advance-count ≠ append-count
+
+Learned by shipping the bug. The original `update()` advances `n_past` by `batch_lens[i]` and appends
+**exactly one** token, always. Those are two different numbers and fusing them corrupts
+`logical_seq` on every multi-token prefill chunk.
+
+When `n_accepted` IS provided, a **final-prefill-chunk row still needs advance=lens / append=1**.
+Decide before writing B/C:
+
+- either `n_accepted` applies to **decode rows only**, prefill rows keeping legacy semantics, or
+- a per-row discriminator distinguishes prefill-final from decode.
+
+The first is simpler and matches how `prefill_pending` already discriminates mid-chunk rows.
+
+### ⚠ THE CHECKPOINT MUST USE A MULTI-CHUNK PROMPT
+
+Four short-prompt arch runs passed the broken version green. Nothing in a single short request reads
+the **interior** of `logical_seq` — decode reads `.back()`. The interior is read by the
+preemption/recompute requeue (`:417–424`, which replays it into KV), fork inheritance
+(`llama-kv-cache-paged.cpp:414`), the prefix-share matcher (`:199`) and `on_finish` (`:348`).
+
+So the standing checkpoint for every remaining step is:
+
+```
+test-paged-kv-e2e -m <model>                      scheduler-level, the only one in the tree
+arch_serve_gate.sh on 3+ verified archs           short prompt
+arch_serve_gate.sh with AG_PROMPT = 30+ tokens    MULTI-CHUNK prefill  <- the one that catches this class
+```
+
 ### Public API
 
 `llama_paged_scheduler_update()` needs a per-sequence **accepted count** beside the tokens. Make it
