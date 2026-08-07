@@ -138,8 +138,27 @@ property holding independently of type.
 ## What would close it
 
 Wire speculation into `update_slots_paged()`: draft generation at prompt-eval completion, draft tokens
-into the paged batch, and acceptance/rollback against the paged block table. The rollback is the
-interesting part — rejected draft tokens have already been written into paged blocks, so the write
-slots must be reclaimed, which the static path does not have to think about.
+into the paged batch, and acceptance against the paged block table.
 
-Not estimated here. An estimate with no measurement behind it becomes a schedule.
+⚠⚠ **A CORRECTION TO THE FIRST VERSION OF THIS PARAGRAPH.** It said *"rejected draft tokens have
+already been written into paged blocks, so the write slots must be reclaimed."* **That is wrong, and
+it contradicted an invariant already proven in this lane.** `DS4P_SLOT_COVER` asserts
+`slots[t] == btab[pos/bs]*bs + pos%bs` — the write slot is a pure function of POSITION — and it held
+over ~50,000 tokens with 0 mismatches. So a rejected token's slot is simply **overwritten** by the
+next token at that position. Nothing to reclaim. Left unchallenged, that sentence would have anchored
+a design around a problem that does not exist.
+
+**The real constraints, read out of the API rather than imagined:**
+
+| constraint | where | consequence |
+|---|---|---|
+| `llama_paged_scheduler_update()` consumes **exactly one token per sequence** (`tokens + info->n_seq`) | `llama-paged-scheduler.cpp` | speculation appends 1..N+1 accepted tokens per step; the update API cannot express that |
+| the scheduler's public surface has **no truncate / rewind / set-length** entry point at all | `include/llama.h:1666–1724` | rejecting drafted tokens has no way to move a sequence's length backwards |
+| `n_batch == n_ubatch` is asserted for paged | `llama-model.cpp:2624` | multi-token verify batches must respect it |
+
+So this is **not** a loop-body change. The scheduler's request/step API is one-token-per-sequence and
+forward-only; speculation is many-tokens-per-step with rollback. The API is the work, and the block
+table is *not* the hard part — which is the opposite of what the first version of this section said.
+
+Still not estimated, but now scoped by what was read rather than by what was assumed. An estimate with
+no measurement behind it becomes a schedule.
