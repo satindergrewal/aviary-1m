@@ -496,9 +496,36 @@ block. If the clear and the verify are misordered across ticks, the verify takes
 branch, step E gets `n_acc = n_sub = 4`, sets max to the **submitted** 15, and the next batch starting
 at 13 needs 16 — exactly the observed rejection.
 
-**Test before writing anything: one printf of `is_spec` and `n_acc` per row.** Every one of the last
-three blockers was solved by printing and none by reasoning — including the ones where the reasoning
-was nearly right.
+**⚠ CANDIDATE REFUTED by that printf.** `is_spec` is TRUE and `n_acc` is correct:
+
+```
+SPECPROBE rows=12 is_spec=0 draft_sz=0 n_acc=-1     prefill, correct
+SPECPROBE rows=4  is_spec=1 draft_sz=3 n_acc=1      multi-row, speculative branch taken
+```
+
+**The validator's own numbers say what actually happens:**
+
+```
+X = 15   the last position stored in the memory module
+Y = 12   the batch's starting position
+required: Y = X + 1
+```
+
+The **second** multi-row batch starts at **the same position as the first** (12), while the memory max
+sits at 15 from the first decode. So after that first multi-row decode:
+
+- `n_past` did **not** advance (else Y would be 13), **and**
+- the max was **not** trimmed (else X would be 12)
+
+Both symptoms at once ⇒ **`update()` did not take effect for that step.** Not the sentinel, not
+`is_spec`, not `set_seq_max_pos` (which can lower — verified).
+
+**Next pass starts here:** why `llama_paged_scheduler_update()` produced neither effect after the
+first speculative decode. Candidates worth checking in order: whether the tick reached the update call
+at all (an early `continue` in the sampling loop skips it), whether `curr_info` still describes the
+batch being updated, and whether `request_id` matches the seq_id the validator reads.
+
+Everything above is measured. Nothing below the update call has been verified.
 
 ### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
 
