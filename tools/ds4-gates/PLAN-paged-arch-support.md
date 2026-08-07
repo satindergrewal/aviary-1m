@@ -52,6 +52,49 @@ investigation first.
 
 ---
 
+## Current state (2026-08-07, end of session)
+
+**22 archs carry the paged consumer.** All COMPILED; none serve-verified; no local GGUFs.
+
+| bucket | count | models |
+|---|---|---|
+| wired, building clean | 15 of his 19 | `qwen3moe` `qwen3vl` `qwen3vlmoe` `ernie4-5` `ernie4-5-moe` `eagle3` `grok` `hunyuan-moe` `hunyuan-vl` `nemotron` `starcoder` `laguna` `step35` `mimo2` `dflash` |
+| blocked — read-only path | 1 | `gemma4-assistant` |
+| need their own cache work | 3 | `deepseek4` (dual cache + top-k), `minimax-m3` (MSA cache), `nemotron-h` (SSM) |
+
+Plus 7 wired before this session: `gemma4` `glm4-moe` `hy-v3` `kimi-linear` `inkling` `qwen35` `qwen35moe`.
+
+### Op gaps found by reading call sites — all three closed or guarded
+
+| gap | found on | state |
+|---|---|---|
+| attention **sinks** | `mimo2` | **closed on the champion**, numerically verified (finite arm + `-inf` control at `0.000e+00`). ABORT-guarded on the scalar kernel, which genuinely lacks them. |
+| **non-causal** attention | `dflash` | **closed**, verified at three head dims, plus a control asserting it *differs* from causal by `2.52e-01`. `dflash` wired on it. |
+| **read-only** attention | `gemma4-assistant` | **guarded, not implemented.** Skipping the write compiled and segfaulted — `k_new`/`v_new` are dereferenced for shapes elsewhere. Arm retained behind `DS4P_TEST_READONLY`. |
+
+None of the three was on any list before the sweep. Each would have compiled and served: a dropped
+sink, an imposed causal mask, a crash on the first read-only call.
+
+### What the sinks gap actually was
+
+Not missing math. `build_attn_kv_paged` had `ggml_tensor * /*sinks*/` — the parameter **accepted and
+commented out** — while the Metal kernels carried live sink handling all along. The capability was
+present at both ends and disconnected in the middle.
+
+### Harness rules this sweep paid for
+
+Three **silent argument shifts** in one session, all from inserting a defaulted parameter in the
+middle of a signature:
+
+| insertion | detector | cost |
+|---|---|---|
+| `sink_mode` mid-signature | none — types matched, compiler silent | an hour of bisecting the *library* |
+| `causal` before non-defaulted params | compiler | a rebuild |
+| `read_only_check` mid-signature | the no-op control | one run |
+
+**Defaulted parameters go last.** And every feature flag gets an arm asserting it *changes* something
+— that check caught two separate no-ops today.
+
 ## Measured status of the 19 — the "16 standard wirings" was never 16
 
 Wiring 13 of them turned up **two capability gaps in the paged op itself**. Both would have compiled
@@ -138,10 +181,11 @@ silently wrong at long context.
 
 | phase | status | what is NOT verifiably closed |
 |---|---|---|
-| 3b hybrid paging | **PARTIAL** — 13 of 19 wired and compiling | none is serve-verified; no local GGUFs; 2 blocked on op gaps; 4 unread |
+| 3b hybrid paging | **PARTIAL** — 15 of 19 wired and compiling, 22 archs total | none is serve-verified; no local GGUFs; `gemma4-assistant` blocked on read-only; 3 specials need their own cache work |
 | B4 arcs 2-3 (q8 banded) | **CLOSED** — `test-paged-vs-cpu` ALL PASSED, q8_0 at the f16 error scale, champion marker asserted | q8_0 end-to-end on a real model; anything about speed |
-| paged op: attention sinks | **NOT STARTED** | `mimo2` cannot be wired without it |
-| paged op: non-causal mode | **NOT STARTED** | `dflash` cannot be wired without it |
+| paged op: attention sinks | **CLOSED on the champion**, verified | scalar-kernel sinks (ABORT-guarded); no end-to-end model run |
+| paged op: non-causal mode | **CLOSED**, verified with a differs-from-causal control | no end-to-end model run |
+| paged op: read-only attention | **GUARDED, not implemented** | K/V shapes are still read for geometry; `gemma4-assistant` stays unwired |
 | P1-6 prefix sharing | gate passes | not re-verified since the ~50k defect was found |
 | P1-5 disk KV banks | **NOT REOPENED** | the "measured wash" verdict was rejected and not replaced |
 | P2-8 continuous batching | **NOT STARTED** | `evict()` is a 13-line body; unscoped |
