@@ -467,10 +467,38 @@ position trimmed to the last ACCEPTED position. Step E already does exactly that
 **scheduler's** bookkeeping (`set_seq_max_pos` from the accepted count) — so the scheduler's ledger is
 correct and the context's is not.
 
-⚠ **First read for the next pass, before any code:** whether `set_seq_max_pos` can *lower* a recorded
-max or only raise it. If it only raises, step E's trim is a no-op on this path and the fix is a
-`seq_rm` on the target memory — which is *"positions are decreasing"* storm territory and needs a
-controlled test. **Not attempted.**
+⚠ **CORRECTION — that read is done, and it moves the fix out of storm territory.**
+`llama-kv-cache-paged.cpp:1089` is an unconditional assignment:
+
+```cpp
+void llama_kv_cache_paged::set_seq_max_pos(llama_seq_id seq_id, llama_pos new_max) {
+    sequence_positions[seq_id].max = new_max;
+}
+```
+
+**It CAN lower.** So step E's trim does reach the paged cache's recorded max, and the fix is **not** a
+`seq_rm` on target memory. The earlier note sending the next pass into *"positions are decreasing"*
+territory was wrong and would have wasted a session in the most dangerous part of this codebase.
+
+**Which means the arithmetic should already work:**
+
+```
+before      max = 11
+batch       rows 12,13,14,15     validator: 12 == 11+1   OK
+decode      writes 12..15 → max = 15
+accept 1    step E: max = batch.pos[offset + n_acc - 1] = 12
+next batch  rows 13..16          validator: 13 == 12+1   OK
+```
+
+⇒ **New leading candidate (a candidate, not a finding): `is_spec` is FALSE on the failing step.** It
+requires `!slot->spec_draft.empty() && n_rows > 1`, and `spec_draft` is cleared inside the arming
+block. If the clear and the verify are misordered across ticks, the verify takes the non-speculative
+branch, step E gets `n_acc = n_sub = 4`, sets max to the **submitted** 15, and the next batch starting
+at 13 needs 16 — exactly the observed rejection.
+
+**Test before writing anything: one printf of `is_spec` and `n_acc` per row.** Every one of the last
+three blockers was solved by printing and none by reasoning — including the ones where the reasoning
+was nearly right.
 
 ### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
 
