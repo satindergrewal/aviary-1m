@@ -148,17 +148,33 @@ over ~50,000 tokens with 0 mismatches. So a rejected token's slot is simply **ov
 next token at that position. Nothing to reclaim. Left unchallenged, that sentence would have anchored
 a design around a problem that does not exist.
 
-**The real constraints, read out of the API rather than imagined:**
+⚠ **A SECOND CORRECTION, from reading the BODIES rather than the signatures.** The version above said
+*"the scheduler's request/step API is one-token-per-sequence and forward-only… the API is the work."*
+That was signature-level reading and it overstated the problem. The batch is **already multi-token per
+sequence** — chunked prefill uses exactly that path, and `update()` advances `n_past` by
+`curr_info.batch_lens[i]`, not by 1.
 
-| constraint | where | consequence |
+What is actually one-token is narrower, and it is four specific lines:
+
+| # | what assumes a single decode token | where |
 |---|---|---|
-| `llama_paged_scheduler_update()` consumes **exactly one token per sequence** (`tokens + info->n_seq`) | `llama-paged-scheduler.cpp` | speculation appends 1..N+1 accepted tokens per step; the update API cannot express that |
-| the scheduler's public surface has **no truncate / rewind / set-length** entry point at all | `include/llama.h:1666–1724` | rejecting drafted tokens has no way to move a sequence's length backwards |
-| `n_batch == n_ubatch` is asserted for paged | `llama-model.cpp:2624` | multi-token verify batches must respect it |
+| A | decode allocates exactly one slot: `allocate(1, *group)`, guarded by `required_capacity = n_past + 1` | `llama-paged-scheduler-impl.cpp:460,467` |
+| B | a decoding group contributes `logical_seq.back()` once | `llama-paged-scheduler-impl.cpp:798` |
+| C | logits are requested only on the sequence's LAST batch token: `batch.logits[...] = !mid_prefill && (token_idx == new_tokens - 1)` — verification needs logits on **every** drafted position | `llama-paged-scheduler-impl.cpp:805` |
+| D | `update()` appends exactly one sampled token (`logical_seq.push_back(new_tokens[i])`) and advances `n_past` by tokens **SUBMITTED**, not tokens **ACCEPTED** | `llama-paged-scheduler-impl.cpp:876–878` |
 
-So this is **not** a loop-body change. The scheduler's request/step API is one-token-per-sequence and
-forward-only; speculation is many-tokens-per-step with rollback. The API is the work, and the block
-table is *not* the hard part — which is the opposite of what the first version of this section said.
+**D is the whole rollback story**, and it confirms the slot-cover correction above: with 4 drafted and
+2 accepted, `n_past` must advance by 2 rather than 4, and the KV written at the two rejected positions
+is simply overwritten by the next step at those same positions. No blocks are reclaimed, nothing is
+freed — the rollback is `n_past` plus `set_seq_max_pos`, both already present in `update()`.
+
+The public signature change follows from D: `llama_paged_scheduler_update()` needs a per-sequence
+**accepted count** alongside the tokens. `n_batch == n_ubatch` (`llama-model.cpp:2624`) still bounds
+how wide a verify batch may be.
+
+So: **an API extension plus four localised changes, in that order** — not a rewrite of the scheduler's
+contract. Reading the bodies made the job smaller than reading the signatures did, which is the
+opposite of the usual direction and worth noticing.
 
 Still not estimated, but now scoped by what was read rather than by what was assumed. An estimate with
 no measurement behind it becomes a schedule.
