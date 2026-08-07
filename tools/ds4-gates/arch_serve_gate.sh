@@ -117,6 +117,27 @@ start() { # $1 = static|paged   -> PORT, SRVPID
         kill -0 "$SRVPID" 2>/dev/null || break
         sleep 1
     done
+    # ⚠ A DESIGNED REFUSAL IS NOT A FAILURE, AND THE TWO MUST NOT SHARE A ROW. The hybrid and SWA
+    # guards refuse --kv-paged deliberately and say so; that is the guard WORKING. Scored as
+    # "did not serve" it becomes a false FAIL, and a results table that cannot separate "refused by
+    # design" from "broken" is worse than no table -- the first arch it mislabels is gemma4, which has
+    # SWA layers, and qwen3next/hunyuan are hybrids. Its sibling paged_multimodel_gate.sh has had this
+    # branch since it was written; this gate shipped without it.
+    if grep -qE "not yet supported for hybrid architectures|needs DS4P_PAGED_SWA=1|requires DS4P_PAGED_HYBRID=1" \
+            "$LOGDIR/$1.log" 2>/dev/null; then
+        echo "  $1 arm REFUSED BY DESIGN -- this arch class is guarded:" | tee -a "$OUT"
+        # ⚠ QUOTE THE LINE THAT MATCHED, not the first line mentioning kv_paged. The first version
+        # grepped "kv_paged" and printed "kv_paged layer->backend map: 48 layers..." -- an unrelated
+        # informational line -- as if it were the refusal. Evidence that does not come from the thing
+        # being reported is not evidence, however plausible it reads.
+        grep -aE "not yet supported for hybrid architectures|needs DS4P_PAGED_SWA=1|requires DS4P_PAGED_HYBRID=1" \
+            "$LOGDIR/$1.log" | head -1 | cut -c1-150 | sed 's/^/  | /' | tee -a "$OUT"
+        echo "  Set AG_ENV to the enabling flag and re-run, e.g." | tee -a "$OUT"
+        echo "    AG_ENV=DS4P_PAGED_HYBRID=1  $0 $ARCH <model>     # hybrid archs" | tee -a "$OUT"
+        echo "    AG_ENV=DS4P_PAGED_SWA=1     $0 $ARCH <model>     # SWA archs" | tee -a "$OUT"
+        echo "  Until then this gate CANNOT answer for this arch. Not a pass, not a failure." | tee -a "$OUT"
+        return 3
+    fi
     echo "  $1 arm DID NOT SERVE; last lines:" | tee -a "$OUT"
     tail -6 "$LOGDIR/$1.log" | sed 's/^/  | /' | tee -a "$OUT"
     return 1
@@ -147,7 +168,12 @@ c_band()  { grep -ac "DS4P-CONSUME banded"                             "$1"; }
 c_auto()  { grep -ac "DS4P-CONSUME auto"                               "$1"; }
 
 # ---------------- static arm ----------------
-start static || exit 1
+# ⚠ exit 3 is SKIPPED-BY-DESIGN, distinct from exit 1 (broken) and exit 2 (VOID/STRIKE). A caller
+# that collapses them scores a working guard as a defect, or worse, buries a real failure in a
+# "skipped" bucket. The three are separate exit codes so a batch runner cannot conflate them.
+start static; rc_s=$?
+[ "$rc_s" -eq 3 ] && { echo "log: $OUT"; exit 3; }
+[ "$rc_s" -ne 0 ] && exit 1
 S_OUT=$(ask)
 kill "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""; sleep 2
 
@@ -160,6 +186,35 @@ S_CONS=$(( $(c_band "$LOGDIR/static.log") + $(c_auto "$LOGDIR/static.log") ))
 printf '  STATIC  arch=%-14s out=[%s]\n' "${GOT_ARCH:-<none>}" "$S_OUT" | tee -a "$OUT"
 printf '          static-path warns=%-6s cap-fails=%-5s headdim-fails=%-5s DS4P-CONSUME=%s\n' \
        "$S_NOPG" "$(c_cap "$LOGDIR/static.log")" "$(c_hdim "$LOGDIR/static.log")" "$S_CONS" | tee -a "$OUT"
+
+# ⚠⚠ IS THE REFERENCE ITSELF SANE? This gate compares paged against static and calls a match a PASS.
+# It never asked whether static was worth comparing to -- and on gemma4-12B the static arm returned
+# "01111133" for the prompt "The capital of France is". Had the paged arm returned the same garbage,
+# the gate would have printed PASS on two broken runs agreeing.
+#
+# That is the degenerate-baseline trap for the third time in this lane: an evening spent scoring a
+# kernel against a reference that was itself looping, then the Q4-over-Q2 quant decision made
+# precisely to avoid it, and now a gate that encoded the lesson in its COMMENTS and not in its CODE.
+# A claim-vs-measure check catches lies; it does not catch absurdity. Absurdity needs its own test.
+#
+# The prompt is fixed and known, so the bar is specific rather than general: an answer to
+# "The capital of France is" that contains almost no letters, or almost no distinct characters, is not
+# an arbiter regardless of what the paged arm does.
+read -r LETTERS DISTINCT <<EOF
+$(printf '%s' "$S_OUT" | python3 -c "
+import sys
+s = sys.stdin.read()
+print(sum(c.isalpha() for c in s), len(set(s.strip())))")
+EOF
+if [ "${LETTERS:-0}" -lt 3 ] || [ "${DISTINCT:-0}" -lt 4 ]; then
+    echo | tee -a "$OUT"
+    echo "VOID: the STATIC reference is degenerate -- [$S_OUT] ($LETTERS letters, $DISTINCT distinct chars)." | tee -a "$OUT"
+    echo "  Static is the arbiter for this whole gate. A broken arbiter cannot judge the paged path:" | tee -a "$OUT"
+    echo "  if paged returns the same garbage the gate would print PASS on two broken runs agreeing." | tee -a "$OUT"
+    echo "  Fix the VEHICLE first -- wrong chat template, damaged quant, or a base model that needs a" | tee -a "$OUT"
+    echo "  different prompt. This says nothing about paging either way." | tee -a "$OUT"
+    echo "log: $OUT"; exit 2
+fi
 
 if [ "$GOT_ARCH" != "$ARCH" ]; then
     echo | tee -a "$OUT"
@@ -181,7 +236,16 @@ if [ "${S_CONS:-0}" -ne 0 ]; then
 fi
 
 # ---------------- paged arm ----------------
-start paged || exit 1
+# The interesting case: static served fine, paged is refused by the SWA/hybrid guard. That is the
+# guard doing its job, and the arch is UNANSWERED rather than failed.
+start paged; rc_p=$?
+if [ "$rc_p" -eq 3 ]; then
+    echo "-----" | tee -a "$OUT"
+    echo "SKIPPED: arch=$ARCH serves under static and is refused under --kv-paged BY DESIGN." | tee -a "$OUT"
+    echo "  Record it as UNANSWERED, never as verified and never as broken." | tee -a "$OUT"
+    echo "log: $OUT"; exit 3
+fi
+[ "$rc_p" -ne 0 ] && exit 1
 P_OUT=$(ask)
 kill "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""
 

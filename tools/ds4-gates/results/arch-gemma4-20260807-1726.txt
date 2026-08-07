@@ -1,0 +1,13 @@
+arch-serve gate: expected arch=gemma4  model=gemma4-12b-uncensored-1.5M-Q4.gguf
+tip: df17cee79 dirty=0  -c 4096
+  STATIC  arch=gemma4         out=[01111133]
+          static-path warns=1152   cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+  paged arm REFUSED BY DESIGN -- this arch class is guarded:
+  | kv_paged layer->backend map: 48 layers over 1 distinct backend(s)
+  Set AG_ENV to the enabling flag and re-run, e.g.
+    AG_ENV=DS4P_PAGED_HYBRID=1  ./tools/ds4-gates/arch_serve_gate.sh gemma4 <model>     # hybrid archs
+    AG_ENV=DS4P_PAGED_SWA=1     ./tools/ds4-gates/arch_serve_gate.sh gemma4 <model>     # SWA archs
+  Until then this gate CANNOT answer for this arch. Not a pass, not a failure.
+-----
+SKIPPED: arch=gemma4 serves under static and is refused under --kv-paged BY DESIGN.
+  Record it as UNANSWERED, never as verified and never as broken.
