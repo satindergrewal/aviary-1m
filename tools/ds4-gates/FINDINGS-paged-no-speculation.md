@@ -97,6 +97,44 @@ matches whether the draft worked perfectly or was never consulted.
    `DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1`. Both refusals were caught by matching the guard's *message
    text* rather than an arch list — `llama-model.cpp:2262` and `:2478`.
 
+## A SECOND, DISTINCT blocker on the same rows: the DRAFT builds its own paged pool, and it aborts
+
+Found running the `gemma4-assistant` pair (target `gemma-4-E2B-it` Q4_K_M + assistant F16). Arm (c)
+never reached the speculation question — it failed to serve:
+
+```
+llama-kv-cache-paged.cpp:314: GGML_ASSERT(buf_gpu && "Failed to allocate GPU KV cache buffer") failed
+```
+
+Sequence from the log, by line number:
+
+| line | event |
+|---|---|
+| 2076 | target `gemma4` loaded |
+| 3506 | **target's** paged KV init — `n_gpu_blocks=384`, succeeds |
+| 3691 | `common_speculative_init_result: loading draft model` |
+| 3771 | draft `gemma4-assistant` loaded |
+| 3980 | **a SECOND paged KV init, also `n_gpu_blocks=384`** — aborts |
+
+The draft model inherits `--kv-paged` and constructs its **own** paged pool, sized with the target's
+block count. It is not a capacity problem: the fitter reported `free_vram=107152 MiB` and
+`VRAM would have allowed 165736 blocks (88.5 GiB)` against a 384-block request (~220 MB).
+
+⚠ This is **independent of** the missing-speculation gap above. Fixing one does not fix the other:
+even once `update_slots_paged()` can speculate, a draft that aborts during KV allocation never gets
+that far. Both need addressing before any draft-head row can be answered.
+
+Consistent with the `dflash` pair, where arm (c) *did* serve — that draft is a standalone-shaped
+model, so its context construction differs from `gemma4-assistant`'s, which additionally throws
+`requires ctx_other to be set` during memory fitting immediately before the abort.
+
+## Confirmed on the way: the `draft-mtp` type for `gemma4-assistant`
+
+`spec_type_for()` in the harness guessed `draft-mtp` for this arch, flagged in-comment as a guess.
+Arm (b) measured **`draft_n = 33`, `accepted = 11`**, output identical to (a). The guess was right,
+and it is now a measurement — on a second speculative type, which also shows the losslessness
+property holding independently of type.
+
 ## What would close it
 
 Wire speculation into `update_slots_paged()`: draft generation at prompt-eval completion, draft tokens
