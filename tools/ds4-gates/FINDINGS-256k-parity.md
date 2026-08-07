@@ -350,3 +350,62 @@ that was not paged at all. Six iterations of that check, zero false greens — e
 
 ⚠ `DS4P-CONSUME` is `LLAMA_LOG_DEBUG` and requires `-lv 5`. At `-lv 4` it reads 0 on arms that are
 demonstrably paging. Reading that 0 as evidence is how this went unnoticed for hours.
+
+---
+
+# ⚠⚠⚠ CORRECTION 3 — my own config advice was HARMFUL. `--kv-block-size 64` alone disables paging.
+
+Clean one-variable test, Ornith-1.0-9B-1M, same binary, `-lv 4`, `--no-kv-unified`, only the block
+size differing. The new no-consumer guard is the instrument:
+
+| config | pool | guard | verdict |
+|---|---|---|---|
+| default bs (16), no champion | 1 | 0 | **genuinely paging** |
+| `--kv-block-size 64`, no champion | 1 | **1** | **POOL BUILT BUT DEAD** |
+| `--kv-block-size 64` + `DS4P_METAL_CHAMP=1` | 1 | 0 | genuinely paging (and fastest) |
+
+⇒ **`--kv-block-size 64` WITHOUT `DS4P_METAL_CHAMP` SILENTLY TURNS PAGING OFF.** The scalar kernel
+serves bs=16 but not bs=64; the champion serves bs=64. With neither, every layer falls back to static
+and the pool is dead weight.
+
+⚠ **The champion is opt-in only** (`getenv("DS4P_METAL_CHAMP")` — no default-on, no auto-detect). So
+the failing combination is reachable by following this document's own earlier advice.
+
+## What this retracts
+The earlier headline — *"`--kv-block-size 64` is the highest-value config fix; the default of 16 is
+the catastrophe"* — is **wrong and backwards**. A user who set bs=64 on my recommendation, without
+knowing an undocumented env var exists, got **less** paging than doing nothing.
+
+Correct guidance:
+
+| what you want | flags |
+|---|---|
+| paging that works, no env vars | `--kv-paged` (default block size) |
+| paging that works and is fastest | `--kv-paged --kv-block-size 64` **plus** `DS4P_METAL_CHAMP=1` |
+| paging silently disabled | `--kv-paged --kv-block-size 64` alone ← **avoid** |
+
+## Arch table intact
+Re-audited with `-lv 4` so the pool marker can appear, and `--no-kv-unified` so paging is not
+disabled by the unified-KV conflict:
+
+`qwen35` · `starcoder` · `ernie45` · `nemotron` — all `pool=1 guard=0`, **genuinely paging**.
+4 of 7 positively confirmed. The verified-arch table is not invalidated.
+
+## Three states, and why two of them look identical
+`guard=0` alone is **ambiguous**: it means *either* "paging fine" *or* "paging never enabled".
+Distinguishing requires **both** signals:
+
+| pool | guard | state |
+|---|---|---|
+| 0 | 0 | paging never enabled (e.g. `kv_unified` conflict) |
+| 1 | 1 | pool built but dead |
+| 1 | 0 | genuinely paging |
+
+⚠ `initializing paged KV cache` is `LLAMA_LOG_INFO` and needs `-lv 4`+. Reading its absence at default
+log level produced a `pool=0` column that was pure artifact — on **every** row, including runs that
+demonstrably paged. Third instance tonight of reading a 0 from a filtered log line
+(`DS4P-CONSUME` at `-lv 4`, `DS4P-MMA` at bs=64, this).
+
+⚠ Three runs tonight were silently killed by **zsh not word-splitting unquoted parameter expansions**
+(`DP_FLAGS`, the ngram `--spec-type`, and this `--kv-block-size 64`). The server rejected the joined
+argument and the run produced a plausible-looking zero. Pass server flags inline, never via `$var`.
