@@ -281,7 +281,7 @@ Every row below has its arch read out of the candidate GGUF's own header by
 | `hunyuan_vl` | HunyuanOCR Q8_0 · MATCH | 0.58 GB | ⛔ **UNANSWERED — vehicle unusable**, see below | Mac |
 | `dflash` | Qwen3.5-4B-DFlash Q4_K_M · MATCH | 0.38 GB | ⛔ **UNANSWERED — draft head**, see below | Mac |
 | `eagle3` | Qwen3-8B-EAGLE3-Speculator F16 · MATCH | 2.05 GB | ⛔ **UNANSWERED — draft head** (same code path; not downloaded) | Mac |
-| `gemma4-assistant` | — | — | ⛔ **UNANSWERED — not wired at all**, see below | ? |
+| `gemma4-assistant` | gemma-4-E2B-it-assistant **F16** · MATCH | **0.17 GB** | 🔧 **WIRED, read-only blocker removed — compiles, untested** | Mac |
 | `gemma4` *(bonus, NOT on the 19)* | Gemma4-26B-A4B-Uncensored-1M Q4_K_M (local) | 16.80 GB | ⚠ **PASS under `DS4P_PAGED_SWA=1` only** | Mac |
 | `ernie4_5-moe` | ERNIE-4.5-21B-A3B-Thinking **Q4_K_M** · MATCH | **13.33 GB** | ready to fetch | Mac |
 | `qwen3vlmoe` | Qwen3-VL-30B-A3B-Instruct **Q4_K_M** · MATCH | **18.56 GB** | ready to fetch | Mac |
@@ -316,7 +316,52 @@ wrong; recording them as pending without the reason would lose the work.
 |---|---|---|
 | `dflash`, `eagle3` | **Draft heads, not models.** `llama-context.cpp:187` throws `requires ctx_other to be set` when the GGUF carries no `tok_embd`/`output`. Confirmed empirically on `dflash` (0.38 GB, exit 3). `eagle3` is the same code path, so it was **not downloaded**. | A target+draft harness (`-md`), then the separate question of whether the *draft's* KV is paged at all |
 | `hunyuan_vl` | The only vehicle found is **HunyuanOCR**, an image model. Text-only prompts return `''` or `' $ $ $ $ …'`. The static reference is degenerate *by construction*, so there is nothing to arbitrate against. | mmproj + a real image, or a different `hunyuan_vl` text vehicle if one is published |
-| `gemma4-assistant` | **`gemma4-assistant` is a DIFFERENT ARCH from `gemma4`** — its own string in `llama-arch.cpp:59` and its own `src/models/gemma4-assistant.cpp`, which contains **no paged wiring at all** (`grep build_attn_paged_or_null` returns nothing). Its NextN head additionally calls `build_attn` with no new K/V, and the paged op `GGML_ABORT`s on that: read-only paged attention is not implemented. | Wire the consumer, then implement read-only paged attention (the "just skip the write" version compiled and segfaulted — `k_new` is dereferenced for shapes) |
+| ~~`gemma4-assistant`~~ | ~~unwired + read-only unimplemented~~ | **BOTH DONE** — see the read-only section below. Now: run the gate on the 0.17 GB vehicle |
+
+### Read-only paged attention — implemented (fork `cce5d6959`), and its test arm was vacuous
+
+`gemma4-assistant`'s NextN head calls `build_attn` with K and V **null**: it writes nothing and
+attends KV the main graph already stored. The paged op's contract was fused write-then-read with no
+way to express that, so the arch could not be wired at all.
+
+**Why the previous attempt segfaulted.** "Make the write conditional" compiled and regressed nothing,
+then crashed the moment a read-only call ran, because `n_heads_kv` still came from `k_new->ne[1]` —
+independently, in **both** backends. Fixing one leaves the other to crash elsewhere. It was a
+contract, not a branch.
+
+Geometry now comes from the pool, which carries it exactly:
+
+```
+ne = [head_dim, block_size, 2*n_head_kv, n_blocks]      llama-kv-cache-paged.cpp:202
+n_heads_kv = ne[2]/2
+```
+
+Derived **unconditionally** in both backends and cross-checked against `k_new` when present, so every
+ordinary paged request exercises the new derivation. A derivation used only on the new path has its
+first real test in the case nobody has run — which is how the last attempt got through.
+
+```
+DS4P_TEST_READONLY=1 DS4P_TEST_BS=64 DS4P_METAL_CHAMP=1
+D= 64 read-only     max_abs=0.000e+00 PASS   max|aro|=2.499e-01
+D= 64 read-only CPU max_abs=0.000e+00 PASS   max|bro|=2.499e-01
+D= 96 / D=128 same.   ALL PASSED
+```
+
+⚠⚠ **The test arm was vacuous — the argument shift this file's own comment warns about, in the call
+the warning exists to protect.** It read `run_paged(backend, D, with_rel, window, GGML_TYPE_F16, 0,
+true)`: seven positionals, so `true` landed on `causal` and `read_only_check` stayed **false**. The
+arm ran an ordinary paged call against another ordinary paged call — guaranteed `max_abs=0.000e+00
+PASS`, never exercising read-only once. When `read_only_check` was moved to LAST to fix the *earlier*
+shift, the declaration was corrected and the call site was not.
+
+Two further guards came out of that: a PASS here is `max_abs == 0`, which is also what an **empty**
+result prints (the loop is bounded by both sizes), so size and non-degeneracy are asserted and the
+magnitude is printed beside the verdict; and a **CPU arm** was added, since read-only changed both
+backends and testing only Metal leaves the other half compiled and unrun.
+
+⚠ **Not proved: there is no mutation test.** The implementation has not been broken on purpose to
+confirm the arm goes red. What is established is that the branch executes (`DS4P-READONLY` marker), in
+both backends, over non-empty non-zero output, bit-identical to write-then-read at three head dims.
 
 ⚠⚠ **`gemma4` is NOT the row on the owner's 19-list. `gemma4-assistant` is.** The PASS recorded above
 is plain `gemma4`, a **bonus arch** in the same position as `starcoder2` — useful, and not a point on
