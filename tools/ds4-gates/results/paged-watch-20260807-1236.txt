@@ -11,3 +11,13 @@ lengths: 8192 32768 49998   reps: 3   -c 73728   --kv-block-size 16
   paged   N=32768   r3  ok
   paged   N=49998   r1  ok
   paged   N=49998   r2  ok
+  paged   N=49998   r3  ok
+-----
+paged activity markers: 21
+  N=8192    failures 0/3
+  N=32768   failures 0/3
+  N=49998   failures 0/3
+
+PAGED CORRECTNESS WATCH: no mismatches in 9 comparisons.
+  ⚠ NOT a certificate. The 2026-08-07 defect was clean 6/6 in one window and failed
+  repeatedly in another at the same config. This bounds the rate; it does not clear the path.
