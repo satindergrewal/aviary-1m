@@ -240,6 +240,55 @@ Two placement failures on the way, both caught by the test rather than by inspec
 ⇒ **Make the run testify which branch it took.** One `printf` converts an inference into a
 measurement, and it found all four vacuities in this session.
 
+### ⚠ THE PREFIX-TRUNCATION CONTRACT — the loop half must size against `batch_lens`, never its own draft
+
+B's chunker **clamps**:
+
+```cpp
+const int32_t want = 1 + (int32_t) group->pending_draft.size();
+chunk_tokens[i] = std::min(want, std::max(1, budget - reserve_after));
+```
+
+So the rows actually emitted can be a **PREFIX** of the staged draft when the batch budget is tight —
+`set_draft()` caps against `n_batch`, but that check cannot see how much of the budget the other
+candidates in this step have taken.
+
+**Consequences the loop half must respect:**
+
+| rule | why |
+|---|---|
+| verify against `info->batch_lens[i] - 1` drafted rows, **never** against the caller's copy of the draft length | the emitted count is authoritative; the staged count is a request |
+| build `idxs` for `common_sampler_sample_and_accept_n` with exactly `batch_lens[i]` entries, and pass a draft slice of `batch_lens[i] - 1` | the helper asserts `idxs.size() == draft.size() + 1` and will abort on a mismatch |
+| a truncated tail is **silently dropped** — `update()` clears `pending_draft` unconditionally | correct: drafts are per-step advisory, not a queue. Stated so nobody "fixes" it into a carry-over. |
+
+Getting this wrong is an off-by-tail that only appears under batch pressure — invisible at `np=1`
+with a short prompt, which is every checkpoint run so far.
+
+### ★ The verify helper, read at the body (`common/sampling.cpp:658`)
+
+```cpp
+GGML_ASSERT(idxs.size() == draft.size() + 1);
+for (i = 0; i < draft.size(); i++) {
+    id = common_sampler_sample(gsmpl, ctx, idxs[i], grammar_first);
+    common_sampler_accept(gsmpl, id, true);
+    result.push_back(id);
+    if (draft[i] != id) break;          // the accept-prefix
+}
+if (i == draft.size()) { /* bonus token at idxs[i] */ }
+```
+
+Two properties that are **invisible from the signature** and both load-bearing:
+
+1. **It takes an explicit `idxs` vector** — it does *not* reach into `slot.spec_i_batch` or any
+   static-slot bookkeeping. The paged loop passes `batch_offsets[i] + 0..n_draft` and it works
+   verbatim.
+2. **It accepts into the sampler chain as it goes**, including the rejected token it stops on. The
+   caller must **not** re-accept the returned tokens — pattern-matching the non-speculative path would
+   double-accept.
+
+Its return length is 1..n_draft+1 and **is** the accepted count step D consumes. The two halves were
+designed independently and meet exactly.
+
 ### The server-loop half — read, not yet written
 
 The three consumption call sites, read before designing:
