@@ -1,0 +1,15 @@
+arch-serve gate: expected arch=qwen3vl  model=Qwen_Qwen3-VL-4B-Instruct-Q4_K_M.gguf
+tip: 3d9a3aa16 dirty=2  -c 4096
+  STATIC  arch=qwen3vl        out=[ Paris. The capital of Germany is Berlin]
+          static-path warns=72     cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+  PAGED   arch=qwen3vl        out=[ Paris. The capital of Germany is Berlin]
+          static-path warns=0      cap-fails=0     headdim-fails=0     pool=1
+          DS4P-CONSUME banded=576    auto=0
+          (startup reserve passes excluded: 0 static-path warnings before the first request)
+-----
+  consumer funnel: banded
+PASS: arch=qwen3vl  output identical  DS4P-CONSUME=576 (banded funnel)
+  fallbacks 72 -> 0, every layer carried by the paged path.
+  ⚠ SCOPE: short prompt at -c 4096. Says the arch is WIRED and CORRECT at small context.
+  Says nothing about long context, nothing about speed, and the ~50k intermittent paged
+  defect is open underneath every row of this table.
