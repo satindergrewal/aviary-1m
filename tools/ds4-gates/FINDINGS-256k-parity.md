@@ -614,3 +614,56 @@ until per-batch progress can be emitted without side effects.
 
 Different runs, ~40 min apart, so drift applies — but both arms clean, both needles found, kernels
 asserted. Consistent with the earlier n=2: paged wins wall and prefill marginally, decode ~1.64x.
+
+---
+
+# ⚠⚠⚠ The 225k corruption is INTERMITTENT — three innocent parties blamed and retracted
+
+`paged + champion` at 225k produces byte-identical garbage `' 123456789012345'` on roughly **1 run in
+3**. Every response carries `prompt_n=224992`, so the full prompt is always ingested.
+
+## Full tally, from responses already on disk
+
+| run | trace | headroom | result |
+|---|---|---|---|
+| `parity_fair/paged_opt` | off | 1.5 | pass |
+| `parity_rep/rep_paged_first` | off | 1.5 | pass |
+| `parity_ab/B_champ_nolazy` | off | 1.5 | pass |
+| `notrace/resp` | off | 1.5 | pass |
+| `parity_bins/paged_first` | **ON** | 1.5 | **FAIL** |
+| `ladder/p225` | off | **1.05** | **FAIL** |
+
+**The two failures differ in both variables that were blamed.** One had the trace marker and default
+headroom; the other had no trace and low headroom. Neither hypothesis explains both.
+
+⇒ **4 pass / 2 fail, same config family. ~33% failure rate. Intermittent.**
+
+## Three retractions, all the same mistake
+
+| blamed | on | retracted because |
+|---|---|---|
+| paging at 225k (a "correctness defect") | 1 failing run | static was clean, then the same config passed 4x |
+| `DS4P_PP_TRACE` (my own instrument) | 1 failing run, 4 untraced passes | the very next untraced run reproduced it |
+| `LLAMA_PAGED_POOL_HEADROOM=1.05` | 1 failing run at 1.05 | the other failure ran at the default 1.5 |
+
+The pattern was never "wrong suspect" — it was **concluding from a single run when the comparison set
+was already on disk.** The survey that settled it cost one command and no GPU.
+
+## What the failure shape says
+The occurrence is intermittent; the **failure mode is deterministic**. Both failures emit
+byte-identical output, so whatever goes wrong takes the same path every time it fires. That points at
+a **state-dependent trigger**, not a configuration one — a different bug shape from anything proposed
+above.
+
+⚠ `prompt_n` counts tokens **submitted**, not tokens **attended**. It cannot distinguish corruption
+from silent truncation, so it rules out input-side truncation only. Same two-ledger distinction —
+written vs read — that has recurred all session.
+
+## Consequences
+- **The headroom A/B is largely moot.** 70 min to test a variable the disk already exonerates.
+- **The depth sweep needs redesigning.** At a ~33% failure rate, a single clean depth-90 run proves
+  nothing; the design must account for the base rate before a miss can be interpreted.
+- **The ~50k intermittent defect has been open on this board all session.** Same word, same lane.
+  Whether it is the same bug at another scale is worth *checking* rather than assuming.
+- ⚠ **Every parity number tonight came from runs that could have been silently affected.** The clean
+  pairs were clean, but a 1-in-3 intermittent fault means any single unverified paged run is suspect.
