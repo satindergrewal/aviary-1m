@@ -221,7 +221,48 @@ Decide before writing B/C:
 - either `n_accepted` applies to **decode rows only**, prefill rows keeping legacy semantics, or
 - a per-row discriminator distinguishes prefill-final from decode.
 
-The first is simpler and matches how `prefill_pending` already discriminates mid-chunk rows.
+**DECIDED: a sentinel, not a struct change.** `prefill_pending[i]` discriminates *mid*-chunk rows, but
+the **final** prefill chunk has `prefill_pending = 0` and still needs advance=lens / append=1 — so it
+does not separate the case on its own.
+
+```
+n_accepted[i] < 0   ->  legacy semantics for this row (advance by batch_lens[i], append ONE)
+n_accepted[i] >= 1  ->  speculative row: advance by n_accepted[i], append that many
+```
+
+Self-describing, needs no addition to `llama_paged_batch_info`, and the caller always knows which rows
+it drafted for. A whole-array `nullptr` stays legacy for every row, so step D's checkpoint is
+unaffected.
+
+⚠ Under the `np=1` scope discipline a batch holds one sequence and is therefore either prefill or
+decode, never mixed — so this distinction is not exercised at first. It is decided now anyway, because
+the mixed case arrives with `-np>1` and a rule invented then would be invented while looking at a
+failure.
+
+### The draft-token INPUT CHANNEL — designed
+
+`llama_paged_batch_info` is **output only** (scheduler → caller): `write_slots`, `block_table`,
+`context_lens`, `batch_offsets`, `batch_lens`, `prefill_pending`, `seq_ids`. There is no inbound path,
+which is why `step()` can only build decode rows from `logical_seq.back()`.
+
+Proposed surface — one function, mirroring `add_request`'s shape:
+
+```c
+// Stage drafted tokens for a request. The NEXT prepare_batch() emits 1 + n_draft rows for it
+// (the last accepted token plus the draft) instead of a single row. Cleared by update().
+LLAMA_API bool llama_paged_scheduler_set_draft(struct llama_paged_scheduler * sched,
+                                               int32_t             request_id,
+                                               const llama_token * draft,
+                                               int32_t             n_draft);
+```
+
+Stored as a per-group `pending_draft` vector beside `logical_seq`. `step()` then emits
+`1 + pending_draft.size()` rows for that group (change **B**) with logits on all of them (change
+**C**), `allocate(1 + n_draft)` (change **A**), and `update()` consumes the accepted count (change
+**D**, already landed).
+
+⚠ **This is the largest single piece of the rock** — a new public entry point, bigger than any of
+A–D individually — and the "four localised lines" scoping did not contain it.
 
 ### ⚠ THE CHECKPOINT MUST USE A MULTI-CHUNK PROMPT
 
