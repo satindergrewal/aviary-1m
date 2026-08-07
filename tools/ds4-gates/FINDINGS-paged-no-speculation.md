@@ -307,6 +307,29 @@ path is likewise unconfirmed.
 
 Absence-vs-presence again: proof the call did not error, no proof it produced anything.
 
+**Eliminated, by reading and by experiment:**
+
+| candidate | how it died |
+|---|---|
+| layer-input capture not configured under paging | `speculative.cpp:1000` sets `llama_set_embeddings_layer_inp(ctx_tgt, …)` in the dflash impl's **constructor** — identical in both arms |
+| target not producing layer inputs | `get_embeddings_layer_inp` `GGML_ASSERT`s on `has_data()`. **No abort fires** and `process()` returns true, so the target *is* producing them under paging |
+| the draft-static fix (`604c2858a`) masking it | **experiment**: disabled the fix, rebuilt, re-ran → decode failures **22 with it, 22 without**, pool aborts **0 either way**. Neither causing nor masking. |
+
+★ **And that experiment sharpened three things that had been one blur.** The pool-allocation abort I
+fixed **never occurred on the dflash pair at all** — 0 aborts even with the fix disabled. It was
+specific to `gemma4-assistant`. So these are **three independent problems**, not one family:
+
+| | scope | state |
+|---|---|---|
+| draft builds its own paged pool and aborts | `gemma4-assistant` only | **FIXED** |
+| `llama_decode(ctx_dft)` returns −1 | `dflash` | **OPEN**, unrelated to the above |
+| speculation absent from the paged loop | all | wired, blocked by the row above |
+
+⚠ **Why the experiment was worth running:** "draft inherits kv_paged — FIXED" had been banked for
+hours. When a later symptom looked like it could be that fix in disguise, testing it cost one rebuild
+and one gate run. **A banked-wrong FIXED is worse than an open blocker, because nobody re-examines
+it.** Restored afterwards and verified by an **empty git diff**, not by trusting the copy.
+
 **Next step: instrument whether `ctx_dft` receives anything from `process()` — presence, not absence —
 before touching another line.**
 
