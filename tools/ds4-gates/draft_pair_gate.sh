@@ -132,9 +132,9 @@ start() { # $1 label  $2 "draft"|""  $3 "paged"|""
     # Gemma4Assistant ctx_other guard, which lives nine lines from the eagle3/dflash one and was
     # missed by a grep for the arch names. Spec-decode plus --kv-paged may well be guarded somewhere
     # too (the paged scheduler's n_batch == n_ubatch assert is a candidate).
-    if grep -qaE "not yet supported|needs DS4P_|requires DS4P_|not supported with speculative|incompatible with" "$LOGDIR/$1.log" 2>/dev/null; then
+    if grep -qaiE "not yet supported|not yet supported for KV-sharing|needs DS4P_|requires DS4P_|not supported with speculative|incompatible with" "$LOGDIR/$1.log" 2>/dev/null; then
         echo "  $1: REFUSED BY DESIGN -- guarded configuration:" | tee -a "$OUT"
-        grep -aE "not yet supported|needs DS4P_|requires DS4P_|not supported with speculative|incompatible with" \
+        grep -aiE "not yet supported|not yet supported for KV-sharing|needs DS4P_|requires DS4P_|not supported with speculative|incompatible with" \
             "$LOGDIR/$1.log" | head -1 | cut -c1-170 | sed 's/^/  | /' | tee -a "$OUT"
         return 3
     fi

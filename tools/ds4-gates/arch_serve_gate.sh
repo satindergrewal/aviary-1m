@@ -140,14 +140,14 @@ start() { # $1 = static|paged   -> PORT, SRVPID
         echo "  paged at all. One harness unblocks three of the nineteen." | tee -a "$OUT"
         return 3
     fi
-    if grep -qE "not yet supported for hybrid architectures|needs DS4P_PAGED_SWA=1|requires DS4P_PAGED_HYBRID=1" \
+    if grep -qiE "not yet supported for hybrid architectures|not yet supported for KV-sharing|needs DS4P_PAGED_SWA=1|requires DS4P_PAGED_HYBRID=1" \
             "$LOGDIR/$1.log" 2>/dev/null; then
         echo "  $1 arm REFUSED BY DESIGN -- this arch class is guarded:" | tee -a "$OUT"
         # ⚠ QUOTE THE LINE THAT MATCHED, not the first line mentioning kv_paged. The first version
         # grepped "kv_paged" and printed "kv_paged layer->backend map: 48 layers..." -- an unrelated
         # informational line -- as if it were the refusal. Evidence that does not come from the thing
         # being reported is not evidence, however plausible it reads.
-        grep -aE "not yet supported for hybrid architectures|needs DS4P_PAGED_SWA=1|requires DS4P_PAGED_HYBRID=1" \
+        grep -aiE "not yet supported for hybrid architectures|not yet supported for KV-sharing|needs DS4P_PAGED_SWA=1|requires DS4P_PAGED_HYBRID=1" \
             "$LOGDIR/$1.log" | head -1 | cut -c1-150 | sed 's/^/  | /' | tee -a "$OUT"
         echo "  Set AG_ENV to the enabling flag and re-run, e.g." | tee -a "$OUT"
         echo "    AG_ENV=DS4P_PAGED_HYBRID=1  $0 $ARCH <model>     # hybrid archs" | tee -a "$OUT"

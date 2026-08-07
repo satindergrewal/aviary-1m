@@ -1,0 +1,7 @@
+arch-serve gate: expected arch=gemma4  model=gemma-4-E2B-it-Q4_K_M.gguf
+tip: 1b4333ac2 dirty=1  -c 4096
+  STATIC  arch=gemma4         out=[ Paris.]
+          static-path warns=45     cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+  paged arm DID NOT SERVE
+  cause:
+  ! $HOME/Documents/GitHub/llama.cpp-ds4ports/src/llama-model.cpp:2520: GGML_ASSERT((!cparams.kv_paged || hparams.n_layer_kv_from_start < 0 || (uint32_t) hparams.n_layer_kv_from_start 
