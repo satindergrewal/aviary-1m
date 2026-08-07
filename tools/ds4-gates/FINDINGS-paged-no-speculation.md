@@ -192,12 +192,21 @@ Both halves now read. **The loop half is narrower than feared and the scheduler 
 
 ### Scheduler half — `llama-paged-scheduler-impl.cpp`
 
-| # | line | assumes one decode token |
-|---|---|---|
-| A | `:460,467` | `allocate(1, *group)`, guarded by `required_capacity = n_past + 1` |
-| B | `:798` | a decoding group contributes `logical_seq.back()` once |
-| C | `:805` | logits only on the last batch row: `token_idx == new_tokens - 1` |
-| D | `:876–878` | appends one sampled token; advances `n_past` by tokens **SUBMITTED**, not **ACCEPTED** |
+| # | line | assumes one decode token | state |
+|---|---|---|---|
+| A | `:460,467` | `allocate(1, *group)`, guarded by `required_capacity = n_past + 1` | not started |
+| B | `:798` | a decoding group contributes `logical_seq.back()` once | not started |
+| C | `:805` | logits only on the last batch row: `token_idx == new_tokens - 1` | not started (precondition verified) |
+| D | `:876–878` | appends one sampled token; advances `n_past` by tokens **SUBMITTED**, not **ACCEPTED** | **DONE** |
+| **E** | `:874–875` | `set_seq_max_pos` from the last **SUBMITTED** position, not the last **ACCEPTED** | **DONE** |
+| **input channel** | — | `step()` builds decode rows from `logical_seq.back()`; drafted tokens have **no way in** | designed, not started |
+| **wrapper layout** | `llama-paged-scheduler.cpp` | one token layout per call, not per row | **DONE** |
+
+⚠ **This list started as "four localised lines" and is now seven items.** E was five lines from D and
+invisible while fixing D. The input channel is a new public entry point and the largest single piece.
+Every scoping claim on this rock has been true of the layer read and silent about the next one down —
+three times, in both directions. The response is not another qualified claim; it is to stop publishing
+scope until the layer below has been read.
 
 ### ⚠ A FIFTH piece the "four lines" scoping did not contain: the draft-token INPUT CHANNEL
 
