@@ -209,6 +209,47 @@ Every scoping claim on this rock has been true of the layer read and silent abou
 three times, in both directions. The response is not another qualified claim; it is to stop publishing
 scope until the layer below has been read.
 
+### The server-loop half — read, not yet written
+
+The three consumption call sites, read before designing:
+
+| site | today | needed |
+|---|---|---|
+| `sampled` (`:3220`) | sized `n_seq`, one per sequence | **batch-offset sized**, matching step D's layout contract |
+| `stops` (`:3362`) | one per sequence | **unchanged** — a sequence stops or it does not; this is not a per-row property |
+| `populate_token_probs(..., idx)` | already takes an index | unchanged — each accepted token reports its own probabilities |
+
+⚠ I had been picturing `stops` becoming ragged alongside `sampled` "for symmetry". It must not.
+That change would look tidy and would quietly redefine what a stop means.
+
+**The drafting machinery the paged loop skips, quantified:**
+
+| function | size | spec-related lines |
+|---|---|---|
+| `pre_decode` | 721 | **68** |
+| `post_decode` | 275 | **18** |
+
+★ **Two findings that shrink the job:**
+
+1. `common_sampler_sample_and_accept_n(smpl, ctx_tgt, spec_i_batch, …)` **already exists** — the
+   verify loop (sample each row, compare to the draft, stop at the first mismatch) does not need
+   writing.
+2. The static path's rollback — `n_rollback = spec_draft.size() + 1 - accepted.size()` followed by
+   `seq_rm` — **is not needed on the paged path at all.** Rejected tokens leave KV past the new
+   `n_past` and the next step overwrites them (`DS4P_SLOT_COVER`: the write slot is a pure function of
+   position). The rollback *is* the accepted count, which step D already carries. The paged loop skips
+   the most delicate piece of the static one.
+
+⚠ **And what keeps it from being "add three calls":** those 68 lines are not all draft generation.
+They include context-shift interaction (`seq_rm(slot.id, n_keep, n_keep + n_discard)`), checkpoint
+handling on both target and draft contexts, and partial-draft reuse across steps. **Whether each
+applies to the paged loop is a per-item question**, and being wrong in either direction is a defect:
+skip one that matters and drafts go stale; port one that does not and `seq_rm` gets called on a paged
+cache.
+
+That per-item audit is the remaining work. No estimate — the scheduler half took six items, two
+retractions and four mutation tests, and it never touched the drafter's own KV lifecycle.
+
 ### ⚠ A FIFTH piece the "four lines" scoping did not contain: the draft-token INPUT CHANNEL
 
 `step()` builds decode rows from `logical_seq.back()` — one token, from state the scheduler **already
