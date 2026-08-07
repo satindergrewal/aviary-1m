@@ -940,3 +940,49 @@ confirmed by stash.
 
 **Next:** the scalar path's `causal` flag, with the control written first this time. The mechanism of
 the multi-row divergence is still OPEN; only the kernel has been ruled out.
+
+---
+
+## 2026-08-07 (later) — DOSE-RESPONSE. Damage scales with rejected tokens per step.
+
+The knob had to be made to move first. `--spec-draft-n-max` was not forwarded by this gate, so an
+earlier 1-vs-2 comparison produced `draft_n=63` in **both** arms — identical to the default run. The
+arms did not differ in the thing under test and neither number was data. Gate now forwards `DP_FLAGS`,
+and liveness is confirmed before reading any arm (`static draft_n 13 -> 27`, `paged 9 -> 63`).
+
+With the knob verified live:
+
+| `--spec-draft-n-max` | draft_n | accepted | paged output |
+|---|---|---|---|
+| 1 | 9  | **1** | `<think> 1. </think>  1 Paris, France** *   **Fact:** It is home to the` |
+| 2 | 12 | **2** | `<think>  <think>  12. 3. 4. 5. 6. 7.` |
+| 3 | 63 | 0 | `<think>  Here are:  1.  1.  1.1.1.1.1.1` |
+| static | 27 | 13 | `<think> Thinking Process:  1.  **Analyze the Request:** ...` |
+
+**Monotonic.** More rejected tokens per step, more damage. Acceptance is non-zero for the first time
+at n_max 1 and 2, and collapses to 0 at 3. This is positive evidence, not an elimination argument:
+the corruption is proportional to the quantity of state that should have been rolled back and was not.
+
+### The mechanism, with what supports each part
+
+| claim | evidence |
+|---|---|
+| extra rows cause it | matched control, identical binary/gate/prompt, `DS4P_SPEC_OFF` |
+| not the attention mask | multirow arm PASS at BS=64 with a **firing** control; scalar BS=16 matches CPU ref at 4.5e-08 |
+| not the sampler | one-factor: plain `common_sampler_sample` on row 0 of a 4-row batch, still wrong |
+| not slot mapping | 35 positions, 35 `(pos,slot)` pairs, no position with two slots |
+| target keeps recurrent state | 649 `ssm_` tensors, needs `DS4P_PAGED_HYBRID`, `n_rs_seq = 3` |
+| the rollback is missing | static path at `:4829` — *"partial acceptance is not supported by the context -> truncate the draft and restore the state"* → `ckpt.load_tgt(...)`. **The paged loop has no `load_tgt` and no checkpoint anywhere.** |
+| damage ∝ rejected count | the table above |
+
+⚠ `llama_memory_seq_rm(ctx_tgt, ...)` returns **true** here. That is not evidence the recurrent state
+moved — a hybrid memory can honour the attention half and no-op the recurrent half. The return value
+was checked and is reported by `DS4P-RMFAIL`; it never fires.
+
+⚠ Even `n_max = 1` is not clean, so this is not simply the `n_rs_seq` capacity bound being exceeded.
+It is consistent with the rollback not happening at all, with severity set by how much is left behind.
+
+**Fix shape:** port the static path's checkpoint/replay (`spec_ckpt` + `load_tgt`) into the paged loop,
+or refuse paged speculation when `common_context_can_seq_rm(ctx_tgt)` reports a context that cannot do
+partial acceptance. The guard is the honest interim: silent wrong output is the worst failure mode and
+three other paged defects are already guarded this way.

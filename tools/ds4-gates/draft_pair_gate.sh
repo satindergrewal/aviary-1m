@@ -111,6 +111,16 @@ echo "  spec type: $SPEC_TYPE" | tee -a "$OUT"
 start() { # $1 label  $2 "draft"|""  $3 "paged"|""
     PORT=$(pick_port) || { echo "  no free port" | tee -a "$OUT"; return 1; }
     local flags=()
+    # ★ EXTRA SERVER FLAGS, applied to EVERY arm so they cannot become a hidden confound.
+    # ⚠ It reads DP_FLAGS -- and a run that sets DP_FLAGS must confirm the knob MOVED (draft_n,
+    # or whatever the flag controls) before trusting the arms. I ran --spec-draft-n-max 1 vs 2
+    # through a gate that silently ignored it: draft_n was 63 in BOTH, identical to the default,
+    # so the arms did not differ in the one thing under test and neither number was data.
+    # shellcheck disable=SC2206
+    # NOTE: this script is BASH. Unquoted expansion word-splits here; ${=VAR} is ZSH-only
+    # syntax and would fail at runtime -- the same dialect trap that made me misreport a
+    # llama.cpp "invalid argument" as an upstream parser quirk when it was my own runner.
+    [ -n "${DP_FLAGS:-}" ] && flags+=(${DP_FLAGS})
     [ -n "$2" ] && flags+=(-md "$DRAFT" -ngld 99 --spec-type "$SPEC_TYPE")
     [ -n "$3" ] && flags+=(--kv-paged)
     local stamp; stamp=$(shasum -a 1 "$SRV" 2>/dev/null | cut -c1-12)
