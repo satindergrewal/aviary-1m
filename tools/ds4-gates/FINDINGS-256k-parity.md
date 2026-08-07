@@ -507,3 +507,50 @@ Seven retractions this session came from generalising off observations. This fin
 way: arithmetic from the source first, a falsifiable boundary stated with numbers, then the
 measurement. It is the only mode that produced durable results tonight — the same shape as the
 dose-response that settled the SSM mechanism.
+
+## Regression-risk case measured (not argued)
+
+The flip only *changes* behaviour where the champion would newly serve a request. On `head_dim <= 128`
+**both** kernels already work, so the flip swaps a working path — that is where regression risk lives,
+not on `D=256` where the alternative is no paging at all.
+
+Tested directly. `starcoder`, `head_dim=128`, `bs=64`, same binary, same prompt, 40-token greedy:
+
+| arm | `CHAMP-PAGED ACTIVE` | guard | bytes |
+|---|---|---|---|
+| scalar | 0 | 0 | 111 |
+| champion | 1 | 0 | 111 |
+
+**Byte-diff of the two completions: IDENTICAL.** Both genuinely paging.
+
+Two byte-identical comparisons now, on different archs and different failure modes:
+
+| model | head_dim | champion compared against | result |
+|---|---|---|---|
+| qwen35 | 256 | the static fallback | identical |
+| starcoder | 128 | the scalar **paged** path | identical |
+
+⇒ Knowing *which* arm to test came from the arithmetic, not from guessing. Without the shared-memory
+derivation the natural instinct is to keep testing D=256 models — where the comparison is meaningless,
+because there is no working scalar path to regress from.
+
+## head_dim <= 64: untested, no vehicle
+Swept every GGUF on the box (`attention.key_length`, falling back to
+`embedding_length / head_count`). Nothing at or below 64, so the third branch of the prediction has no
+test. Recorded as **untested**, not as "obviously fine by the arithmetic".
+
+The `D=128` case landing *exactly* on the 32,768 budget is the boundary where an off-by-one or a
+differently-sized staging term would surface. It did not — mild evidence the formula is right, but
+"predicted two, got two" is n=2 on the formula itself.
+
+## Usable rule, no re-measuring needed
+One GGUF field classifies any model:
+
+| head_dim | `--kv-block-size 64` |
+|---|---|
+| **>= 256** | needs `DS4P_METAL_CHAMP=1`, or paging silently dies |
+| **<= 128** | safe either way |
+
+That is the difference between a finding and a rule, and it is cheap only because the mechanism is
+arithmetic rather than empirical. Stopping at "bs=64 breaks Ornith" would have required a fresh run
+per model.
