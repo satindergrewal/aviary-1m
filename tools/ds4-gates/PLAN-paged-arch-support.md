@@ -170,6 +170,21 @@ other 21 archs.
 
 Cost: **241 MB, ~4 minutes.**
 
+### ⚠ A vehicle is only valid if it loads as the arch you wired
+
+**Name match is not arch match, and it has failed twice.**
+
+| intended arch | wrong vehicle picked by name | what it actually loads as |
+|---|---|---|
+| `starcoder` | StarCoder2-3B | `starcoder2` — a *different file*, not wired |
+| `nemotron` | Llama-3.1-Nemotron-Nano-8B | `llama` — a Llama-3.1 derivative |
+
+The first cost a download and a retracted "verification". The second was caught **before** downloading,
+by asking which arch the repo loads as rather than trusting the brand in its name.
+
+So every row below needs the arch it actually loads as, verified, before it counts as a plan — and
+the serve check reads `print_info: arch` rather than the filename.
+
 ### Test-vehicle sizing — the wiring is arch-shaped, not size-shaped
 
 The paged consumer is per-architecture, so the **smallest published variant of each family** is the
@@ -182,13 +197,13 @@ correct serve-check vehicle. A 0.3B ERNIE exercises `ernie4-5.cpp` exactly as a 
 | `hunyuan-moe` | Hunyuan-A13B-Instruct — 80B total / 13B active | **~34 GiB** at IQ3_KS | ✅ searched | **box** |
 | `qwen3moe` | Qwen3-30B-A3B Q2_K | **~11.4 GB** (Q4_K_M 18.6 GB) | ✅ searched | Mac |
 | `qwen3next` | Qwen3-Next-80B-A3B | sizes not published in results | ⚠ partial | **box** (80B) |
-| `nemotron` | Llama-3.1-Nemotron-Nano-8B Q4_K_M | **~4.92 GB** | ✅ searched | Mac |
-| `starcoder` | StarCoder2-3B Q4_K_M | **~1.85 GB** | ✅ searched | Mac |
+| `nemotron` | ~~Llama-3.1-Nemotron-Nano-8B~~ → **Nemotron-Mini-4B-Instruct** | Q4_K_M, not yet sized | ⚠ arch corrected, size unsearched | Mac |
+| `starcoder` | ~~StarCoder2-3B~~ → needs **StarCoder-1** | not yet sized | ⚠ arch corrected, size unsearched | Mac |
 | `grok` | Grok-1 class | not yet searched | ❌ | **box** |
 | `eagle3` | draft-head arch, pairs with a target | not yet searched | ❌ | ? |
 | `laguna` `mimo2` `step35` `dflash` `hunyuan-vl` `ernie4-5-moe` | — | not yet searched | ❌ | ? |
 
-**Six verified, one partial, eight not.** The three that are verified came from one search each and took a
+**Four vehicles verified, two arch-corrected and unsized, one partial, eight not searched.** The three that are verified came from one search each and took a
 couple of minutes; the rest is the same work, not harder work. Recorded as ❌ rather than filled with
 plausible numbers — an invented size is worse than a blank, because it silently becomes a schedule.
 
