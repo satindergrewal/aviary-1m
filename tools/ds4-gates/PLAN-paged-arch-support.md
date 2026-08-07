@@ -148,6 +148,21 @@ Locally present under `ornith-models/`:
 directory**, which is the special case above. So every one of the 16 standard wirings needs a quant
 downloaded before its serve check can run.
 
+### ✅ VERIFIED archs (serve check passed)
+
+| arch | vehicle | static | paged | paged markers | static-path fallbacks |
+|---|---|---|---|---|---|
+| `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | ` Paris.` | ` Paris.` | **3** | **0** |
+
+Both parts of the closure criterion met: correct text **and** the paged path confirmed active, with
+zero layers falling back. The static arm's 234 fallback warnings are the negative control — the
+counter can be non-zero, so a 0 means something.
+
+**Not verified by this:** long context (the ~50k defect applies here as everywhere), speed, and the
+other 21 archs.
+
+Cost: **241 MB, ~4 minutes.**
+
 ### Test-vehicle sizing — the wiring is arch-shaped, not size-shaped
 
 The paged consumer is per-architecture, so the **smallest published variant of each family** is the
@@ -155,7 +170,7 @@ correct serve-check vehicle. A 0.3B ERNIE exercises `ernie4-5.cpp` exactly as a 
 
 | arch | smallest published GGUF vehicle | approx size | verified | side |
 |---|---|---|---|---|
-| `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | **241 MB** | ✅ searched | Mac |
+| `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | **241 MB** | ✅ **downloaded + SERVE-VERIFIED** | Mac |
 | `qwen3vl` / `qwen3vlmoe` | Qwen3-VL-4B-Instruct Q4_K_M | **~2.5 GB** (Q3_K_M ~2.08 GB) | ✅ searched | Mac |
 | `hunyuan-moe` | Hunyuan-A13B-Instruct — 80B total / 13B active | **~34 GiB** at IQ3_KS | ✅ searched | **box** |
 | `qwen3moe` | Qwen3-30B-A3B Q2_K | **~11.4 GB** (Q4_K_M 18.6 GB) | ✅ searched | Mac |
@@ -206,7 +221,7 @@ silently wrong at long context.
 
 | phase | status | what is NOT verifiably closed |
 |---|---|---|
-| 3b hybrid paging | **PARTIAL** — 15 of 19 wired and compiling, 22 archs total | none is serve-verified; no local GGUFs; `gemma4-assistant` blocked on read-only; 3 specials need their own cache work |
+| 3b hybrid paging | **PARTIAL** — 15 of 19 wired, **1 serve-verified** (`ernie4-5`), 22 archs total | none is serve-verified; no local GGUFs; `gemma4-assistant` blocked on read-only; 3 specials need their own cache work |
 | B4 arcs 2-3 (q8 banded) | **CLOSED** — `test-paged-vs-cpu` ALL PASSED, q8_0 at the f16 error scale, champion marker asserted | q8_0 end-to-end on a real model; anything about speed |
 | paged op: attention sinks | **CLOSED on the champion**, verified | scalar-kernel sinks (ABORT-guarded); no end-to-end model run |
 | paged op: non-causal mode | **CLOSED**, verified with a differs-from-causal control | no end-to-end model run |
