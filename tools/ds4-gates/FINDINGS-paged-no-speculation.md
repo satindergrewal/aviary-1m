@@ -441,14 +441,36 @@ E srv update_slots: paged: llama_decode failed -- cancelling the batch's request
 Batch shape at failure: `n_seq=1, n_tokens=4, n_blocks_per_seq=2`. Note the **first** multi-row batch
 decodes fine; the **second** fails.
 
-⇒ **Leading hypothesis, and it must be tested not assumed:** after a partial accept the target's KV
-still holds the *rejected* draft positions, and `llama_batch` validation rejects a batch re-submitting
-positions already present for that sequence. `DS4P_SLOT_COVER` guarantees the paged **pool slots** are
-overwritable — that argument is about slots, **not** about the memory's per-sequence position
-bookkeeping, which is what the validator checks.
+⇒ **HYPOTHESIS CONFIRMED by instrumentation, not by attempting the fix.** The validator names it —
+`llama-batch.cpp:300`:
 
-⚠ The fix touches paged-memory position bookkeeping, which carries the *"positions are decreasing"*
-storm scar. **Not attempted without a controlled test.**
+```cpp
+const llama_pos p0 = memory ? memory->seq_pos_max(s) : -1;
+if (p0 >= 0 && seq_pos_min(s) != p0 + 1) {
+    // "it is required that the sequence positions remain consecutive: Y = X + 1"
+    return false;
+}
+```
+
+**The batch must start at exactly `memory->seq_pos_max(s) + 1`.** A multi-row decode writes
+`p..p+3`, so the memory records `seq_pos_max = p+3`. The target accepts ONE, so the next batch starts
+at `p+1`. Required `p+4`, got `p+1` ⇒ rejected. That is why the **first** multi-row batch decodes and
+the **second** fails.
+
+★ **The two-ledger point is now evidence rather than argument.** `DS4P_SLOT_COVER` proves the paged
+**pool slots** are overwritable — the write slot is a pure function of position. This validator does
+not read slots at all; it reads `memory->seq_pos_max(s)`. **Two ledgers.** I leaned on the slot proof
+four times today to say rejected tokens need no cleanup, and it was never a statement about this one.
+
+**The fix is nameable:** after a partial accept, the *context's* memory must have its recorded max
+position trimmed to the last ACCEPTED position. Step E already does exactly that for the
+**scheduler's** bookkeeping (`set_seq_max_pos` from the accepted count) — so the scheduler's ledger is
+correct and the context's is not.
+
+⚠ **First read for the next pass, before any code:** whether `set_seq_max_pos` can *lower* a recorded
+max or only raise it. If it only raises, step E's trim is a no-op on this path and the fix is a
+`seq_rm` on the target memory — which is *"positions are decreasing"* storm territory and needs a
+controlled test. **Not attempted.**
 
 ### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
 
