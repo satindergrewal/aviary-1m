@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+
+# ⚠ PRIVACY. This gate writes into tools/ds4-gates/results/, which is TRACKED -- and it built its
+# output path from $HOME, so every run committed /Users/<username>/ into the repo. the owner's rules
+# name file paths containing usernames as private data at absolute highest priority, after two
+# incidents that each needed a full history rewrite.
+#
+# ⚠ A TRAP, NOT A TRAILING CALL. paged_multimodel_gate.sh records why: a trailing scrub was jumped
+# over by the gate's own `exit`, while `grep -l scrub_abs_paths` still listed the gate as a caller,
+# because grep counts TEXT and not control flow. On EXIT it runs whatever path the gate takes.
+. "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+trap 'scrub_abs_paths "${OUT:-}"' EXIT   # ${OUT:-} : fires on early exits too, before OUT is set
+
 # EVICTION GATE -- covers the GPU<->CPU block-swap path.
 #
 # WHY THIS EXISTS: ca704d06 changed do_block_copy's staging buffer from one pool-wide size to a

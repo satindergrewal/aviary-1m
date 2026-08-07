@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+
+# ⚠ PRIVACY. Its output is copied into tools/ds4-gates/results/ by hand, so an absolute home path
+# reaches the tracked tree just as surely as a direct write -- and a human copy has no guard at all.
+# Trap, not a trailing call: a trailing scrub is jumped over by the gate's own `exit`.
+. "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+trap 'scrub_abs_paths "${OUT:-}"' EXIT
+
 # quench_econ_window.sh — P0-1 governor ECONOMICS arm (the GPU half quench_gate.sh could not run).
 # Staged 2026-08-03 so the box window ask is gate-on-binary clean: everything below is ready
 # to run the moment a card slot is granted; expected wall ~20-30 min.
