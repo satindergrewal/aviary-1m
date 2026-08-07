@@ -499,3 +499,49 @@ silently wrong at long context.
 | P2-8 continuous batching | **NOT STARTED** | `evict()` is a 13-line body; unscoped |
 | Metal parity | **NOT DONE** | bar is ≤1.0× at **256k–1M**; best clean measurement is 32k |
 | CUDA parity | **NOT DONE** | stale; no NVIDIA GPU on this Mac |
+
+---
+
+## 2026-08-08 — open items, each with its exact blocker
+
+### 1. Flip `DS4P_METAL_CHAMP` to default-on — OWNER'S CALL, one line
+```cpp
+ggml_metal_paged_champ_enabled() -> return e ? atoi(e) != 0 : true;
+```
+Full case in `FINDINGS-256k-parity.md`. No configuration is made worse; the one place regression could
+occur (head_dim 128, where both kernels work) tested **byte-identical**. Blocked only on approval —
+it changes which kernel every paged request uses.
+
+### 2. Graph reuse for the paged path — SPECIFIED, UNBUILT
+`llm_graph_input_attn_kv_paged::can_reuse()` returns `false` unconditionally. Static reuses graphs
+(measured 14 on a completed run); paged reuses zero, so every batch rebuilds **and** re-optimises the
+Metal graph — the `ggml_graph_optimize` / `ggml_metal_graph_optimize_reorder` chain seen in the stack
+sample.
+
+The comment justifying it does not hold: `write_slots` is a tensor whose *contents* change, not the
+topology. Shapes (`n_tokens`, `max_blocks`, `batch_size`) are constant during a uniform prefill, and
+`res->set_inputs()` runs at `llama-context.cpp:1488`, **after** the reuse branch closes at `:1481` —
+so a reused graph does get fresh contents.
+
+**Exact blocker:** `set_input()` reads six fields off `mctx`. A reused graph must refresh that pointer
+or it reads a stale mapping — *silently wrong attention*, not an error. The wrappers hold it privately:
+
+| holder | accessor |
+|---|---|
+| `llama_memory_hybrid_context::ctx_attn_paged` | setter only, no getter |
+| `llama_kv_cache_iswa` (`set_attn_paged_ctx`) | setter only, no getter |
+| `llama_kv_cache_paged::get_mem_attn_paged()` | on the **cache**, not the context |
+
+`can_reuse()` receives `params.mctx` = the hybrid/ISWA wrapper, and `dynamic_cast` to the paged type
+fails on exactly the models that matter.
+
+**Work:** add a const getter to both wrapper contexts → implement `can_reuse` to (a) refresh `mctx`
+through it and (b) compare the three shape terms. **Verification required before trusting it:** a
+long-context needle run under reuse, because the failure mode produces plausible text rather than an
+error.
+
+### 3. Still untouched
+per-batch timing for the paged loop (the 20k-bin curve is uncomputable on that arm) · interleaved
+`A B A B` attribution · ~50k intermittent defect · Metal/CUDA parity · 512k–1M ladder · multi-model ·
+paged speculation checkpoint port (`spec_ckpt` + `load_tgt`, currently correct-by-refusal) ·
+head_dim ≤ 64 branch of the shared-memory prediction (no vehicle on the box)
