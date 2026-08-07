@@ -292,3 +292,61 @@ is the one that matters** — run 1's confounded verdict was not "we didn't know
 expectation can. It would have aborted run 1 at minute one.
 
 **Zero false greens across all six.** Every failure was a refusal.
+
+---
+
+# ⚠⚠ RETRACTION — "block size is the catastrophe" is WRONG. Paged only works with the champion.
+
+Direct short-context test, `-lv 5`, `--kv-block-size 64`, one variable (`DS4P_METAL_CHAMP`):
+
+```
+nochamp   CHAMP=0   DS4P-MMA=0   DS4P-CONSUME=0     <- ZERO layers consume the paged cache
+champ     CHAMP=3   DS4P-MMA=0   DS4P-CONSUME=32    <- 32 layers consume it
+```
+
+**Without the champion kernel, `--kv-paged` allocates a pool that nothing uses.** Every layer falls
+back to static attention. `initializing paged KV cache` prints, `paged_pool=1` reports success, and
+not one layer reads the pool.
+
+## What this kills
+
+`arm A` (bs=64, no champ — 1139 s / 197.7 / 14.2 tok/s) is a **mislabelled static arm**: static
+attention carrying a wasted allocation. So the earlier claim —
+
+> *"bs=16 → bs=64 is cleanly attributed, ONE variable: never-finishes → parity"*
+
+— was comparing **real paged** (bs=16, which logged `DS4P-MMA OFF (scalar path)`) against
+**not-paged-at-all**. That is not a block-size result. It is the same kernel confound as run 1, one
+level down, and it had already been committed here as cleanly attributed.
+
+## The real finding, and it is a user-facing trap
+
+The scalar paged kernel **does not implement attention sinks** — its own abort message says so and
+names the fix ("use a geometry the champion serves"). Rather than corrupt, layers degrade to the
+static path. The champion implements sinks. Therefore on a sinks model:
+
+| config | what actually happens |
+|---|---|
+| `--kv-paged` alone | pool allocated, **silently unused**, static performance, memory wasted |
+| `--kv-paged` + `DS4P_METAL_CHAMP=1` + `--kv-block-size 64` | genuinely paged, and it **beats static** |
+
+⇒ A user enabling `--kv-paged` on such a model today gets no paging, no error, and pays the memory.
+Both success indicators (`initializing paged KV cache`, `paged_pool=1`) report fine. This is the
+**reports-success-for-a-no-op** shape. Every "paged" number produced in this lane before the champion
+arms was measuring static attention.
+
+## What survives — and it was always a champion-vs-static comparison
+
+**Decode ~1.68x**: paged 25.5 / 24.0 tok/s vs static 15.0 / 14.5 tok/s. Both arm orders, n=2 each,
+`CHAMP` + `DS4P-CONSUME` confirmed on the paged arms and `STATIC` on the controls, needle found on
+every arm. This is the one number that has survived every check.
+
+Wall advantage ~5-6% after drift correction; prefill is inside the noise.
+
+## How it was found
+The **expected-kernel assert** refused to produce a number for an arm whose kernel it could not name.
+Without that refusal the interleave would have returned four clean-looking numbers built on an arm
+that was not paged at all. Six iterations of that check, zero false greens — every failure a refusal.
+
+⚠ `DS4P-CONSUME` is `LLAMA_LOG_DEBUG` and requires `-lv 5`. At `-lv 4` it reads 0 on arms that are
+demonstrably paging. Reading that 0 as evidence is how this went unnoticed for hours.
