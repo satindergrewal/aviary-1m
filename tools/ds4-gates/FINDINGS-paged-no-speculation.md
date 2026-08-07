@@ -435,14 +435,30 @@ The discriminating check is **arm (c) paged acceptance ≈ arm (b) static accept
 
 **⚠ "Comparable" is not a criterion. The tolerance is fixed HERE, before the feature exists:**
 
-> **PASS** = arm (c) paged acceptance ratio within **±0.15 absolute** of arm (b) static acceptance
-> ratio, over **3 reps at fixed seed** on the same pair. Outside that = FAIL, investigate the mirror
-> or the context, not the noise.
+> **PASS** = arm (c) paged acceptance ratio within **±0.05 absolute** of arm (b) static acceptance
+> ratio on the same pair. Outside that = FAIL, investigate the mirror or the context.
 
-Those baselines are single samples (13/27 = 0.48, 11/33 = 0.33) on 24-token greedy runs, so the gate
-must also **measure arm (b)'s own rep-to-rep spread before the feature lands** — if static acceptance
-itself varies by more than ±0.15 across reps, the tolerance is too tight and must be widened *on that
-measurement*, not on the paged result.
+⚠ **The tolerance was ±0.15 by guess. It is now ±0.05 by MEASUREMENT, and the debt is paid.** The
+pre-registration required measuring arm (b)'s own rep-to-rep spread before the feature lands. Done,
+`dflash` + Qwen3.5-4B, 5 reps, `temperature 0`, fixed seed, `cache_prompt: false`:
+
+```
+rep 1  draft_n=27  accepted=13  ratio=0.4815
+rep 2  draft_n=27  accepted=13  ratio=0.4815
+rep 3  draft_n=27  accepted=13  ratio=0.4815
+rep 4  draft_n=27  accepted=13  ratio=0.4815
+rep 5  draft_n=27  accepted=13  ratio=0.4815
+```
+
+**Spread is ZERO.** Greedy acceptance is fully deterministic within a path, so *any* arm-to-arm
+difference is a real difference and not noise. The residual ±0.05 does not cover run-to-run variance
+— there is none — it covers **fp divergence between the static and paged KV paths flipping a marginal
+accept/reject decision**. At 27 drafts that is at most ~1 flipped decision; anything larger is a bug,
+not arithmetic.
+
+This is the *"limit calibrated on unchecked runs"* scar run in reverse: a bound set by guess, then
+measured, and the measurement made it **four times tighter**. Had I skipped the measurement I would
+have shipped a criterion that could not distinguish a working feature from a badly broken one.
 
 Leaving "comparable" undefined until after the run means defining the bar while looking at the answer.
 That is the impossible-bar scar from the other direction, and it is the easiest one to walk into
