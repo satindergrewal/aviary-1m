@@ -179,3 +179,55 @@ verdict for eleven hours.
 
 **A precondition and a flag are not the same knob.** `bs=64` is *required by* the champion, but it is
 also an independent switch that massively helps the scalar path. I collapsed the two.
+
+---
+
+# ATTRIBUTION SETTLED — the champion kernel is the cause
+
+All arms: same binary, same prompt, curl-wall, needle required, kernel identified *before* the
+request was sent.
+
+| arm | config | kernel | wall | prefill | decode | needle |
+|---|---|---|---|---|---|---|
+| static | — | flash | 1102 s | 204.4 tok/s | 15.0 tok/s | found |
+| run 1 | bs=16, no champ | scalar | **>2200 s** | — | — | **never finished** |
+| A | bs=64, no champ, no lazy | scalar | 1139 s | 197.7 tok/s | 14.2 tok/s | found |
+| B | bs=64, **CHAMP**, no lazy | CHAMPION | **1091 s** | **206.4 tok/s** | **25.5 tok/s** | found |
+| PASS | bs=64, CHAMP, LAZY | CHAMPION | 1105 s | 203.7 tok/s | 25.9 tok/s | found |
+
+**Two clean one-variable comparisons:**
+
+- **A vs B** — differ *only* in the champion → decode **14.2 → 25.5 tok/s (1.80x)**.
+  ⇒ The champion kernel produces the decode win. Settled.
+- **B vs PASS** — differ *only* in lazy sync → 25.5 vs 25.9 decode, 1091 s vs 1105 s wall.
+  ⇒ **Lazy sync has no measurable effect.** The arm *without* it was nominally faster.
+
+## ★ Paged + champion BEATS static on every axis
+
+| | static | paged+champion | |
+|---|---|---|---|
+| wall | 1102 s | **1091 s** | 1.01x faster |
+| prefill | 204.4 tok/s | **206.4 tok/s** | marginally faster |
+| decode | 15.0 tok/s | **25.5 tok/s** | **1.70x faster** |
+| needle | found | found | — |
+
+Against the bar — *"equal or better than static, 256k to 1M"* — this is **better**, not equal.
+
+## ⚠ A committed fix of mine measured ZERO
+
+`3da26e179` (lazy sync) was reverted by `72ef1fd16`. The observation was correct — ~440 redundant
+synchronizes versus static's ~1, found by stack sampling — and the conclusion that they were the
+bottleneck was wrong. The CPU sat in `ggml_metal_synchronize` because the GPU was genuinely busy.
+**A correct observation about redundant work is not evidence that the work is the cost.**
+
+Reverted rather than left as an inert env-gated branch: it measured zero, and a flag that does
+nothing later reads as an untried idea.
+
+## What is still NOT established
+- **n=1 throughout.** One model, one context, one box, one prompt, one depth, no repeats.
+- **Mechanism of the bs=16 collapse is unmeasured.** Hypothesis only (block-table indirection /
+  locality cliff).
+- Arm C (lazy alone) aborted on the kernel assert and was not re-run — B vs PASS already answers it.
+- Graph reuse (`can_reuse` hard-returns false for paged) still **specified and unbuilt**.
+- Per-batch timing for the paged loop still missing, so the 20k-bin curve remains uncomputable there.
+- Metal/CUDA parity, 512k–1M ladder, multi-model: untouched.
