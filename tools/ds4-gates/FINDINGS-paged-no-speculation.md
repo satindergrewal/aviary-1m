@@ -527,7 +527,34 @@ UPDPROBE any_spec=0 n_seq=1 acc0=-1 off0=0 len0=12    prefill
 UPDPROBE any_spec=1 n_seq=1 acc0=1  off0=0 len0=4     speculative — reached, acc0 correct
 ```
 
-### ★★★ ROOT CAUSE: THE VALIDATOR AND THE SCHEDULER READ DIFFERENT MEMORY OBJECTS
+### ⚠⚠ THE ISWA ROOT CAUSE BELOW IS **REFUTED** — by a probe run within the hour
+
+`DS4P_LEDGER_PROBE` printed both children at every `seq_pos_max` call:
+
+```
+DS4P-LEDGER seq=0 swa=11 base=11
+DS4P-LEDGER seq=0 swa=15 base=15     after the multi-row decode
+DS4P-LEDGER seq=0 swa=12 base=12     after step E's trim -- BOTH children trimmed
+```
+
+**The two children agree and both get trimmed.** The `iswa → kv_swa` delegation is not the problem,
+and the "third two-ledger instance" claim was wrong. Kept below rather than deleted, because the
+reasoning was sound and only the fact was false.
+
+**What the same run actually shows:** the batch is rebuilt at `Y = 12` *twice* — once when the memory
+reads 15 and again when it reads 12. Both rejected. So `n_past` is **not advancing** after the first
+successful multi-row decode, and the ledger value is a symptom rather than the cause.
+
+⚠ And the retry loop explains the repetition: a failed `llama_decode` returns before `update()` runs,
+so nothing advances and the identical batch is rebuilt. **Only the FIRST failure carries
+information** — everything after it is the same batch echoing.
+
+**Corrected next question:** why `group->n_past` is still 12 when `prepare_batch` builds the batch
+after a successful multi-row decode whose `update()` demonstrably ran (the trim proves it did).
+Note `update()` has *two* paths that advance `n_past` — the `prefill_pending` early-`continue` at
+`:892` and the main path — and only one of them was verified.
+
+### ~~ROOT CAUSE~~ (REFUTED, see above): THE VALIDATOR AND THE SCHEDULER READ DIFFERENT MEMORY OBJECTS
 
 `llama-kv-cache-iswa.cpp`:
 
