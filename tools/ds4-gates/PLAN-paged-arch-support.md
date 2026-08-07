@@ -156,9 +156,20 @@ sliced numbers, and the earlier unsliced ones (414/828/736/1104) should not be d
 | arch | vehicle | funnel | warns static→paged | `DS4P-CONSUME` | startup excluded | output |
 |---|---|---|---|---|---|---|
 | `ernie4_5` | ERNIE-4.5-0.3B-PT Q4_K_M | banded | 36 → **0** | **180** | 0 | identical |
-| `qwen3vl` | Qwen3-VL-4B-Instruct Q4_K_M | banded | — → **0** | **576** | 0 | identical |
+| `qwen3vl` ⚠ | Qwen3-VL-4B-Instruct Q4_K_M | banded | — → **0** | **576** | 0 | identical — **TEXT ONLY** |
 | `nemotron` | Nemotron-Mini-4B-Instruct Q4_K_M | banded | — → **0** | **512** | 0 | identical |
 | `qwen3moe` | Qwen3-30B-A3B Q4_K_M | banded | 96 → **0** | **768** | 0 | identical |
+
+⚠⚠ **`qwen3vl` and `qwen3vlmoe` are verified TEXT-ONLY, and that matters.** Both are
+vision-language models and both were gated with a text prompt. `FINDINGS-paged-drops-images.md`
+documents a defect in the **server request path**, not in any architecture: under `--kv-paged`,
+`get_text_tokens()` strips every media placeholder, so an image prompt reaches the model with the
+picture removed. That mechanism is arch-independent, so **their image path under paging was broken by
+it too** — measured on `hunyuan_vl`, where it turned `PARIS` into `BUTTERFISH`.
+
+Since 7b614a636 the server **refuses** multimodal prompts under `--kv-paged` rather than answering
+from text alone, so the failure is now loud. But these two rows say nothing about vision, and the owner
+runs VL models for vision. Recorded here so the count is not read as more than it is.
 
 ⚠ **The `startup excluded` column is the load-bearing one.** It reads 0 for all four, which turns
 "these four cannot have been contaminated by startup reserve passes" from an argument into a
@@ -278,13 +289,13 @@ Every row below has its arch read out of the candidate GGUF's own header by
 | `nemotron` | Nemotron-Mini-4B-Instruct Q4_K_M | 2.51 GB | ✅ **SERVE-VERIFIED** | Mac |
 | `qwen3moe` | Qwen3-30B-A3B Q4_K_M | 17.35 GB | ✅ **SERVE-VERIFIED** | Mac |
 | `starcoder` | StarCoderBase-1B Q8_0 · MATCH | 1.26 GB | ✅ **SERVE-VERIFIED** — found + fixed a real paged bug, see below | Mac |
-| `hunyuan_vl` | HunyuanOCR Q8_0 · MATCH | 0.58 GB | ⛔ **UNANSWERED — vehicle unusable**, see below | Mac |
+| `hunyuan_vl` | HunyuanOCR Q8_0 + mmproj · MATCH | 0.58 + 0.73 GB | ⛔ **FAIL → now REFUSED**: paged dropped the image (`PARIS` → `BUTTERFISH`) | Mac |
 | `dflash` | Qwen3.5-4B-DFlash Q4_K_M · MATCH | 0.38 GB | ⛔ **BLOCKED — paged loop cannot speculate** (harness ran; see FINDINGS) | Mac |
 | `eagle3` | Qwen3-8B-EAGLE3-Speculator F16 · MATCH | 2.05 GB | ⛔ **BLOCKED — paged loop cannot speculate.** 2.05 GB deliberately UNSPENT, see below | Mac |
 | `gemma4-assistant` | gemma-4-E2B-it-assistant F16 · MATCH | 0.17 GB | ⛔ **BLOCKED — paged loop cannot speculate** (wiring done, serve-untested) | Mac |
 | `gemma4` *(bonus, NOT on the 19)* | Gemma4-26B-A4B-Uncensored-1M Q4_K_M (local) | 16.80 GB | ⚠ **PASS under `DS4P_PAGED_SWA=1` only** | Mac |
 | `ernie4_5-moe` | ERNIE-4.5-21B-A3B-Thinking **Q4_K_M** · MATCH | **13.33 GB** | ✅ **SERVE-VERIFIED** | Mac |
-| `qwen3vlmoe` | Qwen3-VL-30B-A3B-Instruct **Q4_K_M** · MATCH | **18.56 GB** | ✅ **SERVE-VERIFIED** | Mac |
+| `qwen3vlmoe` ⚠ | Qwen3-VL-30B-A3B-Instruct **Q4_K_M** · MATCH | **18.56 GB** | ✅ **SERVE-VERIFIED (TEXT ONLY)** | Mac |
 | `laguna` | Laguna-S-2.1 Q8_0, 4 shards · MATCH | 256×4.5B | searched | **box** |
 | `mimo2` | MiMo-V2.5 UD-Q4_K_S, 5 shards · MATCH | 256×8.2B | searched | **box** |
 | `step35` | Step-3.5-Flash Q4_K · MATCH | 118.71 GB | searched | **box** |
