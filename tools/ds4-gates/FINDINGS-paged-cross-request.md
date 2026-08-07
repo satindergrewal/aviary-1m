@@ -37,6 +37,35 @@ windows — weak evidence. Memory pressure or allocator interaction would fit ev
 intermittent, config-independent, content-independent, and invisible to both the poison test and the
 slot-coverage invariant because none of the paged bookkeeping is wrong.
 
+## The load hypothesis is dead, and the failure is UNINSTRUMENTED
+
+| condition | failures |
+|---|---|
+| quiet box, one server under a lock | **0 / 6** independent server starts |
+| second server hammering 49k prefills throughout | **0 / 5** |
+
+Deliberately recreating the concurrent-GPU-work condition that correlated with the failing window
+produced nothing. The load correlation was two windows and it does not survive a controlled test.
+
+**And the failing runs left no trace.** A failing server's log against a clean one at the same config:
+
+| | failing (`ND-paged`) | clean (`RT-1`) |
+|---|---|---|
+| `build_attn_paged_or_null` static-path warnings | 88 | 88 |
+| distinct layers taking the static path | 8 | 8 |
+| `fails the paged capability contract` | 0 | 0 |
+| warnings or errors present in one and not the other | **none** | |
+
+Same warnings, same layer fallbacks, same scheduler state — then different tokens.
+
+⇒ **Every existing marker, warning and assert on the paged path passes while the output is wrong.**
+So the first job is not to find the bug; it is to add a check that can *fail* when it happens, because
+none of the current ones can. This defect is not merely intermittent, it is uninstrumented.
+
+*(Side note for anyone reading the speed numbers: 8 layers take the static path in every run, clean or
+broken. That is this model's shape, not a defect — but the paged path is not carrying all the
+attention even when it is on.)*
+
 ## What survives — eliminations that were repeated, not sampled
 
 Each varied the factor, confirmed it varied, and held across multiple arms.
@@ -84,10 +113,20 @@ then three further experiments were built on the number it warned about instead 
 
 ## Next step, and it is the only one worth taking first
 
-**Measure the rate under load.** Reproduce the failing window deliberately — a second heavy GPU
-consumer running alongside — and count failures per N server starts at one fixed config. Without a
-rate, no bisect is valid and no length result means anything. With one, the whole characterisation
-can be redone at whatever rep count the rate demands.
+~~Measure the rate under load.~~ **Done: 0/5 under deliberate load, 0/6 quiet. The load hypothesis is
+dead and the failure is not currently reproducible on demand.**
+
+**Add instrumentation that can fail.** The log comparison above shows every existing check passing on
+a run that produced wrong output. Candidates, cheapest first:
+
+1. A per-request output hash against a static reference, run automatically at several lengths — so the
+   next occurrence is *caught* rather than noticed by eye.
+2. An assertion on the attention output itself (finite, bounded, non-degenerate) rather than on the
+   bookkeeping around it, since the bookkeeping is provably clean.
+3. Keep `DS4P_SLOT_COVER` on in any long-running paged server: it costs one comparison per token and
+   is the only invariant here that could have caught a mapping fault.
+
+Until something can fail on demand, no bisect is worth running.
 
 ## Harness rules this hunt paid for
 
