@@ -49,8 +49,13 @@ mkreq() { # $1 depth_percent -> writes a JSON request body
     python3 - "$1" "$FILL" "$NEEDLE" "$LOGDIR/req-$1.json" <<'PY'
 import json,sys
 depth, fill, needle, out = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3], sys.argv[4]
-# ~12 tokens per filler line, so lines ~= fill/12
-lines = max(1, fill // 12)
+# ⚠ MEASURED, NOT GUESSED. This said 12 tokens per line and the real figure is ~23.4: LC_FILL=240000
+# produced a 468925-token prompt, which BOTH arms rejected against a 262144 context. The constant
+# made LC_FILL mean roughly half of what it claimed, so every long-context run built a prompt about
+# twice the requested size. Both arms failed identically, which is exactly how the static control is
+# supposed to behave -- it said "not a paged bug" in one line.
+TOK_PER_LINE = 23.4
+lines = max(1, int(fill / TOK_PER_LINE))
 at = max(1, int(lines * depth / 100))
 buf = []
 for i in range(lines):
@@ -71,7 +76,7 @@ start_srv() { # $1 label  $2 extra args
     # shellcheck disable=SC2086
     env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 \
         nohup "$SRV" -m "$M" -ngl 99 -c "$CTX" -np 1 -b 512 -ub 512 --port $P --no-warmup -lv 4 \
-        $2 > "$LOGDIR/$1.log" 2>&1 &
+        $2 >> "$LOGDIR/$1.log" 2>&1 &   # APPEND: > truncated on every restart, hiding that restarts happened at all
     for _ in $(seq 1 600); do
         [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] && return 0
         sleep 1
@@ -94,10 +99,20 @@ probe() { # $1 arm  $2 extra args
         paged)  [ "$marker" -lt 1 ] && { echo "paged: FAIL no paged pool built -- arm is not paged" | tee -a "$OUT"; fails=$((fails+1)); pkill -f "$SRV"; return; } ;;
         static) [ "$marker" -gt 0 ] && { echo "static: FAIL built a paged pool -- arm is not static" | tee -a "$OUT"; fails=$((fails+1)); pkill -f "$SRV"; return; } ;;
     esac
-    for d in 10 50 90; do
+    # ★ DEPTHS CONFIGURABLE. At 256k a single depth costs ~40 min (prefill is O(n^2)), so the
+    # 3-depth default puts BOTH paged arms two hours behind the static ones -- no early signal, and
+    # a failure at hour 3 burns the whole run. LC_DEPTHS=50 gets one matched static/paged pair fast;
+    # the full sweep still runs by leaving it unset.
+    for d in ${LC_DEPTHS:-10 50 90}; do
         mkreq "$d"
         local resp txt n
-        resp=$(curl -s --max-time 900 -X POST http://127.0.0.1:$P/completion \
+        # ⚠ TIMEOUT MUST SCALE WITH CONTEXT. Prefill is O(n^2): 4K returns instantly, 230k takes
+        # ~40 MINUTES on this box. A fixed 900 s cap silently abandons every request above roughly
+        # 100k, so this gate COULD NOT EVER have produced a result at the sizes it exists to test --
+        # and it fails as a curl timeout, which looks like a hung server rather than a gate bug.
+        # 900 s floor, plus 1 s per 60 tokens of prompt.
+        local tmo=$(( 900 + FILL / 60 ))
+        resp=$(curl -s --max-time "$tmo" -X POST http://127.0.0.1:$P/completion \
                -H 'Content-Type: application/json' --data-binary "@$LOGDIR/req-$d.json")
         txt=$(echo "$resp" | python3 -c 'import json,sys
 try: j=json.load(sys.stdin)
