@@ -31,10 +31,23 @@ tools/server/server-context.cpp:3328
         // line 4349: if (slot.can_speculate()) { common_speculative_begin(...); }
 ```
 
-| loop | references to `common_speculative` / `spec_draft` / `can_speculate` |
-|---|---|
-| `update_slots_paged()` | **0** |
-| static `update_slots()` | **22** |
+| function | speculation references | reached by the paged loop? |
+|---|---|---|
+| `update_slots_paged()` (lines 3068–3326, 259 lines) | **0** | it *is* the paged loop |
+| `pre_decode()` | **8** | **no** |
+| `post_decode()` | **13** | **no** |
+| `handle_last_sampled_token()` | **5** | **no** |
+
+The static `update_slots()` calls `pre_decode()` and `post_decode()`. `update_slots_paged()` calls
+neither, and contains no speculation reference of its own. All the drafting lives in helpers the paged
+loop never enters.
+
+⚠ **A correction to the first version of this document.** It reported "0 in the paged loop vs 22 in
+the static loop". The 22 was an artifact: the count used `awk '/^    void update_slots\(\)/,0'`,
+whose range runs to **end of file**, so it swept every function that follows. Correctly scoped by
+brace matching, `update_slots()` itself contains **0** speculation references too — the code is in
+`pre_decode`/`post_decode`, which is why the corrected table names them. The load-bearing number was
+always the **0** in the paged loop; the 22 was decoration, and it was wrong.
 
 The paged scheduler owns batching entirely, and speculation was never wired into it. Nothing is
 disabled and no flag is off — the code is not there.
