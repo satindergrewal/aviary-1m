@@ -240,6 +240,46 @@ Two placement failures on the way, both caught by the test rather than by inspec
 ⇒ **Make the run testify which branch it took.** One `printf` converts an inference into a
 measurement, and it found all four vacuities in this session.
 
+### Loop half: WIRED, and blocked on the drafter's own KV (2026-08-07)
+
+Fork `40aa45e45`. Regression clean; **speculation still does not run.**
+
+**Landed and necessary:** `llama_set_embeddings` before the paged decode · `common_speculative_process`
+after it · `common_speculative_accept(…, accepted.size() - 1)` (the last entry is the target's bonus
+token, not a draft acceptance) · the verify on `common_sampler_sample_and_accept_n` ·
+`n_draft_total`/`n_draft_accepted` reporting.
+
+**⚠ THREE PIECES OF SLOT STATE THE PAGED LOOP DID NOT MAINTAIN**, each found by the drafter's own
+counters rather than by reading:
+
+| state | symptom |
+|---|---|
+| `SLOT_STATE_GENERATING` | my condition tested it; **the loop never sets it** — the whole draft block was DEAD CODE, and the only occurrence of that constant in the function was my own test |
+| `common_speculative_begin` | never called → `#calls(b,…) = 0` |
+| `slot.sampled` — the drafter's `id_last` | read by my params, **never written here** → `draft()` ran 22 times and generated **zero** |
+
+Same class every time: **the paged loop enters neither `pre_decode` nor `post_decode`, so every piece
+of slot state those maintain is silently absent** — and absence produces a *working server that drafts
+nothing*. Correct output, no error, no crash. Only `draft_n` and the drafter's statistics line show
+anything at all.
+
+⇒ **Before adding any further speculation call to this loop, enumerate the slot state it reads.** Three
+of four failures were a field the static path writes elsewhere.
+
+**⚠ THE BLOCKER, and it is not a missing line:**
+
+```
+W draft: llama_decode returned -1
+D slot get_n_draft_: max possible draft: 0
+```
+
+The **draft model's own context cannot decode** — `-1` is "no KV slot for the batch". Its KV is never
+primed: in the static path that happens through decode machinery this loop does not run, and
+`common_speculative_process()` alone does not do it.
+
+Next piece: how the draft context acquires its KV when the target loop never calls the machinery that
+gives it any. Not a line — a question.
+
 ### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
 
 Written now so the landing commit cannot forget them. Wrong-and-loud beats wrong-and-quiet, including
