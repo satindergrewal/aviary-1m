@@ -270,15 +270,45 @@ of four failures were a field the static path writes elsewhere.
 
 ```
 W draft: llama_decode returned -1
-D slot get_n_draft_: max possible draft: 0
 ```
 
-The **draft model's own context cannot decode** — `-1` is "no KV slot for the batch". Its KV is never
-primed: in the static path that happens through decode machinery this loop does not run, and
-`common_speculative_process()` alone does not do it.
+**Counted, not sampled:**
 
-Next piece: how the draft context acquires its KV when the target loop never calls the machinery that
-gives it any. Not a line — a question.
+| | |
+|---|---|
+| `get_n_draft_max` calls | **23** — values 22, 21, 20 … 3, 2, 1, 0 |
+| draft decode failures | **22** — every single arming attempt |
+
+⇒ **The arming is correct.** The block runs every step and computes a sane `n_max`. The failure is
+entirely inside `ctx_dft`.
+
+⚠ **A correction to the first reading of this.** Seeing `max possible draft: 2, 1, 0` I concluded the
+drafter was being starved. That was `tail -3` of a healthy 23-call series starting at 22 — the
+decrease is just `n_remaining` shrinking toward the 24-token limit. The full distribution took one
+command and says the opposite. **`tail -3` is a partial view, and a partial view produced a coherent
+wrong story for the sixth time this session.**
+
+What dflash does (`common/speculative.cpp:1145–1164`):
+
+```cpp
+n = dp.n_past;                                  // I pass s.prompt.n_tokens()
+for (i = 0; i < n_block_tokens; ++i)
+    common_batch_add(batch, i == 0 ? dp.id_last : mask_token_id, n + i, { seq_id }, true);
+llama_decode(ctx_dft, batch);                   // -> -1, 22/22
+```
+
+It writes at positions `n..n+k` into the **draft** context; `-1` is "no KV slot for the batch".
+
+⚠ **Leading candidate, labelled as a candidate.** dflash conditions on the **target's post-norm
+embeddings**, delivered via `common_speculative_process()`. That call is made and never returns false
+— but *"did not fail"* is not *"produced embeddings"*. Whether the **paged attention path yields valid
+post-norm embeddings at all** is unverified, and whether `llama_set_embeddings` does anything on that
+path is likewise unconfirmed.
+
+Absence-vs-presence again: proof the call did not error, no proof it produced anything.
+
+**Next step: instrument whether `ctx_dft` receives anything from `process()` — presence, not absence —
+before touching another line.**
 
 ### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
 
