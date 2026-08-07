@@ -362,9 +362,49 @@ slot.spec_ckpt.update_dft(ctx_dft, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
 classification was right and I then ported **none** of it. *Applies-unchanged still has to be
 applied* — "this carries over" is a statement about difficulty, not a statement that it is done.
 
-**This is the remaining work for the loop half**, and it is the last piece: draft-context state
-management between attempts, either `seq_rm`-based rewind or checkpoint restore depending on
-`ctx_dft_seq_rm_type`.
+### ★★ THE −1 WAS AN OFF-BY-ONE (fork `cb3062141`)
+
+Not KV priming, not checkpoints, not the draft-static fix, not embeddings — **one integer.**
+
+The static path arms the draft **before** pushing the sampled token into the prompt mirror.
+`get_n_draft_max`'s own comment says so: *"slot.prompt is not yet expanded with the `id` token sampled
+above."* `update_slots_paged()` pushes **first** and arms after, so `n_tokens()` was already +1.
+
+| arm | first draft decode |
+|---|---|
+| static | `n_tokens=4 pos0=12 seq0=0 n_ctx_dft=4096` |
+| paged | `n_tokens=4 pos0=**13**` |
+
+The draft cache refused the write, and every later attempt landed one further along the same gap —
+which is why 22/22 failed **identically** and looked structural. A uniform wall of failures from a
+single integer.
+
+**Second fix, exposed once drafts actually generated:** `speculative.cpp:2625` asserts
+`GGML_ASSERT(!dp.drafting || dp.result->empty())`. The static path satisfies it *structurally*, by
+only arming in the `else` of `if (!spec_draft.empty())` — a leftover partial draft is REUSED, never
+re-armed over. The paged path consumes the whole draft each step, so clearing is correct.
+
+| | before | after |
+|---|---|---|
+| `#gen drafts` | 0 | **6** |
+| decode failures | 22 | **16** |
+| abort | — | gone |
+
+⚠ **Speculation still does not run end to end.** `draft_n` reports 0; six drafts generate; sixteen
+attempts still fail; none reach the verify as multi-row batches.
+
+### ⚠⚠ METHOD: an error-only probe cannot show you what success looks like
+
+Three passes of theorising — KV priming, the draft-static fix, embeddings extraction — and none was
+the answer. **The answer came from logging the SUCCEEDING arm at the same site and diffing one
+integer.**
+
+And the first attempt at that probe landed on a *different* `llama_decode` site, so neither arm
+printed. That read as "the probe is broken" when it meant **"the probe is in the wrong place"** — the
+same class again, inside the tool being used to escape the class.
+
+⇒ **When two arms differ, instrument BOTH.** The failing one tells you what broke; only the working
+one tells you what it should have been.
 
 ### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
 
