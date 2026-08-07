@@ -1,0 +1,11 @@
+draft-pair gate: draft arch=dflash
+  target=Qwen3.5-4B-Q4_K_M.gguf  draft=qwen35-4b-dflash-Q4_K_M.gguf
+  binary sha1=32ad398fc11e  -c 4096  n_predict=24
+  spec type: draft-dflash
+  a target-static        draft_n=0      accepted=0      out=[  <think> Thinking Process:  1.  **Analyze the Request:**     *   Target: List three]
+  b target+draft-static  draft_n=27     accepted=13     out=[  <think> Thinking Process:  1.  **Analyze the Request:**     *   Target: List three]
+  draft loader arch (last print_info): dflash
+  c target+draft-paged   draft_n=0      accepted=0      out=[]
+  paged markers: DS4P-CONSUME=16  DS4P-READONLY=0
+-----
+VOID: draft_n = 0 under paging. The draft went inert exactly where it is under test.

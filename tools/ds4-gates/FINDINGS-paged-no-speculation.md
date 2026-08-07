@@ -406,6 +406,50 @@ same class again, inside the tool being used to escape the class.
 ⇒ **When two arms differ, instrument BOTH.** The failing one tells you what broke; only the working
 one tells you what it should have been.
 
+### Loop half: staging WORKS, target decode rejects the multi-row batch (fork `fa213d9a0`)
+
+Progress this pass, each fix exposing the next layer:
+
+| fix | effect |
+|---|---|
+| rewind `ctx_dft` to `n_past` before drafting (`llama_memory_seq_rm(mem_dft, id, n_past, -1)`) | draft decode failures **16 → 0**, `#gen drafts` **6 → 22** |
+| stage the draft **after** `update()`, not before | staging finally **reaches** the scheduler; multi-row batches emitted |
+
+★ **The rewind diagnosis came from printing POSITIONS, not counts.** The pattern was
+one-success-three-failures on a 4-token block: `12 OK (writes 12..15) · 13,14,15 FAIL · 16 OK ·
+17,18,19 FAIL`. A successful draft writes `n_past..n_past+3`; the target accepts ONE; `n_past` advances
+by 1 while the draft context still holds the rejected positions. `dflash::accept()` ignores its
+arguments and does not rewind, so the caller must. **A uniform wall of 22 identical failures said
+nothing for hours; the periodic pattern said everything in a minute — same probe, different
+projection.**
+
+⚠⚠ **The ordering bug was mine, with a comment arguing for it.** I staged the draft *before*
+`update()`, which clears `pending_draft` — a clearing I wrote myself, in four places, deliberately.
+The comment read: *"Runs AFTER the verify loop and BEFORE update(), because update() clears
+pending_draft…"* — **the correct fact, and the opposite conclusion drawn from it.** A distinct failure
+from the rest of this session: not a missing read or an absent signal, but an inverted inference
+preserved in a comment that made it look considered.
+
+**⚠ CURRENT BLOCKER — the target's paged decode rejects the multi-row batch:**
+
+```
+E decode: failed to initialize batch
+E llama_decode: failed to decode, ret = -1
+E srv update_slots: paged: llama_decode failed -- cancelling the batch's requests
+```
+
+Batch shape at failure: `n_seq=1, n_tokens=4, n_blocks_per_seq=2`. Note the **first** multi-row batch
+decodes fine; the **second** fails.
+
+⇒ **Leading hypothesis, and it must be tested not assumed:** after a partial accept the target's KV
+still holds the *rejected* draft positions, and `llama_batch` validation rejects a batch re-submitting
+positions already present for that sequence. `DS4P_SLOT_COVER` guarantees the paged **pool slots** are
+overwritable — that argument is about slots, **not** about the memory's per-sequence position
+bookkeeping, which is what the validator checks.
+
+⚠ The fix touches paged-memory position bookkeeping, which carries the *"positions are decreasing"*
+storm scar. **Not attempted without a controlled test.**
+
 ### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
 
 Written now so the landing commit cannot forget them. Wrong-and-loud beats wrong-and-quiet, including
