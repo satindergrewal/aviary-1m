@@ -554,3 +554,63 @@ One GGUF field classifies any model:
 That is the difference between a finding and a rule, and it is cheap only because the mechanism is
 arithmetic rather than empirical. Stopping at "bs=64 breaks Ornith" would have required a fresh run
 per model.
+
+---
+
+# ⚠⚠⚠ The per-batch instrument corrupted the output it was measuring
+
+`9c9631d02` added `DS4P_PP_TRACE` so a binned tok/s curve would be computable on the paged arm.
+Reverted in `4a7fe8e13`.
+
+One variable — same model, same 224,992-token prompt, same binary, same flags, champion confirmed
+active on both, minutes apart:
+
+| run | wall | needle | content |
+|---|---|---|---|
+| `DS4P_PP_TRACE=1` | 1053 s | **FALSE** | `' 123456789012345'` |
+| trace absent | 1045 s | TRUE | `' MAGENTA-7742\n\nNote 4914 contains the'` |
+
+The traced run did not *miss* the needle — it emitted a counting sequence unrelated to the prompt. A
+retrieval miss looks like a plausible wrong token; degenerate counting is **corrupted context**.
+
+⇒ **The "paged correctness defect at 225k" escalated earlier is RETRACTED.** There is no paged
+corruption. There was my marker.
+
+## The instrument was "self-validating" and that is exactly the problem
+
+`9c9631d02` cross-checked its binned integral against the server's independently-computed
+`prompt_per_second` and matched to **0.994**. That check passed *while the model emitted nonsense*,
+because it validates **throughput** and is blind to **correctness**.
+
+> An instrument can verify its own numbers and still poison what it measures — and the passing
+> cross-check is precisely what makes it trustworthy-looking.
+
+The validation covered the failure mode I imagined (wrong counters) and had no opinion on the one that
+occurred (wrong text). **A check tests the premise you thought of.**
+
+## Mechanism unknown — the two candidates differ in severity
+- **(a) direct state mutation** — `llama_paged_scheduler_get_seq_state()` per batch inside the decode
+  loop is the only new call; a "getter" with side effects would explain it.
+- **(b) timing perturbation** — `SRV_WRN` hundreds of times per request exposing a **pre-existing
+  race** in the paged path.
+
+**(b) would mean a real defect underneath that the commit merely made visible.** Not established.
+Reverted first because the risk is asymmetric and the feature is optional.
+
+⚠ **n=1 on the failing side.** Four clean runs without the trace (three prior champion arms plus the
+control), one garbage run with it. Suggestive, not conclusive. Reverted without confirming
+reproduction because leaving a correctness hazard in the tree for another 18 minutes was not a trade
+worth making.
+
+## Consequence
+The 20k-bin parity curve is **uncomputable on the paged arm again**. That gate returns to unevaluable
+until per-batch progress can be emitted without side effects.
+
+## The one clean pair this produced
+| arm | wall | needle | prefill | decode |
+|---|---|---|---|---|
+| static | 1057 s | TRUE | 213.3 tok/s | 15.8 tok/s |
+| paged + champion (no trace) | **1045 s** | TRUE | **215.4 tok/s** | **25.9 tok/s** |
+
+Different runs, ~40 min apart, so drift applies — but both arms clean, both needles found, kernels
+asserted. Consistent with the earlier n=2: paged wins wall and prefill marginally, decode ~1.64x.
