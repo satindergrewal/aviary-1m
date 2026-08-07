@@ -171,14 +171,35 @@ except Exception: print('MALFORMED')"
 
 # counts, kept SEPARATE. Lumping them hides which failure mode fired: 'no paged context at all' and
 # 'paged pool active but this layer is not eligible' need completely different fixes.
-c_nopg()  { grep -ac "took the STATIC path -- no paged context"        "$1"; }
-c_cap()   { grep -ac "fails the paged capability contract"             "$1"; }
-c_hdim()  { grep -ac "does not match the paged pool's"                 "$1"; }
-c_pool()  { grep -ac "DS4P-CHECKOUT"                                   "$1"; }
+# ⚠⚠ COUNT ONLY WHAT HAPPENS AFTER A REQUEST EXISTS. llama-server builds the graph many times at
+# startup -- memory fitting and reserve passes -- before any token is real. On gemma4 those startup
+# passes take the STATIC path because the paged scheduler has no batch info yet, and the first
+# version of this gate counted them as layer-fallbacks:
+#
+#   21 graph builds STATIC   0.311s -> 1.271s     ALL before the first request
+#    8 graph builds PAGED    from 2.088s          the request arrives at 2.088s
+#
+# It scored gemma4 PARTIAL with "630 fallbacks" when 100% of inference-time builds were paged. The
+# warnings were real, the count was real, and the verdict was false, because the work being counted
+# had not happened yet. Same class as counting a log line that fires BEFORE the work it announces.
+#
+# So every counter slices the log at the first request. The slice marker must be present, and
+# post_slice VOIDs rather than silently counting the whole file if it is missing.
+post_slice() { # $1 log -> stdout: the portion after the first real request
+    awk '/launch_slot_|start_loop: processing task, id = 0/{seen=1} seen' "$1"
+}
+has_slice()  { grep -qa "launch_slot_\|start_loop: processing task, id = 0" "$1"; }
+
+c_nopg()  { post_slice "$1" | grep -ac "took the STATIC path -- no paged context"; }
+c_cap()   { post_slice "$1" | grep -ac "fails the paged capability contract"; }
+c_hdim()  { post_slice "$1" | grep -ac "does not match the paged pool's"; }
+c_pool()  { post_slice "$1" | grep -ac "DS4P-CHECKOUT"; }
 # the two consumer funnels, counted apart: which one an arch uses decides which further checks the
 # gate is even ENTITLED to run.
-c_band()  { grep -ac "DS4P-CONSUME banded"                             "$1"; }
-c_auto()  { grep -ac "DS4P-CONSUME auto"                               "$1"; }
+c_band()  { post_slice "$1" | grep -ac "DS4P-CONSUME banded"; }
+c_auto()  { post_slice "$1" | grep -ac "DS4P-CONSUME auto"; }
+# startup-only counts, reported separately so the contamination stays VISIBLE rather than deleted
+c_nopg_pre() { local a b; a=$(grep -ac "took the STATIC path -- no paged context" "$1"); b=$(c_nopg "$1"); echo $((a-b)); }
 
 # ---------------- static arm ----------------
 # ⚠ exit 3 is SKIPPED-BY-DESIGN, distinct from exit 1 (broken) and exit 2 (VOID/STRIKE). A caller
@@ -272,9 +293,18 @@ printf '  PAGED   arch=%-14s out=[%s]\n' "${P_ARCH:-<none>}" "$P_OUT" | tee -a "
 printf '          static-path warns=%-6s cap-fails=%-5s headdim-fails=%-5s pool=%s\n' \
        "$P_NOPG" "$P_CAP" "$P_HDIM" "$P_POOL" | tee -a "$OUT"
 printf '          DS4P-CONSUME banded=%-6s auto=%s\n' "$P_BAND" "$P_AUTO" | tee -a "$OUT"
+printf '          (startup reserve passes excluded: %s static-path warnings before the first request)\n' \
+       "$(c_nopg_pre "$LOGDIR/paged.log")" | tee -a "$OUT"
 echo "-----" | tee -a "$OUT"
 
 rc=0
+# ⚠ the slice marker must EXIST, or every count above silently became "whole file" again
+if ! has_slice "$LOGDIR/paged.log"; then
+    echo "VOID: no request marker in the paged log, so the counters could not exclude startup" | tee -a "$OUT"
+    echo "  reserve passes. Every number above would be contaminated by graph builds that ran" | tee -a "$OUT"
+    echo "  before a token existed. Fix the marker, do not read this result." | tee -a "$OUT"
+    echo "log: $OUT"; exit 2
+fi
 # ⚠ POOL ACTIVITY IS NOT CONSUMPTION. DS4P-CHECKOUT says the block manager handed out blocks; it is
 # emitted by the scheduler and is true even if no graph reads them. That gap IS audit finding 5.
 if [ "${P_CONS:-0}" -eq 0 ]; then
