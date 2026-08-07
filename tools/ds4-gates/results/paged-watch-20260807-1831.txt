@@ -1,0 +1,37 @@
+tip: 51d87602d dirty=0
+lengths: 8192 32768 49998   reps: 2   -c 73728   --kv-block-size 16
+  static  N=8192    ref=[ was founded before France. Prague is the capital of France.]
+  static  N=32768   ref=[ is the capital of France. Prague is the capital of France]
+  static  N=49998   ref=[ founded before Italy. Prague is the capital of France. Rome]
+  paged   N=8192    r1  ok
+  paged   N=8192    r2  ok
+  paged   N=32768   r1  ok
+  paged   N=32768   r2  ok
+  paged   N=49998   r1  ok
+  paged   N=49998   r2  ok
+-----
+paged activity markers: 14
+  N=8192    failures 0/2
+  N=32768   failures 0/2
+  N=49998   failures 0/2
+
+PAGED CORRECTNESS WATCH: no mismatches in 6 comparisons.
+  ⚠ NOT a certificate. The 2026-08-07 defect was clean 6/6 in one window and failed
+  repeatedly in another at the same config. This bounds the rate; it does not clear the path.
+
+================================================================================
+VOID -- DO NOT CITE THIS RUN. Reason recorded rather than the file deleted.
+
+llama-server was REBUILT THREE TIMES while this run was in flight (assert added; contiguity fix
+deliberately disabled for a mutation test; fix restored). The static and paged arms exec the binary
+minutes apart and straddled those rebuilds, so the tip printed in the header is the tip at LAUNCH,
+not necessarily what either arm ran. One of the intermediate binaries had a fix disabled on purpose.
+
+The result was CLEAN, and that is precisely why it must be voided explicitly: a failing confounded
+run gets investigated, a passing one gets filed as evidence.
+
+Arms must differ in ONE thing. These differ in an unknown number.
+
+The gate now stamps sha1(binary) at EVERY arm's exec and VOIDs on a mismatch between arms, so this
+confound is visible in the output instead of invisible.
+================================================================================

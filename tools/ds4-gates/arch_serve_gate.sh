@@ -154,8 +154,23 @@ start() { # $1 = static|paged   -> PORT, SRVPID
         echo "  Until then this gate CANNOT answer for this arch. Not a pass, not a failure." | tee -a "$OUT"
         return 3
     fi
-    echo "  $1 arm DID NOT SERVE; last lines:" | tee -a "$OUT"
-    tail -6 "$LOGDIR/$1.log" | sed 's/^/  | /' | tee -a "$OUT"
+    echo "  $1 arm DID NOT SERVE" | tee -a "$OUT"
+    # ⚠ SURFACE THE CAUSE, NOT THE TAIL. On an abort the last six lines are BACKTRACE FRAMES -- dyld
+    # offsets and mangled symbols -- while the one line that names the fault scrolled past above it.
+    # Measured: a deliberately reintroduced contiguity bug printed
+    #   "GGML_ASSERT(ggml_is_contiguous(q) && "paged attn: q must be contiguous ...") failed"
+    # and the gate showed six frames of `_ZN18common_init_result...` instead. A diagnostic buried
+    # under its own stack trace is a diagnostic nobody reads.
+    local why
+    why=$(grep -aE "GGML_ASSERT|GGML_ABORT|error:|failed to |not supported|out of memory" \
+          "$LOGDIR/$1.log" | grep -av "^ *[0-9]* " | tail -3)
+    if [ -n "$why" ]; then
+        echo "  cause:" | tee -a "$OUT"
+        printf '%s\n' "$why" | cut -c1-190 | sed 's/^/  ! /' | tee -a "$OUT"
+    else
+        echo "  no assert/abort/error line found; last lines:" | tee -a "$OUT"
+        tail -6 "$LOGDIR/$1.log" | sed 's/^/  | /' | tee -a "$OUT"
+    fi
     return 1
 }
 

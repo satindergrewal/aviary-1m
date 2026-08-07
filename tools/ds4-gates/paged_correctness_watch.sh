@@ -73,8 +73,31 @@ pick_port() {
     return 1
 }
 
+# ⚠⚠ STAMP THE BINARY AT EVERY EXEC, NOT THE TIP AT LAUNCH.
+#
+# This gate printed `git rev-parse HEAD` once, at startup, and called that "the tip under test". It
+# is not. The static arm and the paged arm exec the binary MINUTES APART, and on 2026-08-07 a run
+# straddled THREE rebuilds of llama-server -- one of which had a fix deliberately disabled for a
+# mutation test. Whichever binary existed at each exec is what that arm actually ran, and the header
+# said 51d87602d throughout.
+#
+# It came back 5/6 clean, which is what makes it dangerous: a FAILING confounded run gets
+# investigated, a PASSING one gets filed as evidence. So the binary's own hash is recorded per arm,
+# and a mismatch between arms VOIDS the comparison instead of being averaged into it.
+bin_stamp() { shasum -a 1 "$SRV" 2>/dev/null | cut -c1-12; }
+
 start() { # $1 mode(static|paged) -> sets PORT, SRVPID; returns 1 and prints the child's log on failure
     PORT=$(pick_port) || { echo "  no free port" | tee -a "$OUT"; return 1; }
+    local stamp; stamp=$(bin_stamp)
+    echo "  [$1 arm binary sha1=$stamp]" | tee -a "$OUT"
+    if [ -z "${BIN_STAMP_FIRST:-}" ]; then
+        BIN_STAMP_FIRST="$stamp"
+    elif [ "$stamp" != "$BIN_STAMP_FIRST" ]; then
+        echo "VOID: the binary CHANGED between arms ($BIN_STAMP_FIRST -> $stamp)." | tee -a "$OUT"
+        echo "  The two arms did not test the same code. Arms must differ in ONE thing; these differ" | tee -a "$OUT"
+        echo "  in an unknown number. Rebuild finished, then re-run with nothing else touching it." | tee -a "$OUT"
+        return 1
+    fi
     local flags=()
     [ "$1" = paged ] && flags=(--kv-paged --kv-block-size "$BS" -ngpub $(( (CTX + BS - 1)/BS )) -ncpub 512)
     env DS4P_PAGED_HYBRID=1 "$SRV" -m "$M" -ngl 99 -c "$CTX" -np 1 -b 2048 -ub 2048 \

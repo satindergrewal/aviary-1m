@@ -1,0 +1,11 @@
+arch-serve gate: expected arch=starcoder  model=starcoderbase-1b.Q8_0.gguf
+tip: 51d87602d dirty=2  -c 4096
+  STATIC  arch=starcoder      out=[ the capital of the Republic of France.]
+          static-path warns=48     cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+  paged arm DID NOT SERVE; last lines:
+  | 18  libllama-common.0.0.10585.dylib     0x000000010584cf00 _ZN18common_init_resultC2ER13common_paramsb + 324
+  | 19  libllama-common.0.0.10585.dylib     0x000000010584eb38 _Z23common_init_from_paramsR13common_paramsb + 108
+  | 20  libllama-server-impl.dylib          0x0000000105178dc4 _ZN19server_context_impl10load_modelER13common_params + 3016
+  | 21  libllama-server-impl.dylib          0x00000001050a1714 _Z12llama_serverR13common_paramsiPPc + 20148
+  | 22  libllama-server-impl.dylib          0x000000010509c7fc _Z12llama_serveriPPc + 164
+  | 23  dyld                                0x000000018b027e00 start + 6992
