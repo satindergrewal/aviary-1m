@@ -52,6 +52,49 @@ investigation first.
 
 ---
 
+## Measured status of the 19 — the "16 standard wirings" was never 16
+
+Wiring 13 of them turned up **two capability gaps in the paged op itself**. Both would have compiled
+and served; neither is detectable without reading the call site.
+
+| bucket | count | models |
+|---|---|---|
+| wired, building clean | 13 | `qwen3moe` `qwen3vl` `qwen3vlmoe` `ernie4-5` `ernie4-5-moe` `eagle3` `grok` `hunyuan-moe` `hunyuan-vl` `nemotron` `starcoder` `laguna` `step35` |
+| **blocked on the op** | 2 | `mimo2`, `dflash` |
+| needs reading first | 1 | `gemma4-assistant` |
+| special | 3 | `deepseek4`, `minimax-m3`, `nemotron-h` |
+
+### The two op-level blockers
+
+**`mimo2` — attention sinks.** Its call passes `sinks`:
+```
+build_attn(inp_attn, wo, NULL, wo_s, Qcur, Kcur, Vcur, nullptr, sinks, ...)
+```
+`build_attn_paged_or_null` has no sinks parameter. Wiring it drops the sink from every layer —
+correct-looking output, quietly wrong attention, no error.
+
+**`dflash` — non-causal attention.** `dflash.cpp:451` says so in as many words: *"cache-aware,
+non-causal attention"*. The paged mask is causal-only, hardcoded `vis = (col <= q_pos)` in the Metal
+source. Wiring it masks out the future half of every layer's context, silently.
+
+**These are the real content of phase 3b**, and neither was on any list before the sweep:
+1. sinks support in `build_attn_paged_or_null` and the mask kernel
+2. a non-causal mode for the paged mask
+
+### Five `wo` conventions, all silent if mishandled
+
+| convention | archs |
+|---|---|
+| `wo, wo_b, wo_s` | most of the scripted batch |
+| `wo, NULL, wo_s` | `ernie4-5` |
+| `wo, NULL, nullptr` | `eagle3` |
+| `NULL, NULL, NULL` — projection deferred past a gate | `laguna`, `step35` |
+| `+ sinks` | `mimo2` (unsupported) |
+
+The paged branch must apply `wo` in the first three and must **not** in the fourth. Getting it
+backwards projects twice or not at all, and neither raises an error. This is why each file is anchored
+exactly and the wiring script refuses anything it does not match rather than generalising.
+
 ## Mac vs box — what can be closed where
 
 Locally present under `ornith-models/`:
@@ -95,8 +138,10 @@ silently wrong at long context.
 
 | phase | status | what is NOT verifiably closed |
 |---|---|---|
-| 3b hybrid paging | **NOT STARTED** for the 19-model scope | everything; 7 unrelated archs are wired from earlier work |
-| B4 arcs 2-3 (q8 banded) | **IN PROGRESS** | q8 KV is refused at 3 sites on the champion path |
+| 3b hybrid paging | **PARTIAL** — 13 of 19 wired and compiling | none is serve-verified; no local GGUFs; 2 blocked on op gaps; 4 unread |
+| B4 arcs 2-3 (q8 banded) | **CLOSED** — `test-paged-vs-cpu` ALL PASSED, q8_0 at the f16 error scale, champion marker asserted | q8_0 end-to-end on a real model; anything about speed |
+| paged op: attention sinks | **NOT STARTED** | `mimo2` cannot be wired without it |
+| paged op: non-causal mode | **NOT STARTED** | `dflash` cannot be wired without it |
 | P1-6 prefix sharing | gate passes | not re-verified since the ~50k defect was found |
 | P1-5 disk KV banks | **NOT REOPENED** | the "measured wash" verdict was rejected and not replaced |
 | P2-8 continuous batching | **NOT STARTED** | `evict()` is a 13-line body; unscoped |
