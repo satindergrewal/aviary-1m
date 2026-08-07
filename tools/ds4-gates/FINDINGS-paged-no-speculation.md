@@ -240,6 +240,18 @@ Two placement failures on the way, both caught by the test rather than by inspec
 ⇒ **Make the run testify which branch it took.** One `printf` converts an inference into a
 measurement, and it found all four vacuities in this session.
 
+### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
+
+Written now so the landing commit cannot forget them. Wrong-and-loud beats wrong-and-quiet, including
+when the loud thing is a stale warning of mine:
+
+| item | where | action in the SAME commit that wires drafting |
+|---|---|---|
+| load-time warning *"speculative decoding is NOT implemented in the paged decode loop… the draft will NEVER be consulted"* | `server-context.cpp`, fork `7b614a636` | **remove or make conditional** |
+| slot API reports `"speculative": true` under `--kv-paged` | `server-context.cpp:802` | resolves itself — the statement becomes true |
+| *"no speculation under paged"* assertions | this doc, `kv-paged-facts` memory, `ds4-ports-lane` memory pointer | rewrite all three |
+| `draft_pair_gate.sh` arm (c) expected to VOID at `draft_n=0` | `tools/ds4-gates/` + several commit messages | arm (c) flipping from VOID to a real acceptance number **is the event this whole rock is pointed at** |
+
 ### The 68-line audit — sorted by WHICH CONTEXT each line touches
 
 The sort key that makes this tractable comes from a fix landed earlier the same day: `604c2858a`
