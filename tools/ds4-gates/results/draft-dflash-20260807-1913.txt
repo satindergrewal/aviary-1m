@@ -1,0 +1,9 @@
+draft-pair gate: draft arch=dflash
+  target=Qwen3.5-4B-Q4_K_M.gguf  draft=qwen35-4b-dflash-Q4_K_M.gguf
+  binary sha1=32ad398fc11e  -c 4096  n_predict=24
+  spec type: draft-dflash
+  a target-static        draft_n=0      accepted=0      out=[  <think> Thinking Process:  1.  **Analyze the Request:**     *   Target: List three]
+  b target+draft-static  draft_n=27     accepted=13     out=[  <think> Thinking Process:  1.  **Analyze the Request:**     *   Target: List three]
+  draft loader arch (last print_info): dflash
+  c target+draft-paged: REFUSED BY DESIGN -- guarded configuration:
+  | $HOME/Documents/GitHub/llama.cpp-ds4ports/src/llama-model.cpp:2478: GGML_ASSERT((!cparams.kv_paged || paged_swa_dev) && "kv_paged on SWA needs DS4P_PAGED_SWA=1"

@@ -74,10 +74,44 @@ pick_port() {
     return 1
 }
 
+# ★★ -md ALONE IS INERT IN THIS FORK, AND IT FAILS SILENTLY.
+#
+# Passing only -md loads the draft model, logs "loading draft model ...", prints its arch, and then
+# drafts NOTHING: common/speculative.cpp:2488 logs "no implementations specified for speculative
+# decoding" and returns nullptr. The server serves normally. The output is correct. `timings` simply
+# has no draft_n key at all.
+#
+# An implementation type is required: --spec-type <name>, from common/speculative.cpp:2186 --
+#   draft-simple  draft-eagle3  draft-mtp  draft-dflash  draft-dspark
+#   ngram-simple  ngram-map-k   ngram-map-k4v  ngram-mod  ngram-cache
+#
+# Measured on Qwen3.5-4B + its DFlash draft:
+#   -md alone                      timings has NO draft keys, statistics line absent
+#   -md --spec-type draft-dflash   draft_n=39  draft_n_accepted=25   (64% accepted)
+#
+# ⚠ This is why the gate demands draft_n > 0 rather than trusting that -md did something. Its very
+# first real run VOIDed on exactly this, before any conclusion about dflash could be drawn.
+spec_type_for() { # $1 draft arch -> --spec-type name
+    case "$1" in
+        dflash)           echo draft-dflash ;;
+        eagle3)           echo draft-eagle3 ;;
+        gemma4-assistant) echo draft-mtp    ;;   # NextN head; override with DP_SPEC_TYPE if wrong
+        *)                echo ""           ;;
+    esac
+}
+SPEC_TYPE=${DP_SPEC_TYPE:-$(spec_type_for "$ARCH")}
+if [ -z "$SPEC_TYPE" ]; then
+    echo "refusing: no --spec-type known for draft arch '$ARCH'. Set DP_SPEC_TYPE explicitly." >&2
+    echo "  Running without one loads the draft and drafts nothing, which this gate would VOID" >&2
+    echo "  anyway -- but silently guessing a type is worse than refusing." >&2
+    exit 2
+fi
+echo "  spec type: $SPEC_TYPE" | tee -a "$OUT"
+
 start() { # $1 label  $2 "draft"|""  $3 "paged"|""
     PORT=$(pick_port) || { echo "  no free port" | tee -a "$OUT"; return 1; }
     local flags=()
-    [ -n "$2" ] && flags+=(-md "$DRAFT" -ngld 99)
+    [ -n "$2" ] && flags+=(-md "$DRAFT" -ngld 99 --spec-type "$SPEC_TYPE")
     [ -n "$3" ] && flags+=(--kv-paged)
     local stamp; stamp=$(shasum -a 1 "$SRV" 2>/dev/null | cut -c1-12)
     if [ "$stamp" != "$BINSHA" ]; then

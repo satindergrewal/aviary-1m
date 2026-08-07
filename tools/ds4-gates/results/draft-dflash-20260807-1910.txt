@@ -1,0 +1,9 @@
+draft-pair gate: draft arch=dflash
+  target=Qwen3.5-4B-Q4_K_M.gguf  draft=qwen35-4b-dflash-Q4_K_M.gguf
+  binary sha1=32ad398fc11e  -c 4096  n_predict=24
+  a target-static        draft_n=0      accepted=0      out=[  <think> Thinking Process:  1.  **Analyze the Request:**     *   Target: List three]
+  b target+draft-static  draft_n=0      accepted=0      out=[  <think> Thinking Process:  1.  **Analyze the Request:**     *   Target: List three]
+  draft loader arch (last print_info): dflash
+VOID: draft_n = 0 -- the draft proposed NOTHING, so -md was inert.
+  (b) matching (a) would then be trivially true and (c) would test the target's paging
+  while proving nothing about the draft. This gate cannot answer for 'dflash' in that state.
