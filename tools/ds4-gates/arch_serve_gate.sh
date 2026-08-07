@@ -108,6 +108,7 @@ start() { # $1 = static|paged   -> PORT, SRVPID
     # verbosity 5. At -lv 4 the marker count read ZERO on an arch that was demonstrably paging -- the
     # gate would have VOIDed a working arch because its own probe was filtered out. Caught only
     # because the marker was verified for PRESENCE on a known-good model before being trusted.
+    [ -n "${AG_MMPROJ:-}" ] && flags+=(--mmproj "$AG_MMPROJ" --jinja)
     env ${AG_ENV:-} "$SRV" -m "$MODEL" -ngl 99 -c "$CTX" -np 1 -b 512 -ub 512 \
         --port "$PORT" --no-warmup -lv 5 "${flags[@]}" "${EXTRA[@]}" > "$LOGDIR/$1.log" 2>&1 &
     SRVPID=$!
@@ -174,7 +175,34 @@ start() { # $1 = static|paged   -> PORT, SRVPID
     return 1
 }
 
+# ★ IMAGE MODE. Some architectures have no usable TEXT vehicle at all. hunyuan_vl's only published
+# GGUF is HunyuanOCR, an image model: on text-only prompts it returns '' or ' $ $ $ $', so the static
+# reference is degenerate BY CONSTRUCTION and the gate correctly VOIDs. That is not a paging result,
+# it is the wrong question asked of the model.
+#
+# With AG_MMPROJ + AG_IMAGE the gate asks the question the model can answer -- an OCR prompt over a
+# deterministic locally-generated PNG -- and the reference becomes sane. Verified before wiring:
+# the same model answers 'PARIS' to an image containing the word PARIS.
+#
+# The degenerate-reference guard still applies unchanged, so a vehicle that cannot read its own test
+# image still VOIDs rather than being compared to nothing.
 ask() {
+    if [ -n "${AG_IMAGE:-}" ]; then
+        python3 -c "
+import base64, json
+b = base64.b64encode(open('$AG_IMAGE','rb').read()).decode()
+print(json.dumps({'messages': [{'role': 'user', 'content': [
+    {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + b}},
+    {'type': 'text', 'text': '''${AG_VPROMPT:-What word is written in this image? Answer with the word only.}'''}]}],
+    'max_tokens': $NPRED, 'temperature': 0, 'seed': 1}))" > "$LOGDIR/req.json"
+        curl -s --max-time 600 -X POST "http://127.0.0.1:$PORT/v1/chat/completions" \
+            -H 'Content-Type: application/json' -d @"$LOGDIR/req.json" \
+          | python3 -c "
+import json,sys
+try: print(json.load(sys.stdin)['choices'][0]['message']['content'].replace(chr(10),' '))
+except Exception: print('MALFORMED')"
+        return
+    fi
     python3 -c "
 import json
 print(json.dumps({'prompt': '''$PROMPT''', 'n_predict': $NPRED, 'temperature': 0,
