@@ -520,12 +520,43 @@ sits at 15 from the first decode. So after that first multi-row decode:
 Both symptoms at once ⇒ **`update()` did not take effect for that step.** Not the sentinel, not
 `is_spec`, not `set_seq_max_pos` (which can lower — verified).
 
-**Next pass starts here:** why `llama_paged_scheduler_update()` produced neither effect after the
-first speculative decode. Candidates worth checking in order: whether the tick reached the update call
-at all (an early `continue` in the sampling loop skips it), whether `curr_info` still describes the
-batch being updated, and whether `request_id` matches the seq_id the validator reads.
+**⚠ AND `update()` IS REACHED, WITH CORRECT INPUTS** — first check in that order, answered by printf:
 
-Everything above is measured. Nothing below the update call has been verified.
+```
+UPDPROBE any_spec=0 n_seq=1 acc0=-1 off0=0 len0=12    prefill
+UPDPROBE any_spec=1 n_seq=1 acc0=1  off0=0 len0=4     speculative — reached, acc0 correct
+```
+
+### ★★★ ROOT CAUSE: THE VALIDATOR AND THE SCHEDULER READ DIFFERENT MEMORY OBJECTS
+
+`llama-kv-cache-iswa.cpp`:
+
+```cpp
+llama_pos llama_kv_cache_iswa::seq_pos_max(llama_seq_id seq_id) const {
+    return kv_swa->seq_pos_max(seq_id);      // <-- the SWA CHILD
+}
+```
+
+The scheduler's `set_seq_max_pos` trims the **paged** child's ledger. The batch validator calls
+`memory->seq_pos_max(s)` on the **ISWA parent**, which delegates to the **SWA child**. Nobody trims
+that one, so it keeps the submitted max (15) while the paged child correctly holds the accepted one
+(12).
+
+Qwen3.5-4B is hybrid **and** SWA, so the ISWA wrapper is in play — which is exactly why this pair
+needs `DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1` to run at all.
+
+**⇒ TESTABLE PREDICTION, on record before it is checked: a NON-SWA target would not hit this.** With
+no ISWA wrapper the validator reads the paged child directly, and step E's trim is the one it sees. If
+a non-SWA target+draft pair still fails at `Y = X + 1`, this root cause is wrong.
+
+★ **THE TWO-LEDGER PATTERN, THIRD INSTANCE TODAY** — and each time I had a proof about one ledger and
+assumed it covered the other:
+
+| # | ledger A | ledger B |
+|---|---|---|
+| 1 | paged pool **slots** (`DS4P_SLOT_COVER`) | memory **positions** (the validator) |
+| 2 | **scheduler's** bookkeeping (step E trims it) | **context's** memory module |
+| 3 | **paged child** (trimmed) | **SWA child** (read by the validator, never trimmed) |
 
 ### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
 
