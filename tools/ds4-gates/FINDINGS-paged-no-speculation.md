@@ -874,3 +874,69 @@ On record before the feature exists so it can embarrass me.
 
  An estimate with
 no measurement behind it becomes a schedule.
+
+---
+
+## 2026-08-07 — THREE ledgers, not one. Two fixed, and the kernel exonerated.
+
+Speculation now runs end to end. It did not before: the first speculative batch decoded, and every
+batch after it was rejected by the batch validator until the storm breaker cancelled the request.
+
+**Three separate objects track "the last position of sequence s".** Step E trimmed one of them.
+
+| # | object | who reads it | state |
+|---|---|---|---|
+| 1 | `llama_kv_cache_paged::set_seq_max_pos` | the paged manager | trimmed by step E, was fine |
+| 2 | the **context's** memory module | `llama-batch.cpp:271`, the batch validator | **NOT trimmed** |
+| 3 | the **draft** context's memory module | consecutive-position rule | **wrong bound** |
+
+Fix (2): `llama_memory_seq_rm(llama_get_memory(ctx_tgt), rid, last_acc + 1, -1)` after a partial
+accept. Target decode failures **3 → 0**; `n_past` advances every step (12 → 25) instead of the
+request being cancelled.
+
+Fix (3): the rewind used `s.prompt.n_tokens()` — the STATIC path's counter, which this loop never
+advances. It was handed 16 while the draft opened at 12, so it removed nothing and the draft decode
+failed 23 times. Rebased onto the target ledger: `rm` from `tgt_max + 1`. **The `+1` is measured, not
+derived** — `tgt_max` 11,12,13,14 → draft opens at 12,13,14,15. The static path arms its draft
+*before* pushing the sampled token; this loop generates it *after* `update()`.
+
+### The remaining defect, and what it is NOT
+
+Output is still wrong. A matched control settles the shape — `DS4P_SPEC_OFF` skips draft staging and
+nothing else, so the binary, gate, prompt and seed are identical:
+
+```
+row-0 emissions, 1 row    271 · 248068 · 198 · 90700 · 8340 · 25    output CORRECT
+row-0 emissions, 4 rows   271 · 248068 · 271 · 248068 · 271 · 8160  output WRONG
+                           ^same  ^same   ^diverges at the third token
+```
+
+Adding rows that must be invisible to row 0 changes row 0's output. The divergence is **not
+immediate** — two steps agree first, which is why a single-step probe would have missed it.
+
+**It is not a kernel mask leak.** That was hypothesised and is now dead by measurement:
+
+```
+multirow f16 D=64 prefill=88 + 2 x 4-row decode/96:  max_abs=0.000e+00 PASS
+NEGATIVE CONTROL, mask forced non-causal:            max_abs=2.430e-01 FAIL
+```
+
+Attention is causal, so R-row dispatches must be bit-identical to one call, and they are.
+
+### ⚠ Two things about the test itself that matter more than the arm
+
+1. **At BS=16 the negative control does NOT fire** (`0.000e+00` with and without). The eight green
+   `multirow` lines at the server's own block size are **vacuous** and are not evidence. It also
+   implies the scalar kernel ignores `op_params[8]` — flagged, not concluded.
+
+2. **`test-paged-vs-cpu` aborts in its DEFAULT configuration.** Default block size is 16; the scalar
+   kernel does not implement sinks and aborts rather than dropping them, and that abort fires before
+   every later arm. At the default geometry this file has never executed past the sinks arm. Confirmed
+   pre-existing by stashing. It only runs at all with BS=64 plus champion, which is **not** what the
+   server uses. Made skippable so the rest can be measured.
+
+`test-paged-kv-e2e` also fails on a hybrid model (`llama_decode` at `:158`) — likewise pre-existing,
+confirmed by stash.
+
+**Next:** the scalar path's `causal` flag, with the control written first this time. The mechanism of
+the multi-row divergence is still OPEN; only the kernel has been ruled out.
