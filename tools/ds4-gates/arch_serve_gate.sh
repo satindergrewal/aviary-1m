@@ -214,6 +214,15 @@ kill "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""; sleep 2
 # ⚠ THE ARCH IS READ FROM THE LOADER, NOT THE FILENAME. A repo named "...starcoder..." can hold a
 # starcoder2 model, and the model file that gets compiled is chosen by THIS string.
 GOT_ARCH=$(grep -m1 "print_info: arch" "$LOGDIR/static.log" | sed 's/.*= *//' | tr -d ' \r')
+# ⚠ THE SLICE MARKER MUST EXIST IN *THIS* ARM TOO. The first version checked it only on the paged
+# log. Without it here, S_NOPG and S_CONS silently read 0 and the banded branch VOIDs saying "the
+# counter was never shown able to move" -- which fails closed but DIAGNOSES WRONG, sending the reader
+# after a wiring fault when the real problem is a missing marker in the harness.
+if ! has_slice "$LOGDIR/static.log"; then
+    echo "VOID: no request marker in the STATIC log -- its counters cannot exclude startup reserve" | tee -a "$OUT"
+    echo "  passes, so neither the negative control nor anything derived from it can be read." | tee -a "$OUT"
+    echo "log: $OUT"; exit 2
+fi
 S_NOPG=$(c_nopg "$LOGDIR/static.log")
 S_CONS=$(( $(c_band "$LOGDIR/static.log") + $(c_auto "$LOGDIR/static.log") ))
 

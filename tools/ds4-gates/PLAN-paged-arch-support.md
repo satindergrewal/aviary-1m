@@ -276,7 +276,8 @@ Every row below has its arch read out of the candidate GGUF's own header by
 | `hunyuan_vl` | HunyuanOCR Q8_0 · MATCH | 0.58 GB | ⛔ **UNANSWERED — vehicle unusable**, see below | Mac |
 | `dflash` | Qwen3.5-4B-DFlash Q4_K_M · MATCH | 0.38 GB | ⛔ **UNANSWERED — draft head**, see below | Mac |
 | `eagle3` | Qwen3-8B-EAGLE3-Speculator F16 · MATCH | 2.05 GB | ⛔ **UNANSWERED — draft head** (same code path; not downloaded) | Mac |
-| `gemma4` | Gemma4-12B-Uncensored-1.5M Q4 (local) | 7.38 GB | ⛔ **UNANSWERED** — degenerate static reference **and** SWA-guarded | Mac |
+| `gemma4-assistant` | — | — | ⛔ **UNANSWERED — not wired at all**, see below | ? |
+| `gemma4` *(bonus, NOT on the 19)* | Gemma4-26B-A4B-Uncensored-1M Q4_K_M (local) | 16.80 GB | ⚠ **PASS under `DS4P_PAGED_SWA=1` only** | Mac |
 | `ernie4_5-moe` | ERNIE-4.5-21B-A3B-Thinking **Q4_K_M** · MATCH | **13.33 GB** | ready to fetch | Mac |
 | `qwen3vlmoe` | Qwen3-VL-30B-A3B-Instruct **Q4_K_M** · MATCH | **18.56 GB** | ready to fetch | Mac |
 | `laguna` | Laguna-S-2.1 Q8_0, 4 shards · MATCH | 256×4.5B | searched | **box** |
@@ -310,7 +311,22 @@ wrong; recording them as pending without the reason would lose the work.
 |---|---|---|
 | `dflash`, `eagle3` | **Draft heads, not models.** `llama-context.cpp:187` throws `requires ctx_other to be set` when the GGUF carries no `tok_embd`/`output`. Confirmed empirically on `dflash` (0.38 GB, exit 3). `eagle3` is the same code path, so it was **not downloaded**. | A target+draft harness (`-md`), then the separate question of whether the *draft's* KV is paged at all |
 | `hunyuan_vl` | The only vehicle found is **HunyuanOCR**, an image model. Text-only prompts return `''` or `' $ $ $ $ …'`. The static reference is degenerate *by construction*, so there is nothing to arbitrate against. | mmproj + a real image, or a different `hunyuan_vl` text vehicle if one is published |
-| `gemma4` | **Two independent blocks.** (a) The local 12B-Uncensored-1.5M returns `01111133` under **static** — a broken arbiter before paging is involved. (b) Paged is refused by the SWA guard (`DS4P_PAGED_SWA=1`). | A gemma4 vehicle with a sane static reference, then re-run under `AG_ENV=DS4P_PAGED_SWA=1` |
+| `gemma4-assistant` | **`gemma4-assistant` is a DIFFERENT ARCH from `gemma4`** — its own string in `llama-arch.cpp:59` and its own `src/models/gemma4-assistant.cpp`, which contains **no paged wiring at all** (`grep build_attn_paged_or_null` returns nothing). Its NextN head additionally calls `build_attn` with no new K/V, and the paged op `GGML_ABORT`s on that: read-only paged attention is not implemented. | Wire the consumer, then implement read-only paged attention (the "just skip the write" version compiled and segfaulted — `k_new` is dereferenced for shapes) |
+
+⚠⚠ **`gemma4` is NOT the row on the owner's 19-list. `gemma4-assistant` is.** The PASS recorded above
+is plain `gemma4`, a **bonus arch** in the same position as `starcoder2` — useful, and not a point on
+the board. The list row stays UNANSWERED on a *different* blocker (unwired + read-only) from the one
+that plain `gemma4` needed (the SWA guard).
+
+This is the arch-identity trap for the third time, and the first time it fired at the **ledger** level
+rather than the download level: right verification, right model, wrong row credited. The probe
+protects vehicle selection; nothing was protecting the scoreboard.
+
+**And even for plain `gemma4` the PASS is conditional.** It needs `AG_ENV=DS4P_PAGED_SWA=1`; under a
+plain `--kv-paged` it is still refused by the SWA guard. Against the owner's actual bar — *"when I run
+the latest models, they don't error out unexpectedly"* — a model that refuses `--kv-paged` without an
+env var still errors out for him. So it is recorded as **verified under a development flag**, never as
+verified.
 
 ⚠ **Three archs carry per-layer attention geometry**, which is the same class as the `gemma4`
 `headdim` defect — an architecture with more than one head shape against a pool allocated once:
