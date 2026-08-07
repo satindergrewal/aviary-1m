@@ -158,21 +158,29 @@ correct serve-check vehicle. A 0.3B ERNIE exercises `ernie4-5.cpp` exactly as a 
 | `ernie4-5` | ERNIE-4.5-0.3B-PT Q4_K_M | **241 MB** | ✅ searched | Mac |
 | `qwen3vl` / `qwen3vlmoe` | Qwen3-VL-4B-Instruct Q4_K_M | **~2.5 GB** (Q3_K_M ~2.08 GB) | ✅ searched | Mac |
 | `hunyuan-moe` | Hunyuan-A13B-Instruct — 80B total / 13B active | **~34 GiB** at IQ3_KS | ✅ searched | **box** |
-| `qwen3moe` | Qwen3-30B-A3B class | not yet searched | ❌ | probably Mac |
-| `qwen3next` | — | not yet searched | ❌ | ? |
-| `nemotron` | — | not yet searched | ❌ | ? |
-| `starcoder` | — | not yet searched | ❌ | probably Mac |
+| `qwen3moe` | Qwen3-30B-A3B Q2_K | **~11.4 GB** (Q4_K_M 18.6 GB) | ✅ searched | Mac |
+| `qwen3next` | Qwen3-Next-80B-A3B | sizes not published in results | ⚠ partial | **box** (80B) |
+| `nemotron` | Llama-3.1-Nemotron-Nano-8B Q4_K_M | **~4.92 GB** | ✅ searched | Mac |
+| `starcoder` | StarCoder2-3B Q4_K_M | **~1.85 GB** | ✅ searched | Mac |
 | `grok` | Grok-1 class | not yet searched | ❌ | **box** |
 | `eagle3` | draft-head arch, pairs with a target | not yet searched | ❌ | ? |
 | `laguna` `mimo2` `step35` `dflash` `hunyuan-vl` `ernie4-5-moe` | — | not yet searched | ❌ | ? |
 
-**Three verified, twelve not.** The three that are verified came from one search each and took a
+**Six verified, one partial, eight not.** The three that are verified came from one search each and took a
 couple of minutes; the rest is the same work, not harder work. Recorded as ❌ rather than filled with
 plausible numbers — an invented size is worse than a blank, because it silently becomes a schedule.
 
-**Mac/box split, from what is verified:** ERNIE-4.5-0.3B and Qwen3-VL-4B run here comfortably.
-Hunyuan-A13B at ~34 GiB does not leave room for a paged pool alongside on a 128 GB box shared with
-other work — that one is a box job.
+**Mac/box split, from what is verified so far:**
+
+| side | vehicles | total |
+|---|---|---|
+| **Mac** | ERNIE-4.5-0.3B (241 MB) · StarCoder2-3B (1.85 GB) · Qwen3-VL-4B (2.5 GB) · Nemotron-Nano-8B (4.92 GB) · Qwen3-30B-A3B Q2_K (11.4 GB) | **~21 GB, five archs** |
+| **box** | Hunyuan-A13B (~34 GiB) · Qwen3-Next-80B | — |
+
+⚠ **`nemotron` needs a note.** llama.cpp issue #20570 reports Nemotron-3-Nano-30B-A3B failing at
+`mamba-base.cpp:173: GGML_ASSERT` — that is the SSM family, i.e. the `nemotron-h` shape already
+flagged as a special here. The Llama-3.1-Nemotron-Nano-8B vehicle above exercises `nemotron.cpp`, not
+the hybrid one, which is the right target for this wiring and the wrong one for `nemotron-h`.
 
 ### Closure criteria per model
 
