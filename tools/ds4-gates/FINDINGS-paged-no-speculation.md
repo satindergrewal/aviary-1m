@@ -176,5 +176,57 @@ So: **an API extension plus four localised changes, in that order** — not a re
 contract. Reading the bodies made the job smaller than reading the signatures did, which is the
 opposite of the usual direction and worth noticing.
 
-Still not estimated, but now scoped by what was read rather than by what was assumed. An estimate with
+Still not estimated, but now scoped by what was read rather than by what was assumed.
+
+## The complete change list, read out of the bodies (2026-08-07)
+
+Both halves now read. **The loop half is narrower than feared and the scheduler half is four lines.**
+
+### Loop half — `update_slots_paged()`
+
+| what | state |
+|---|---|
+| the token mirror the draft reads (`slot.prompt.tokens`) | **already maintained per token**, `server-context.cpp:3287`, with a comment explaining exactly why. The obvious failure mode — desynced mirror feeds the draft wrong context, acceptance craters, `draft_n > 0` still passes — **does not apply.** |
+| drafting calls | **absent.** The loop invokes none of `pre_decode` (8 spec refs), `post_decode` (13), `handle_last_sampled_token` (5). |
+| sampling | samples **one token per sequence**, from the last batch row: `tok_idx = batch_offsets[i] + batch_lens[i] - 1`. Verification needs a token per **drafted position**, then the accept-prefix. |
+
+### Scheduler half — `llama-paged-scheduler-impl.cpp`
+
+| # | line | assumes one decode token |
+|---|---|---|
+| A | `:460,467` | `allocate(1, *group)`, guarded by `required_capacity = n_past + 1` |
+| B | `:798` | a decoding group contributes `logical_seq.back()` once |
+| C | `:805` | logits only on the last batch row: `token_idx == new_tokens - 1` |
+| D | `:876–878` | appends one sampled token; advances `n_past` by tokens **SUBMITTED**, not **ACCEPTED** |
+
+### Public API
+
+`llama_paged_scheduler_update()` needs a per-sequence **accepted count** beside the tokens. Make it
+nullable so the existing one-token semantics survive, and grep the callers first so the blast radius
+is a fact rather than an assumption. Semantics to state explicitly: `n_past += accepted`,
+`logical_seq` extends by **all** accepted tokens, `seq_max_pos` = last **accepted** position, and
+EOS-mid-run truncates the accepted count at the stop.
+
+### Scope discipline
+
+**`np=1` greedy first.** The `-np>1` absolute-offset corruption is a separate open defect; coupling
+them makes both undebuggable. `n_batch == n_ubatch` (`llama-model.cpp:2624`) bounds verify width.
+
+### Pre-registered acceptance criterion, with baselines already measured
+
+`draft_n > 0` is necessary and **nowhere near sufficient** — a draft fed wrong context still proposes.
+The discriminating check is **arm (c) paged acceptance ≈ arm (b) static acceptance on the same pair**:
+
+| pair | arm (b) static acceptance |
+|---|---|
+| `dflash` + Qwen3.5-4B | **13 / 27** |
+| `gemma4-assistant` + gemma-4-E2B-it | **11 / 33** |
+
+Materially below that = mirror or context bug, **not noise**. On record before the feature exists so
+it can embarrass me.
+
+⚠ The `gemma4-assistant` pair additionally needs the KV-sharing fix — its only viable target is
+`gemma-4-E2B-it`, which is now REFUSED under `--kv-paged`. `dflash` + Qwen3.5-4B is the usable pair.
+
+ An estimate with
 no measurement behind it becomes a schedule.
