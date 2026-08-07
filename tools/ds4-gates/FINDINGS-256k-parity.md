@@ -103,3 +103,79 @@ was specific to that model's FA4 paged-KV path, not a blanket SM120 failure. Not
 (different silicon, different quant formats), but it would legitimately answer "does a real
 PagedAttention engine hold up at 256k". **Premature until the kernel confound is fixed** — otherwise we
 would be benchmarking our scalar fallback against their production path.
+
+---
+
+# REVISION 2026-08-08 — the verdict above is SUPERSEDED. Read this section.
+
+Everything above was true when written. It is no longer the conclusion. Kept intact rather than
+rewritten, because the sequence of wrong turns is the useful part.
+
+## The corrected pair PASSES the owner's bar
+
+Same binary, curl-wall both arms, needle required, kernel identified before the request.
+
+| arm | config | kernel | wall | prefill | decode | needle |
+|---|---|---|---|---|---|---|
+| static | — | flash | 1102 s | 204.4 tok/s | 15.0 tok/s | found |
+| paged | bs=64 + CHAMP + LAZY | **CHAMP-PAGED ACTIVE** | 1105 s | 203.7 tok/s | **25.9 tok/s** | found |
+
+**Prefill parity (0.997x). Decode 1.73x FASTER. Needle retrieved on both arms.**
+
+## BLOCK SIZE IS THE CATASTROPHE — and 16 is the DEFAULT
+
+Cleanly attributed. `run 1` and `arm A` differ in **exactly one thing**: `--kv-block-size`.
+Same binary, scalar kernel in both, no lazy sync in either, same prompt.
+
+| run | block size | kernel | result |
+|---|---|---|---|
+| run 1 | **16** (default) | scalar | **never completed** — >2200 s, >1.94x static, still climbing |
+| arm A | **64** | scalar | 1139 s, 197.7 tok/s prefill, needle found |
+
+⇒ `--kv-block-size 64` turns an unusable paged path into a roughly-parity one **with nothing else
+changed**. This is the single highest-value configuration fact in this document.
+
+⚠ Mechanism NOT measured. Plausibly 4x more blocks per attention call and 4x the block-table
+indirection; the champion's `C == bs` contiguity requirement hints the scalar path has a similar
+locality cliff. **Hypothesis with evidence, not a conclusion.**
+
+## Arm A also shows block size does NOT explain the decode win
+Arm A decodes at 14.2 tok/s — slightly *worse* than static's 15.0, nowhere near 25.9. So the decode
+result comes from the champion and/or the lazy-sync fix. Arms B (`bs64+CHAMP`, no lazy) and C
+(`bs64+LAZY`, no champ) isolate it; each differs from the passing config in one thing.
+
+## ⚠ "The champion did not engage" was WRONG — a case-sensitive grep
+
+`grep -c 'champ'` → 0. `grep -c 'CHAMP'` → 3. The log said
+`CHAMP-PAGED ACTIVE D=256 bs=64 nsg=4 Q=8 C=64`. The champion **did** engage, and `C=64` is exactly
+the `C == paged bs` condition recorded in `memory/champion-paged-port.md` three days earlier.
+
+**A false retraction costs as much as a false claim.** It went unchallenged because it pointed at
+self-criticism, which felt like rigour.
+
+## The kernel assert took THREE iterations, each defeated by a different assumption
+
+| version | defeat | consequence |
+|---|---|---|
+| v1 | wrong **case** | retracted a correct finding |
+| v2 | wrong **time** — checked at health-ready, before any attention dispatch | UNKNOWN on a healthy run |
+| v3 | wrong **variant** — knew `CHAMP-PAGED ACTIVE`, not `CHAMP-VEC` | UNKNOWN on an active champion |
+
+Root defect in all three: **exact-string matching against output I do not control and never
+enumerated.** Fixed by matching the family and *printing which variant was seen*, so a number is
+traceable to log evidence rather than to intent.
+
+**Zero false greens across all three.** Every failure was a false red that cost a re-run. A check
+biased toward refusing is recoverable; one biased toward passing is how run 1 carried a confounded
+verdict for eleven hours.
+
+## Two A/B design errors, both mine
+1. I believed the passing config changed **two** things. It changed **three** (`bs=64`,
+   `DS4P_METAL_CHAMP`, `DS4P_LAZY_SYNC`). Neither original arm isolated the champion. *I did not know
+   how many variables I had changed*, while building the run whose purpose was to separate them.
+2. Arm C was left at `bs=16` — the setting arm A had just proven catastrophic — making it a
+   three-variable arm that would likely never return. Caught only because arm A's result forced a
+   re-read of the design.
+
+**A precondition and a flag are not the same knob.** `bs=64` is *required by* the champion, but it is
+also an independent switch that massively helps the scalar path. I collapsed the two.
