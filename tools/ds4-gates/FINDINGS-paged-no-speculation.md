@@ -330,8 +330,41 @@ hours. When a later symptom looked like it could be that fix in disguise, testin
 and one gate run. **A banked-wrong FIXED is worse than an open blocker, because nobody re-examines
 it.** Restored afterwards and verified by an **empty git diff**, not by trusting the copy.
 
-**Next step: instrument whether `ctx_dft` receives anything from `process()` — presence, not absence —
-before touching another line.**
+### ★ ROOT CAUSE OF THE −1, from instrumenting rather than guessing
+
+```
+W draft: llama_decode returned -1 | n_tokens=4 n_ctx_dft=4096 n_ubatch=512
+W draft:   row 0: tok=271    pos=13 seq=0 logits=1
+W draft:   row 1: tok=248077 pos=14 seq=0 logits=1     (248077 = dflash's mask token)
+W draft:   row 2: tok=248077 pos=15 seq=0 logits=1
+W draft:   row 3: tok=248077 pos=16 seq=0 logits=1
+```
+
+Four tokens at positions 13–16, seq 0, against **4096 free**. **Not capacity** — the draft cache will
+not accept those positions for that sequence, because nothing occupies 0..12 in its decoder KV.
+
+**Self-perpetuating**, which is why 22 attempts failed *identically* rather than degrading: the first
+lands at pos 13 against an empty draft KV, fails, writes nothing; the next lands at pos 14 against the
+same gap.
+
+Encode side is fine in both arms — **0** `llama_encode(ctx_dft)` failures paged, 0 static. Decode
+failures: **0 static, 22 paged**.
+
+⇒ **The static path maintains the DRAFT CONTEXT's KV state between attempts, and
+`update_slots_paged()` does neither half of it:**
+
+```cpp
+use_ckpt_dft = (ctx_dft_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_FULL);
+slot.spec_ckpt.update_dft(ctx_dft, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
+```
+
+⚠ **That is the 17-line `ctx_dft` bucket the audit classified as "applies ~unchanged".** The
+classification was right and I then ported **none** of it. *Applies-unchanged still has to be
+applied* — "this carries over" is a statement about difficulty, not a statement that it is done.
+
+**This is the remaining work for the loop half**, and it is the last piece: draft-context state
+management between attempts, either `seq_rm`-based rewind or checkpoint restore depending on
+`ctx_dft_seq_rm_type`.
 
 ### ⚠ CLOSE-OUT LIST — three of my own guards become FALSE the moment the loop half works
 
