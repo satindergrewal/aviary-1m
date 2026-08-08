@@ -912,3 +912,48 @@ beyond that and *measured* only there.
 
 **Still open and unrelated:** Gemma4-12B runs **48 of 48 layers static** under paging while the pool and
 champion markers look healthy.
+
+---
+
+# ⚠ RETRACTION: "Gemma4 ran zero paged layers" was an artefact of the log level
+
+Earlier this file claimed Gemma4-12B ran **48 of 48 layers static**, that the arm was therefore 100%
+vacuous, and derived an admission bar from it. Re-run at `-lv 5`:
+
+| | |
+|---|---|
+| `DS4P-CONSUME` | **320** — layers *did* consume the paged context |
+| `DS4P-SET` | 1008 |
+| distinct static-path layers | 48 |
+| capability-contract refusals | **64** |
+| head dims | `n_embd_head_k = 512`, `n_embd_head_k_swa = 256` |
+
+**`DS4P-CONSUME` requires `-lv 5`. The earlier run was `-lv 4`, so those events were invisible, not
+absent** — and that invisibility was read as "zero paged layers". Same class as reading 0 from a filtered
+log line (three prior incidents on file).
+
+⇒ Two things collapse:
+- **"Gemma ran zero paged layers" — WRONG.** It runs a mix.
+- **The admission bar "distinct static-path layers < `n_layer`" — INVALID as stated.** A layer can log the
+  static path in one batch and consume paged in another, so `48 == n_layer` does not mean nothing paged.
+  A valid bar must count `DS4P-CONSUME` at `-lv 5`, not infer from a marker's absence at a log level that
+  cannot print it.
+- The four CLEAN verdicts from that arm are **unexplained**, not vacuous.
+
+## And the model is broken independently of paging
+| arm | "The capital of France is" | "2 + 2 =" |
+|---|---|---|
+| **paged** | `'01111111'` | — |
+| **static** (pool asserted absent: 0 lines) | `'01111111'` | `' 1111111'` |
+
+**Byte-identical garbage with paging off.** So this checkpoint mangles short raw completions on its own —
+it answered the long needle prompt correctly in the earlier arm, which points at a missing chat template
+rather than a paged defect.
+
+⇒ **No paged defect is demonstrated for Gemma4.** The earlier line *"the paged path silently declines an
+entire arch while reporting a healthy startup"* is **withdrawn** — it was built on a consume count that
+could not have appeared, and the output failure it was paired with reproduces on the static path.
+
+⇒ What *is* real: the shape contract fires **64** times on this arch (two head dims, 512 global vs 256
+SWA, against a pool allocated once at 512) and degrades to the static path rather than corrupting. That is
+a loud, principled refusal working as designed — the opposite of a silent decline.
