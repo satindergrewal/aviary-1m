@@ -667,3 +667,28 @@ written vs read — that has recurred all session.
   Whether it is the same bug at another scale is worth *checking* rather than assuming.
 - ⚠ **Every parity number tonight came from runs that could have been silently affected.** The clean
   pairs were clean, but a 1-in-3 intermittent fault means any single unverified paged run is suspect.
+
+---
+
+# ⚠⚠ EVERY NUMBER IN THIS FILE IS DEFECT-ERA AND VOID (2026-08-08)
+
+All measurements above were taken on a paged path that was **skipping a per-batch write it was supposed
+to perform**. `llm_graph_input_mem_hybrid::set_input` returned early under paging (an attention-only
+guard), so the recurrent input's `s_copy` was written **once at graph construction and never refreshed** —
+for 24 of 32 layers, on every batch. See `FINDINGS-paged-cross-request.md` and fork `6391c5e63`.
+
+This is not "a bug was present somewhere in the tree". **The specific work under test was partly not
+happening**, and not doing it is cheaper than doing it — per batch, per layer.
+
+⇒ The prefill parity, the decode ratio, and the comparison table are **void, not superseded**. They are
+left in place, labelled, so that anyone who finds an old chart and wonders why it disagrees with a newer
+one gets the reason rather than a contradiction.
+
+⇒ Honest prior for the re-run: **paged should get slower against these figures**, and if it does that is
+not a regression — it is the first measurement of the correct thing. Magnitude deliberately not estimated
+in advance.
+
+⇒ Re-run in progress: 225k needle prompt, `-c 262144`, one server at a time, PID-pinned, **needle-gated**
+(a speed number from a run that got the answer wrong is not a speed number), with presence assertions that
+**abort** the arm rather than warn — static refuses to run if it sees a paged pool, paged refuses if it
+sees none.
