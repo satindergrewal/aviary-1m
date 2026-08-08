@@ -285,3 +285,73 @@ context, no 4-5 hour prefill, deterministic. Previously the cheapest known repro
 **Paged failed both, static passed both.** `s512` retrieving a needle at **501,733 tokens — 2x the
 model's native 250k** — also removes the YaRN-extrapolation caveat: `p512`'s failure was this defect,
 not context degradation. Prefill throughput was within 1% across arms at both sizes.
+
+---
+
+# THE VARIABLE: the FINAL PARTIAL PREFILL CHUNK (2026-08-08)
+
+Not the ubatch size. **The size of the last, partial prefill batch.**
+
+## How the ubatch framing died
+A sweep over ubatch values came back **non-monotonic**, which no threshold can produce:
+
+| ub | result |
+|---|---|
+| 384 (6 blocks) | CLEAN |
+| 400 | CORRUPTS |
+| 416 | CORRUPTS |
+| **432** | **CLEAN** ← clean *between* two corrupting values |
+| 448 (7 blocks) | CORRUPTS |
+
+The earlier "threshold at 7 blocks" read was an artefact of sampling only block multiples. Sampling
+between them is what killed it.
+
+## What the same data says once you compute the last chunk
+Prompt = 7427 tokens. `last = N mod ub`:
+
+| ub | last batch | result |
+|---|---|---|
+| 256 | 3 | CLEAN |
+| 320 | 67 | CLEAN |
+| 384 | 131 | CLEAN |
+| 432 | 83 | CLEAN |
+| 400 | 227 | **CORRUPTS** |
+| 416 | 355 | **CORRUPTS** |
+| 448 | 259 | **CORRUPTS** |
+| 512 | 259 | **CORRUPTS** |
+
+**8 for 8.** Small final chunk clean, large final chunk corrupt — including the 432 anomaly, which is
+clean *because* 432 happens to divide 7427 into a remainder of 83.
+
+## The decisive test: hold ub, move the remainder
+An 8/8 split over one prompt is a correlation. The falsifiable version changes the remainder **without
+touching the ubatch**, by varying prompt length instead.
+
+`-ub 512` held fixed; `N = 15*512 + r`; three requests per point on a fresh server.
+
+**`-ub 512`, remainder 3 → CLEAN (3/3 needle FOUND).** The same ubatch that corrupted at remainder 259.
+Same binary, same flags, champion live. Only the prompt length differs, and the outcomes are opposite.
+
+⇒ **The ubatch cannot be the cause.** The final partial chunk can.
+
+⚠ Prompt lengths are **constructed as tokens**, not estimated from text: `/tokenize` once, prepend
+filler tokens to hit `N` exactly, and assert `prompt_n == N` on every response. A text prompt cannot
+hit a token count, and a 3-token error silently relabels the point being measured.
+
+## ⚠ Consequence: the workaround line changes
+Remainders live in `[0, ub)`. So `-ub 256` is **not** safe in general — a differently-sized prompt can
+leave a 255-token final chunk, inside the corrupting band. The earlier "-ub 256 is clean, n=5" was true
+for a 7427-token prompt (remainder 3) and is **prompt-dependent luck, not margin**.
+
+**Guaranteed-clean setting pending refinement: `-ub 128`** (max remainder 127, below the bracket floor).
+
+## Where it points
+The last-chunk case is exactly the `is_prefill && !mid_prefill` predicate in the paged scheduler
+(`src/llama-paged-scheduler-impl.cpp`). A sufficiently large final chunk writes different KV on a
+repeat request — consistent with the measured checksum divergence (req1 4.40e11 vs req2 4.59e11,
+identical at N=512, diverging by N=1024).
+
+⚠ Resonance, recorded with its refutation attached: the fleet-era **partial-last-block** lead was never
+refuted on the merits — the test that was supposed to settle it was shown to be vacuous. Tonight's
+partial-*chunk* variable is the same family one level up (batch rather than block). Recorded as a
+possible early sighting, **not** asserted as the same defect.
