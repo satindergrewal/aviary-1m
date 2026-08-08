@@ -69,6 +69,10 @@ carried-state independently, because the same output appears at request position
 *"A stable, B == A, C differs → REAL paged divergence on qwen3vlmoe. File it."*
 The competing hypothesis — the documented near-tie flakiness of cross-arm byte-equality — was the
 **leading** one and is refuted: a near-tie would have made at least one arm vary. Neither did.
+⚠⚠ **THAT SENTENCE IS WRONG AND IS KEPT ONLY TO SHOW THE ERROR.** "A near-tie makes an arm vary" is
+false: a tie can be resolved **deterministically and differently** by two implementations, which is
+exactly what happened (1.03×, see the header). The probe refuted *randomness*, not *a tie*, and I read
+its result as refuting both.
 
 ## What the shape rules out
 
@@ -76,7 +80,8 @@ The competing hypothesis — the documented near-tie flakiness of cross-arm byte
 |---|---|
 | carried state across requests | arm C is a **fresh server, ONE request**, and still diverges |
 | the 2026-08-08 recurrent defect | `qwen3vlmoe` is **non-hybrid**; recurrent writes after req 1 = **0** |
-| harness near-tie / arbiter flakiness | both arms deterministic across processes |
+| harness near-tie / arbiter *flakiness* | both arms deterministic across processes |
+| ⚠ a near-tie *as such* | **NOT ruled out — see the header. This row conflated RANDOM flakiness with a TIE. The tie is real (1.03×) and each arm resolves it deterministically.** |
 | a wrong vehicle | loader reports `arch = qwen3vlmoe`, matching the expectation |
 
 ## Why 100+ single-request gate runs never saw it
