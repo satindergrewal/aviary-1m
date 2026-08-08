@@ -692,3 +692,32 @@ in advance.
 (a speed number from a run that got the answer wrong is not a speed number), with presence assertions that
 **abort** the arm rather than warn — static refuses to run if it sees a paged pool, paged refuses if it
 sees none.
+
+## Post-fix 225k re-run — static arm (⚠ indicative: binary mismatch, see below)
+
+Definitions registered **before** the data existed: wall-clock headline (it is what the user experiences),
+server's own `prompt_per_second` / `predicted_per_second` quoted as-is, needle-gated. The instantaneous
+rate decays ~350 → ~145 tok/s across this prompt, so a single "prefill tok/s" figure is ambiguous by 2.4x
+on one run — both arms must use the same definition or the ratio is manufactured.
+
+| arm | needle | wall | prompt_n | pp | tg |
+|---|---|---|---|---|---|
+| **static, post-fix** | **PASS** | **995.0 s** | 220,070 | 221.9 tok/s | 15.34 tok/s |
+| static, defect-era (`s225`) | pass | 1039 s | — | — | — |
+| paged, defect-era (`p225`) | **FAIL** | 1020 s | — | — | — |
+
+⇒ **The static baseline is stable: 995 s vs 1039 s, 4.2% apart.** No fix touches that path, so the two
+should agree, and they do within run-to-run variance. That validates the harness and, more importantly,
+**isolates the comparison** — any movement in the paged number is attributable to the fix and nothing else.
+
+⇒ The defect-era paged figure is the clearest illustration of why this file was void: **1020 s was quoted
+as a 19 s win over static, on a run whose needle FAILED**, on a path that was skipping a per-batch write —
+and the skipped work is part of why it was quick.
+
+⚠ **This pair is indicative only.** The static arm ran the pre-rebuild image (server started 17:28:35) and
+the paged arm the post-rebuild one (binary 17:32:53) — a probe was added mid-measurement. The probe is
+`getenv`-gated and unset, so the difference is one branch not taken, but *behaviourally identical by
+reasoning* is not a measurement. Both arms re-run on one image; that pair is the publishable one.
+
+⇒ Process rule added: **no builds while a measurement holds the GPU lock.** The lock protected the device;
+it did not protect the artifact under measurement, and it should.
