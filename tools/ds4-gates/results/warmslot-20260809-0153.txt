@@ -1,0 +1,18 @@
+tip: 4b7e0066c dirty=0  model=ornith-1.0-9b-1M-IQ2_M.gguf  reps=6  regime=WARM
+  static-r1      prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  paged-r1       prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  paged-r2       prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  static-r2      prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  static-r3      prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  paged-r3       prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  paged-r4       prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  static-r4      prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  static-r5      prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  paged-r5       prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  paged-r6       prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+  static-r6      prime=4.  Wh A=<think> Thinking Process: 1.  **Analyze  B=A, B, C, D, E.  **  Name the first five  -> SUSPECT
+-----
+static: 0 clean / 6 bad     paged: 0 clean / 6 bad
+verdicts: static:SUSPECT paged:SUSPECT paged:SUSPECT static:SUSPECT static:SUSPECT paged:SUSPECT paged:SUSPECT static:SUSPECT static:SUSPECT paged:SUSPECT paged:SUSPECT static:SUSPECT
+WARM MULTI-SLOT GATE: FAIL -- paged 6 bad / static 6 bad (1c REPRODUCES on this binary)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260809-0153.txt

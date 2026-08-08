@@ -1,0 +1,6 @@
+tip: 5d6b629fc dirty=0  ctx=262144  fill~240000tok
+--- STATIC (control) ---
+  static depth 10%  prompt_tokens=-1     found=0  <<NO CONTENT: {"error": {"code": 400, "message": "request (468925 tokens) exceeds the available context size (2621>>
+  static depth 50%  prompt_tokens=-1     found=0  <<NO CONTENT: {"error": {"code": 400, "message": "request (468925 tokens) exceeds the available context size (2621>>
+  static depth 90%  prompt_tokens=-1     found=0  <<NO CONTENT: {"error": {"code": 400, "message": "request (468925 tokens) exceeds the available context size (2621>>
+--- PAGED ---

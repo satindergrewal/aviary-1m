@@ -1,0 +1,11 @@
+tip: 4b7e0066c dirty=0  model=gemma4-26b-a4b-uncensored-1M-Q4_K_M.gguf  reps=6  regime=WARM
+  static-r1      prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN
+  paged-r1       prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN
+  paged-r2       prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN
+  static-r2      prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN
+  static-r3      prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN
+  paged-r3       prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN
+  paged-r4       prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN
+  static-r4      prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN
+  static-r5      prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN
+  paged-r5       prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     -> CLEAN

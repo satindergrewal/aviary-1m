@@ -1,0 +1,8 @@
+arch-serve gate: expected arch=qwen3moe  model=Qwen3.5-4B-Q4_K_M.gguf
+tip: fa213d9a0 dirty=4  -c 4096
+  STATIC  arch=qwen35         out=[ Paris. A. True B]
+          static-path warns=24     cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+
+STRIKE: loader reports arch='qwen35', gate was told to expect 'qwen3moe'.
+  This is the wrong vehicle. The model file exercised is the one selected by the loader's
+  arch string, so whatever this run proves, it does not prove anything about 'qwen3moe'.

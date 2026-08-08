@@ -1,0 +1,14 @@
+tip: 4b7e0066c dirty=0  model=gemma4-26b-a4b-uncensored-1M-Q4_K_M.gguf  reps=4  regime=WARM
+  static-r1      prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     consume=-1     -> CLEAN
+  paged-r1       prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     consume=630    -> CLEAN
+  paged-r2       prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     consume=630    -> CLEAN
+  static-r2      prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     consume=-1     -> CLEAN
+  static-r3      prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     consume=-1     -> CLEAN
+  paged-r3       prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     consume=630    -> CLEAN
+  paged-r4       prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     consume=630    -> CLEAN
+  static-r4      prime=4     A=<|channel>thought <channel|>one, B=<|channel>A, B, C, D, E          post=4     consume=-1     -> CLEAN
+-----
+static: 4 clean / 0 bad     paged: 4 clean / 0 bad
+verdicts: static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN
+WARM MULTI-SLOT GATE: PASS -- both paths clean across 4 warm reps (1c did not reproduce)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260809-0214.txt
