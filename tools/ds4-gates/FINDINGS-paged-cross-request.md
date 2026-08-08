@@ -597,3 +597,55 @@ needed rejected drafts and this one has none.
 
 ⚠ The 88 `took the STATIC path` warnings all fire **before** the first request (line 209 vs 356) — graph
 construction, not per-batch fallback.
+
+---
+
+# ⚠ CORRECTION: the poison does NOT affect single-chunk prompts
+
+| arm | result |
+|---|---|
+| fresh server, 221-token prompt (**one** prefill chunk) | FOUND, FOUND |
+| span-256 poison: req1 / req2 | FOUND / **MISS** — server confirmed poisoned |
+| **221-token prompt on the poisoned server** | **FOUND, FOUND** |
+
+Every "sticky" prompt tested earlier was 7000+ tokens, i.e. 15 chunks. The earlier claim *"every request
+after it is garbage, whatever prompt you send"* is **wrong**.
+
+⇒ **Corrected:** after the trigger, every subsequent **multi-chunk** prefill is corrupted from its second
+chunk onward; single-chunk prefills are untouched.
+
+⇒ That is sharper, not weaker: **there is no persistent corrupted data.** The damage is manufactured
+fresh at each chunk-to-chunk handoff. A poisoned server has nothing wrong sitting in its cache — it has
+something wrong in how it carries state between prefill chunks, and a request with no handoff never meets
+it. This is the strongest support for the recurrent-state route: those 24 layers are exactly the state
+that must be carried across a chunk boundary, and a single-chunk request carries nothing.
+
+# ★ Second defect, deterministic: a stale position ledger takes the server down
+
+Sequence **long → long → short → short → long** ends in HTTP 500 and process exit:
+
+```
+slot launch_slot_: task 94 | paged: request registered (7936 tokens)
+init: the tokens of sequence 0 in the input batch have inconsistent sequence positions:
+  - the last position stored in the memory module of the context (the KV cache) for seq 0 is X = 7950
+  - the tokens for seq 0 in the input batch have a starting position of Y = 0
+decode: failed to initialize batch -> llama_decode ret = -1 -> "paged decode failed"
+```
+
+7950 is the **previous long request's** last position (7936 + generation). The short requests in between
+never reset the context's memory-module ledger, so the next request is refused by the batch validator.
+
+**Two-ledgers class, sixth instance in the lane, third in this file** — the paged manager's bookkeeping
+and the context's memory module are separate, and only one is maintained. The two fixed earlier were on
+the speculation path; this one is plain serving with no drafts involved.
+
+⚠ The abort that follows (`ggml-metal-device.m:657: GGML_ASSERT([rsets->data count] == 0)`) is a
+**shutdown-path** check — its own comment says *"most likely you haven't deallocated all Metal resources
+before exiting"*. The decode failure is the defect; the assert is teardown. Reporting the assert as the
+crash would send someone into the Metal backend for a position-bookkeeping bug.
+
+⇒ Any mixed-length workload hits this, which is every real chat server.
+
+⇒ It may not be separate from the corruption: a stale position ledger surviving across requests is exactly
+what would make the next request's chunk handoff compute the wrong carry. Not merged — but the fix for the
+loud one gets tested against the silent one immediately.
