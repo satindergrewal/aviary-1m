@@ -749,3 +749,35 @@ in the good direction.
 ⚠ **Still indicative.** Static ran the pre-rebuild image, paged the post-rebuild one (timestamps 17:28:35
 vs 17:32:53). The one-binary re-run was queued *before* this result was known, and runs regardless of
 which way it fell.
+
+---
+
+# ✅ PUBLISHABLE PAIR — 225k, one binary, both arms, needle-gated
+
+| arm | needle | wall | prompt_n | pp | tg |
+|---|---|---|---|---|---|
+| static | **PASS** | 985.9 s | 220,070 | 224.0 tok/s | 15.67 tok/s |
+| **paged** | **PASS** | **969.2 s** | 220,070 | **227.6 tok/s** | **24.42 tok/s** |
+
+**wall ratio 0.9831 — paged 1.7% faster · prefill 1.6% faster · decode 1.558×.**
+Denominator is *this run's* static (985.9 s), pre-registered before the paged arm ran so the flattering
+one could not be chosen afterwards.
+
+## The mixed-binary pair vs the clean one
+| | run 1 (mixed) | run 2 (one binary) | apart |
+|---|---|---|---|
+| static | 995.0 s | 985.9 s | 0.9% |
+| paged | 963.7 s | 969.2 s | 0.6% |
+| decode | 25.05 | 24.42 | 2.5% |
+
+The binary mismatch changed nothing detectable. **That does not make flagging it wrong** — it was cheap
+insurance that happened not to be needed, and the same evidence would justify it again. The 80 minutes
+bought the right to state these numbers without a footnote.
+
+## ⚠ Decode revised DOWN
+Earlier reported as **1.63×** from the mixed pair; the clean pair says **1.558×**. **The lower number is
+the real one.** The defect-era claim of **1.68×** sits above both — it was measured on a run that returned
+garbage, *and* it was optimistic.
+
+⇒ **Final performance statement: paging is correct, modestly faster on prefill, and substantially faster on
+decode — 1.56×, not the 1.68× that was on the books, with a passing needle at 430 chunks behind it.**
