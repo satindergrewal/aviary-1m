@@ -720,10 +720,29 @@ both paths, and the counter proves the rewritten function actually executed rath
 model answered.
 ⇒ **Correctness EARNED** — needle found by both arms on every request, each arm perfectly deterministic.
 
+⚠⚠ **2026-08-09 — THE ARM LABELLED `paged` ABOVE WAS NOT PAGING ITS ATTENTION.** `qwen35moe.cpp` accepted
+`paged_ctx` and never read it, so under `--kv-paged` every attention layer of Ornith-35B ran STATIC beside
+an allocated, unread pool (`DS4P-CHECKOUT` 6, `DS4P-CONSUME` **0**). See
+`FINDINGS-qwen35moe-no-consumer.md`.
+
+**What survives and what does not, precisely:**
+· **SURVIVES** — the `set_input` coverage claim. `DS4P-RS` counts the **recurrent** write, which a hybrid
+  model performs in both arms regardless of how attention is computed. 813 vs 816 is real, and the
+  rewritten function did execute on a second model.
+· **DEAD** — any reading of that table as *paged attention* coverage. It was static-vs-static for the
+  attention half.
+⇒ Fixed and re-gated on the fixed binary: `DS4P-CONSUME` **0 → 430**, static-path fallbacks **230 → 0**,
+sequence leg 3/3, poison control fired. **Ornith-35B pages its attention for the first time.**
+
 ⚠ **This is a second MODEL, not a second ARCH.** `qwen35moe` is the MoE sibling of `qwen35`: same family,
 same recurrent design, same `key_length` 256. Header screen of every local GGUF found **15 archs, 2 hybrid,
-both qwen35 family** — so hybrid-paged coverage in this fork is *one arch deep by inventory*, not by bad
-luck. Acquiring a genuine second hybrid arch is an errand with a download.
+both qwen35 family** — so hybrid-paged coverage in this fork is *one FAMILY deep by inventory*, not by bad
+luck.
+⇒ **Correction to the sentence that used to end here** (*"acquiring a genuine second hybrid arch is an
+errand with a download"*): `qwen35moe` **is** a separate arch by the same source-file criterion that makes
+`starcoder2` separate from `starcoder`, and it has been on this disk all along. What the box lacks is a
+different hybrid **FAMILY** — Mamba/Jamba-shaped: `jamba`, `falcon-h1`, `granite-hybrid`, `nemotron-h`,
+`plamo2`, `kimi-linear`, `lfm2`. **Do not shop for a second Qwen3.5; there are five here.**
 
 ### ⚠ Cross-arm byte-equality is the WRONG gate for two kernels
 Proposed as a think-block-immune correctness test (Grok #7817) and it fails here — the arms diverge at

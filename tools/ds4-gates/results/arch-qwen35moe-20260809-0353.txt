@@ -1,0 +1,25 @@
+arch-serve gate: expected arch=qwen35moe  model=ornith-1.0-35b-1M-Q4_K_M.gguf
+tip: 59e9ea250 dirty=1  -c 4096
+  STATIC  arch=qwen35moe      out=[ Paris, a city renowned for its iconic]
+          static-path warns=230    cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+  PAGED   arch=qwen35moe      out=[ Paris, a city renowned for its iconic]
+          static-path warns=0      cap-fails=0     headdim-fails=0     pool=6
+          DS4P-CONSUME banded=430    auto=0
+          (startup reserve passes excluded: 210 static-path warnings before the first request)
+-----
+  consumer funnel: banded
+  multi-request leg: hybrid=yes  recurrent writes after first request=43
+    req 1/3 long  match  [ located on a river. Is the fact]
+    req 2/3 short match  [ Tokyo, a city that has been the]
+    req 3/3 long  match  [ Rome.  <think> Here's a]
+  sensitivity control: re-running the PAGED arm with DS4P_RSPOISON=0xDEADBEEF ...
+    CONTROL FIRED -- poisoned recurrent state produced different text, so the leg
+    above is sensitive to recurrent state and its match is a measurement.
+PASS: arch=qwen35moe  output identical  DS4P-CONSUME=430 (banded funnel)
+  fallbacks 230 -> 0, every layer carried by the paged path.
+  multi-request: 3 requests (long, short, long) on ONE server all match, recurrent input
+  re-written 43 times after the first request, and a poisoned control proved the leg
+  can see recurrent state. This row is NOT a single-request verdict.
+  ⚠ SCOPE: short prompt at -c 4096. Says the arch is WIRED and CORRECT at small context.
+  Says nothing about long context, nothing about speed, and the ~50k intermittent paged
+  defect is open underneath every row of this table.
