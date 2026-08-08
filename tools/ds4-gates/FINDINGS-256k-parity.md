@@ -721,3 +721,31 @@ reasoning* is not a measurement. Both arms re-run on one image; that pair is the
 
 ⇒ Process rule added: **no builds while a measurement holds the GPU lock.** The lock protected the device;
 it did not protect the artifact under measurement, and it should.
+
+## Post-fix 225k re-run — both arms (⚠ indicative: binary mismatch)
+
+| arm | needle | wall | prompt_n | pp | tg |
+|---|---|---|---|---|---|
+| static, post-fix | **PASS** | 995.0 s | 220,070 | 221.9 tok/s | 15.34 tok/s |
+| **paged, post-fix** | **PASS** | **963.7 s** | 220,070 | **228.8 tok/s** | **25.05 tok/s** |
+| static, defect-era (`s225`) | pass | 1039 s | — | — | — |
+| paged, defect-era (`p225`) | **FAIL** | 1020 s | — | — | — |
+
+**paged vs static, post-fix: wall 3.2% faster · prefill 3.1% faster · decode 1.63× faster.**
+
+⇒ **The needle PASSES at 225k.** The corruption fix was verified on 16-chunk prompts; this is a
+**430-chunk** prompt and it holds. The outcome that would have reopened everything — a mechanism scaling
+with chunk *count* rather than chunk *size* — did not occur, and was checked rather than assumed.
+
+⇒ **The old 1.68× decode claim was approximately right and is now honest: 1.63×, with a passing needle
+behind it.** Before, that figure came from a run that returned garbage on a path skipping a per-batch
+write.
+
+⇒ **Correctness was free.** Paged now performs the recurrent write on every one of 430 chunks for 24 of 32
+layers and is still faster than static on all three measures. The prior registered *before* the data —
+*"paged should get slower, and that would be the first measurement of the correct thing"* — was **wrong**,
+in the good direction.
+
+⚠ **Still indicative.** Static ran the pre-rebuild image, paged the post-rebuild one (timestamps 17:28:35
+vs 17:32:53). The one-binary re-run was queued *before* this result was known, and runs regardless of
+which way it fell.
