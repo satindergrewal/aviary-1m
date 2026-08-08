@@ -649,3 +649,67 @@ crash would send someone into the Metal backend for a position-bookkeeping bug.
 ⇒ It may not be separate from the corruption: a stale position ledger surviving across requests is exactly
 what would make the next request's chunk handoff compute the wrong carry. Not merged — but the fix for the
 loud one gets tested against the silent one immediately.
+
+---
+
+# ★ FIXED: the crash. `launch_slot` cleared the mirror but not the context ledger
+
+## The minimal reproducer is three ordinary requests
+| arm | sequence | result |
+|---|---|---|
+| A | long, long, short, short, long | **HTTP 500** on step 5 |
+| B | long, short, long | **HTTP 500** on step 3 |
+| C | short, long | 200, but the long answers **wrong on its first request** |
+| D | **clean** long, short, **clean** long | **HTTP 500** — independent of the corruption trigger |
+| E | trig, short, trig, trig | 500 on step 3, **process ABORT** on step 4 |
+| F | short, short, long | all 200, all correct — a long request **is** needed first |
+
+Arm D is the important one: both long slots use the span-255 prompt, which is clean forever on its own.
+**The crash has nothing to do with the corruption.**
+
+```
+init: the tokens of sequence 0 in the input batch have inconsistent sequence positions:
+  - the last position stored in the memory module of the context for sequence 0 is X = 7949
+  - the tokens for sequence 0 in the input batch have a starting position of Y = 0
+decode: failed to initialize batch -> llama_decode ret = -1 -> HTTP 500 "paged decode failed"
+```
+Then on the next request: `GGML_ASSERT(remaining_prompt > 0 && "prefill candidate with no prompt
+remainder")` at `llama-paged-scheduler-impl.cpp:769` — the group believes its prompt is fully prefilled,
+so the chunker gets a candidate with nothing to do and aborts the process.
+
+## The line
+```cpp
+if (params_base.kv_paged) {
+    slot.prompt.clear();      // mirror only  -> slot.prompt_clear();  // mem.seq_rm + mirror
+}
+```
+`prompt_clear()` does `mem.seq_rm(id, -1, -1)` **first**, then clears the mirror. **Two-ledgers class,
+sixth in the lane** — and this instance was introduced by the earlier mirror fix (`bc8274a80`) in this
+same file. Closing one ledger left the other open behind it.
+
+## Verified — fresh server per arm (fork `4c3b18144`, local only)
+| arm | before | after |
+|---|---|---|
+| long, short, long | 500 | **200, correct** |
+| long, short, long, long | ABORT | **survives** |
+| span 255 × 3 | CLEAN | CLEAN — no regression |
+| short × 3 | CLEAN | CLEAN — no regression |
+| **span 256 × 3 (corruption razor)** | CORRUPT | **CORRUPT — unchanged** |
+
+## ⚠ Do not ship this alone
+Before the fix, `long, short, long` failed **loudly** with a 500. After it, that request returns **200
+with confident garbage** on exactly the sequence where the corruption also fires. The change is correct —
+the ledger must be cleared and the crash hits perfectly ordinary prompts — but on its own it converts a
+visible failure into an invisible one. It ships with the corruption fixed, or behind the same guard.
+
+## ⚠ And it weakens the leading corruption suspect
+`seq_rm(id, -1, -1)` resets the **recurrent** memory on this hybrid context. The fix runs it on every
+paged launch and the corruption is byte-identical. Stale recurrent state across the chunk handoff — the
+leading suspect since the all-layer probe — survives only if it is not what `seq_rm` resets.
+
+## Suspects eliminated, each with a firing control
+ubatch size · prompt length · block size · block count · partial-block fill · champion kernel · `n_ctx`
+padding · block allocation and freelist order · `max_blocks`/stride · `n_past` · resolved write slots ·
+graph reuse · compute-buffer sizing · the context memory ledger.
+
+**Still standing:** the final prefill chunk's span from its block-aligned start, at exactly 256.
