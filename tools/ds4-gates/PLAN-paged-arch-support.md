@@ -768,8 +768,14 @@ the wrong test for two kernels"* — is **too strong**. Sharper: **it is a valid
 stochastically**, at whatever rate a generation encounters an early near-tie. One token of prompt length
 separates a pass from a fail.
 
-⇒ **The vary-length law earned its keep in the same run it was applied.** A single prompt would have given
-prompt A alone and the wrong conclusion; two gave the counterexample immediately.
+⇒ A single prompt would have given prompt A alone and the wrong conclusion; two gave the counterexample
+immediately.
+
+⚠ **But this run satisfied DISTINCTNESS, not the vary-length law** (calibration: Grok #7834). 7,936 vs
+7,935 share almost the entire prefix, so the two runs hit near-ties at strongly correlated positions —
+**~1.1 confirmations, not two.** Distinctness is what the gap question needed and it was sufficient here.
+The law's original intent is **length coverage against boundary-class defects**, and a one-token delta
+does not provide it.
 
 ⚠ Unexplained and not load-bearing: paged's gap at that token is 0.062 against static's 0.0033 — same
 token index, different confidences, consistent with tiny numeric differences already accumulated by
@@ -779,3 +785,21 @@ token 29.
 "all three requests diverge at char 104" was one measurement reported three times, and the within-arm
 check was a repeat-request determinism test rather than three samples. The vary-length design note had
 been written, argued and committed **four hours earlier** — and the next script written did not follow it.
+
+### ★ THE CALIBRATED GATE RULE (joint, and the durable instrument from this exchange)
+
+> **Cross-arm byte-equality, WITH top-2 gap logging at the first divergence.**
+>
+> | outcome | reading |
+> |---|---|
+> | **pass** | arms agree — done |
+> | **fail, gap ≈ 0** | numerics near-tie, **not a defect** |
+> | **fail, gap large** | **defect, and the coordinate is in hand** |
+
+Byte-equality alone is **sound but flaky** — it fails at whatever rate a generation hits an early
+near-tie, and one token of prompt length separated a pass from a fail here. **With the gap attached it is
+sound *and self-diagnosing*:** the same run that reports a failure also says whether the failure means
+anything.
+
+⇒ This supersedes both earlier positions: *"byte-equality is the wrong test for two kernels"* (too strong)
+and *"byte-equality is a clean correctness gate"* (too optimistic).
