@@ -1,0 +1,13 @@
+arch-serve gate: expected arch=gemma3  model=gemma-3-12b-it-IQ4_XS.gguf
+tip: ae9e496e8 dirty=0  -c 4096
+  STATIC  arch=gemma3         out=[ Paris.  Paris is known for its]
+          static-path warns=0      cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+  PAGED   arch=gemma3         out=[ Paris.  Paris is known for its]
+          static-path warns=0      cap-fails=0     headdim-fails=0     pool=5
+          DS4P-CONSUME banded=0      auto=0
+          (startup reserve passes excluded: 0 static-path warnings before the first request)
+-----
+VOID: paged arm shows ZERO DS4P-CONSUME events -- no graph consumed the paged context.
+  pool checkouts = 5, so the blocks were allocated and then read by nobody. Identical
+  output here proves only that two effectively-static runs agree. This is audit finding 5
+  reproducing, not a passing arch.
