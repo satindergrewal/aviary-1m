@@ -73,3 +73,71 @@ gate_verdict() { # $1=static_bad $2=paged_bad $3=label
 #   n_predict truncation, and the empty 4th sequence.
 #       MS_REPS=1 ./<gate>.sh    # read the per-sequence dump, THEN run the grid
 gate_smoke_note() { echo "pre-launch: MS_REPS=1 smoke (bash -n does NOT catch runtime faults; shellcheck absent here)"; }
+
+# ---- MAGNITUDE: a systematic difference is NOT graded by byte comparison --------------------------
+# ⚠⚠ THE LAW THIS ENCODES, learned by breaking it on 2026-08-09. `qwen3vlmoe` paged text differed from
+#   static, reproducibly. A three-arm probe showed BOTH arms deterministic across processes, so I filed
+#   it as OPEN DEFECT and reported "the fifth real defect". The top-2 logprobs:
+#
+#       static   ' on' p=0.16328    ' located' p=0.15927     <- 0.025 logprob apart. A 1.03x TIE.
+#       paged    ' located' 0.17962 ' on' 0.16509
+#
+#   A ~0.1 logprob numerical difference flipped an argmax static itself won by 0.025. Not a wrong
+#   answer. The file was retracted the same hour, by me, before anyone asked.
+#
+# ⇒ THE REASONING ERROR, stated so the next gate cannot repeat it:
+#       determinism separates RANDOM from SYSTEMATIC.
+#       it CANNOT separate LARGE-systematic from TINY-systematic.
+#       byte comparison is blind to MAGNITUDE. "Reproducible" NEVER upgrades a finding's severity.
+#   I wrote "a near-tie would have made an arm vary; neither did, so the tie is refuted." False -- a tie
+#   is resolved DETERMINISTICALLY AND DIFFERENTLY by two implementations. (sharpened: Grok #8200)
+#
+# ⚠ AND IT SCALES THE WRONG WAY. At 4k this cost one filed-then-retracted finding. At 512k-1M the
+#   near-tie ENCOUNTER RATE is not one position, so a cross-arm byte-equality gate WILL false-fail
+#   stochastically at depth -- i.e. it would file NUMERICS as DEFECTS at exactly the owner's bar. Any
+#   long-context cross-arm gate must carry this clause. It lives here, not in prose, because prose laws
+#   in this directory have been violated by the very next script three times.
+#
+# The field is `top_logprobs`. ⚠ NOT `top_probs` and NOT `probs` -- the first parser looked for those,
+# printed nothing, and "no data" read exactly like "no divergence". Third instrument that night to read
+# silent from being aimed at the wrong key.
+GATE_TIE_LOGPROB="${GATE_TIE_LOGPROB:-0.35}"   # measured tie: 0.025. A real disagreement is >> this.
+
+gate_top2_gap() { # $1=port  $2=prompt  -> "<top1_token>|<top2_token>|<logprob_gap>"; "" on failure
+    local port="$1" prompt="$2"
+    GT_P="$prompt" python3 -c "
+import json, os
+print(json.dumps({'prompt': os.environ['GT_P'], 'n_predict': 1, 'temperature': 0,
+                  'seed': 1, 'cache_prompt': False, 'n_probs': 5}))" > "${TMPDIR:-/tmp}/gate_top2.json"
+    curl -s --max-time 900 -X POST "http://127.0.0.1:$port/completion" \
+        -H 'Content-Type: application/json' -d @"${TMPDIR:-/tmp}/gate_top2.json" \
+      | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    tl = (d.get('completion_probabilities') or [{}])[0].get('top_logprobs') or []
+    if len(tl) < 2: raise ValueError('fewer than 2 candidates')
+    print('%s|%s|%.5f' % (tl[0]['token'], tl[1]['token'], tl[0]['logprob'] - tl[1]['logprob']))
+except Exception:
+    print('')"
+}
+
+# Grade a cross-arm TEXT difference. Call this BEFORE printing the word 'defect'.
+#   exit 0 = TIE      -> a divergence NOTE. Not a defect. Do not file one.
+#   exit 1 = REAL     -> the arms disagree where the model is confident.
+#   exit 2 = UNGRADED -> the gap could not be measured; say UNGRADED, never 'defect'.
+gate_grade_divergence() { # $1=static_gap_triplet (from gate_top2_gap on the STATIC arm)
+    local trip="$1" gap tok1 tok2
+    [ -z "$trip" ] && { echo "  UNGRADED: no top-2 gap measured. A cross-arm text difference without a"
+                        echo "  magnitude is not gradeable -- report it as a DIVERGENCE, never a defect."; return 2; }
+    tok1=${trip%%|*}; gap=${trip##*|}; tok2=${trip#*|}; tok2=${tok2%%|*}
+    if python3 -c "import sys; sys.exit(0 if abs(float('$gap')) < float('$GATE_TIE_LOGPROB') else 1)"; then
+        echo "  TIE, NOT A DEFECT: static's own top-2 are ['$tok1'] vs ['$tok2'], only $gap logprob apart"
+        echo "  (threshold $GATE_TIE_LOGPROB). A small numerical difference between the paths flipped an"
+        echo "  argmax static itself barely won. Report a divergence NOTE. Neither arm is ground truth."
+        return 0
+    fi
+    echo "  SUBSTANTIVE: static separates ['$tok1'] from ['$tok2'] by $gap logprob (>= $GATE_TIE_LOGPROB),"
+    echo "  so the arms disagree where the model is CONFIDENT. This one is gradeable as a defect."
+    return 1
+}

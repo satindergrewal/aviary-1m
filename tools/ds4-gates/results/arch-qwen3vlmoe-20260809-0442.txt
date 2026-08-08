@@ -1,0 +1,32 @@
+arch-serve gate: expected arch=qwen3vlmoe  model=Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
+tip: ae9e496e8 dirty=0  -c 4096
+  STATIC  arch=qwen3vlmoe     out=[ Paris. True or False? Answer: ]
+          static-path warns=864    cap-fails=0     headdim-fails=0     DS4P-CONSUME=0
+  PAGED   arch=qwen3vlmoe     out=[ Paris. True or False? Answer: ]
+          static-path warns=0      cap-fails=0     headdim-fails=0     pool=6
+          DS4P-CONSUME banded=3840   auto=0
+          (startup reserve passes excluded: 0 static-path warnings before the first request)
+-----
+  consumer funnel: banded
+  multi-request leg: hybrid=no  recurrent writes after first request=0
+*** DIVERGED: request 1 of 3 (long), static vs paged. Grading before naming it. ***
+    static [ on a river. What is the number]
+    paged  [ located on a river. What is the]
+  grading req 1/3 -- restarting the STATIC arm to read its own top-2 gap ...
+  TIE, NOT A DEFECT: static's own top-2 are [' on'] vs [' located'], only 0.02485 logprob apart
+  (threshold 0.35). A small numerical difference between the paths flipped an
+  argmax static itself barely won. Report a divergence NOTE. Neither arm is ground truth.
+    req 2/3 short match  [ Tokyo, which is also the most populous]
+    req 3/3 long  match  [ located on which river?]
+PASS: arch=qwen3vlmoe  single-request output identical, one sequence request GRADED A TIE  DS4P-CONSUME=3840 (banded funnel)
+  fallbacks 864 -> 0, every layer carried by the paged path.
+  ⚠ multi-request: one request DIVERGED and was GRADED A TIE, not a defect. The arms do
+  NOT agree byte-for-byte on this arch; they agree wherever the model is confident. Read
+  a future match here as 'the tie did not fall the other way', not as numerical parity.
+  multi-request: 3 requests (long, short, long) on ONE server. ⚠ NON-HYBRID, so
+  there is no recurrent state to poison and the leg's POWER IS UNMEASURED here: it covers
+  the short-after-long ledger shape, and nothing proves it would catch a subtler carry
+  defect on this arch. Weaker than the hybrid rows, on purpose, and recorded as such.
+  ⚠ SCOPE: short prompt at -c 4096. Says the arch is WIRED and CORRECT at small context.
+  Says nothing about long context, nothing about speed, and the ~50k intermittent paged
+  defect is open underneath every row of this table.

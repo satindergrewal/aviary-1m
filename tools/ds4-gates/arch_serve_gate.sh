@@ -49,6 +49,9 @@
 set -uo pipefail
 
 . "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+# ⚠ The magnitude clause is an INCLUDE, not a habit. This gate filed a 1.03x tie as OPEN DEFECT on
+# 2026-08-09 because nothing forced it to measure the top-2 gap before choosing the word.
+. "$(dirname "$0")/_gate_common.sh" 2>/dev/null || true
 
 ARCH="${1:-}"
 MODEL="${2:-}"
@@ -492,6 +495,31 @@ fi
 
 seq_line() { printf '%s\n' "$2" | sed -n "$1p"; }
 
+# ★ GRADE A DIVERGENCE BEFORE NAMING IT. Restarts the STATIC arm and reads its own top-2 gap at the
+# divergent position: a text difference sitting on a coin-flip tie is a NOTE, not a defect.
+# ⚠ Only runs when something actually diverged (once in 100+ runs), so the extra server start is not a
+# routine cost. ⚠ Preserves static.log first -- start() overwrites it, and every count printed above
+# would otherwise become unreproducible from the file left on disk.
+grade_divergence() { # $1 = the prompt that diverged  $2 = label
+    command -v gate_top2_gap >/dev/null 2>&1 || {
+        echo "  UNGRADED ($2): _gate_common.sh not loaded, no magnitude instrument available." | tee -a "$OUT"; return; }
+    cp "$LOGDIR/static.log" "$LOGDIR/static-main.log" 2>/dev/null
+    echo "  grading $2 -- restarting the STATIC arm to read its own top-2 gap ..." | tee -a "$OUT"
+    if start static >/dev/null 2>&1; then
+        local trip out grc
+        trip=$(gate_top2_gap "$PORT" "$1")
+        kill "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""
+        # ⚠ CAPTURE, THEN PRINT. `gate_grade_divergence | tee` returns TEE's status, not the grader's --
+        # the same defect shape as the `grep | sed || echo clean` privacy guard fixed hours earlier,
+        # where a downstream command's success masked the verdict.
+        out=$(gate_grade_divergence "$trip"); grc=$?
+        printf '%s\n' "$out" | tee -a "$OUT"
+        return $grc
+    fi
+    echo "  UNGRADED ($2): the static arm did not restart, so no magnitude could be read." | tee -a "$OUT"
+    return 2
+}
+
 # ⚠⚠ THE STATIC SEQUENCE IS THE ARBITER HERE TOO, AND IT CAN BE DEGENERATE FOR REASONS THAT HAVE
 # NOTHING TO DO WITH PAGING. These prompts are ~2k tokens; overflow the context, hit a template
 # problem, or trip a refusal and the server returns an error or an empty string -- IN BOTH ARMS. Two
@@ -519,10 +547,15 @@ for i in 1 2 3; do
     lbl=$([ "$i" = 2 ] && echo "short" || echo "long")
     if [ "$a" != "$b" ]; then
         SEQ_DIVERGED=1
-        echo "*** FAIL: request $i of 3 ($lbl) DIVERGED between static and paged. ***" | tee -a "$OUT"
+        # ⚠ "DIVERGED", not "FAIL", until the magnitude is read. The word is chosen by the grader below.
+        echo "*** DIVERGED: request $i of 3 ($lbl), static vs paged. Grading before naming it. ***" | tee -a "$OUT"
         echo "    static [$a]" | tee -a "$OUT"
         echo "    paged  [$b]" | tee -a "$OUT"
-        rc=1
+        case "$i" in 1) dp="$SEQ_LONG1";; 2) dp="$SEQ_SHORT";; *) dp="$SEQ_LONG2";; esac
+        grade_divergence "$dp" "req $i/3"; grc=$?
+        # exit 1 from the grader = SUBSTANTIVE. A tie (0) or ungradeable (2) is NOT a gate failure --
+        # that is the whole point of the clause, and the reason the header above says DIVERGED not FAIL.
+        [ "$grc" -eq 1 ] && rc=1
     else
         printf '    req %d/3 %-5s match  [%s]\n' "$i" "$lbl" "$a" | tee -a "$OUT"
     fi
@@ -585,7 +618,12 @@ if [ "$FUNNEL" = banded ] || [ "$FUNNEL" = mixed ]; then
 fi
 
 if [ "$rc" -eq 0 ]; then
-    echo "PASS: arch=$ARCH  output identical  DS4P-CONSUME=$P_CONS ($FUNNEL funnel)" | tee -a "$OUT"
+    # ⚠ "output identical" is FALSE when a request diverged and graded a tie. Say which it is.
+    if [ "${SEQ_DIVERGED:-0}" -ne 0 ]; then
+        echo "PASS: arch=$ARCH  single-request output identical, one sequence request GRADED A TIE  DS4P-CONSUME=$P_CONS ($FUNNEL funnel)" | tee -a "$OUT"
+    else
+        echo "PASS: arch=$ARCH  output identical  DS4P-CONSUME=$P_CONS ($FUNNEL funnel)" | tee -a "$OUT"
+    fi
     if [ "$FUNNEL" = banded ]; then
         echo "  fallbacks ${S_NOPG} -> 0, every layer carried by the paged path." | tee -a "$OUT"
     else
@@ -593,12 +631,21 @@ if [ "$rc" -eq 0 ]; then
         echo "  emits no static-path warning, so this gate CANNOT prove every layer was carried. It" | tee -a "$OUT"
         echo "  proves paged ran ($P_CONS consume events) and the text matches. Record it that way." | tee -a "$OUT"
     fi
+    # ⚠ DO NOT SAY "ALL MATCH" WHEN ONE DIVERGED AND WAS GRADED A TIE. The verdict is legitimately PASS
+    # -- a coin-flip tie is not a defect -- but a summary line that erases the divergence is how the
+    # next reader concludes the arms agree byte-for-byte, which is exactly the false confidence this
+    # clause exists to remove. Report the grade, not a rounded version of it.
+    if [ "${SEQ_DIVERGED:-0}" -ne 0 ]; then
+        echo "  ⚠ multi-request: one request DIVERGED and was GRADED A TIE, not a defect. The arms do" | tee -a "$OUT"
+        echo "  NOT agree byte-for-byte on this arch; they agree wherever the model is confident. Read" | tee -a "$OUT"
+        echo "  a future match here as 'the tie did not fall the other way', not as numerical parity." | tee -a "$OUT"
+    fi
     if [ "$HYBRID" = yes ]; then
-        echo "  multi-request: 3 requests (long, short, long) on ONE server all match, recurrent input" | tee -a "$OUT"
+        echo "  multi-request: 3 requests (long, short, long) on ONE server, recurrent input" | tee -a "$OUT"
         echo "  re-written $P_RS times after the first request, and a poisoned control proved the leg" | tee -a "$OUT"
         echo "  can see recurrent state. This row is NOT a single-request verdict." | tee -a "$OUT"
     else
-        echo "  multi-request: 3 requests (long, short, long) on ONE server all match. ⚠ NON-HYBRID, so" | tee -a "$OUT"
+        echo "  multi-request: 3 requests (long, short, long) on ONE server. ⚠ NON-HYBRID, so" | tee -a "$OUT"
         echo "  there is no recurrent state to poison and the leg's POWER IS UNMEASURED here: it covers" | tee -a "$OUT"
         echo "  the short-after-long ledger shape, and nothing proves it would catch a subtler carry" | tee -a "$OUT"
         echo "  defect on this arch. Weaker than the hybrid rows, on purpose, and recorded as such." | tee -a "$OUT"
