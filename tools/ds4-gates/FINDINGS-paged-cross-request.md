@@ -407,3 +407,69 @@ server, each with identical repeats. Same binary, same flags, same ubatch, oppos
 
 The static arm retrieves the needle at N=8128 where paged misses 3/3, so the corrupting prompts are
 fine and every paged failure above is a real paged failure.
+
+---
+
+# RESOLVED SHAPE: a trigger + a sticky state (2026-08-08, fresh-server data)
+
+Two facts that had been fused into one:
+
+1. **The trigger is a property of the prompt.** Some prompts poison a paged server, others never do.
+2. **The damage is sticky.** A triggering prompt answers request 1 correctly and is wrong from request 2
+   onward; after that **every** request is wrong regardless of which prompt is sent. Corrupt output is
+   degenerate (` 1234567890` in every observed case). Shrinking the prompt does not recover it.
+
+This explains every symptom in this file at once: *first request correct, later requests wrong* ·
+*survived an intervening unrelated prompt* · warmup-sending harnesses failing while no-warmup harnesses
+passed · the phantom "~33% intermittent" rate.
+
+## Order confound found and removed
+The ascending sweep ran 8 points as 24 sequential requests on **one** server, so its monotone corrupt
+tail was equally explained by a sticky state tripping at request #7. Re-run on **fresh servers**:
+remainder 131, which "corrupted" in the ascending sweep, is **clean 3/3 alone**. Every number below is
+fresh-server, ≤3 requests, one model load.
+
+## Length is ruled out in both directions
+| N | final chunk | verdict |
+|---|---|---|
+| 8195 | 3 | CLEAN |
+| 8451 | 259 | **TRIGGERS** |
+
+Both are *longer* than the 8128 trigger. A long prompt with a small final chunk is clean; a longer one
+with a large final chunk poisons. Absolute prompt length moves the wrong way.
+
+## The chunk sequence was measured, not computed
+`created llama_batch: ... n_tokens=` at `-lv 5`:
+- `ub=400, N=7427` → 18×400 + **227**
+- `ub=512, N=7907` → 15×512 + **227**
+
+Same final chunk size, opposite verdicts. So *final chunk size alone* is insufficient — and the hand
+arithmetic was right, which is why the counterexample is real.
+
+## The rule that survives all 20 points
+`ub=512` is 8 blocks, so its chunks always start block-aligned; `ub=400` is 6.25 blocks, so its final
+chunk starts at **offset 32 inside a block**.
+
+> **Corruption iff `(block_offset + final_chunk_size) >= 256`** — the span the final prefill chunk covers
+> measured from its block-aligned start.
+
+| case | offset | final chunk | span | verdict |
+|---|---|---|---|---|
+| `ub=400 N=7427` | 32 | 227 | 259 | **TRIGGERS** |
+| `ub=512 N=7936` | 0 | 256 | 256 | **TRIGGERS** |
+| `ub=512 N=7937` | 0 | 257 | 257 | **TRIGGERS** |
+| `ub=512 N=7907` | 0 | 227 | 227 | CLEAN |
+| `ub=432 N=7427` | 48 | 83 | 131 | CLEAN |
+
+The two counterexamples that killed the simpler rules are what force this one: *final-chunk-size < 256*
+fails on `ub=400`; *touches ≤ 4 blocks* fails on `N=7936`. The span rule absorbs both.
+
+⚠ 20/20 is a **fit** — both rules were built from the same points. Open tests: the one-token razor
+(N=7935, span 255, predicted CLEAN) and whether the constant is **256 entries** or **4 blocks**
+(separable only by changing `--kv-block-size`; note bs=16 disables the champion kernel, so that arm
+needs a same-kernel control).
+
+## Workaround
+Bound the final chunk below the threshold for **every** prompt: **`-ub 128`**. `-ub 256` permits a
+255-token final chunk and, at a non-block-multiple ubatch, a span above 256 — it is prompt-dependent,
+not safe.
