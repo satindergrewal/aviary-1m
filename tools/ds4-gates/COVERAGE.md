@@ -114,3 +114,31 @@ whether its silence means something.
 `batch_offset_invariant_gate` is verified in both directions: FAIL (exit 1, 600/600) on the broken
 tree, INCONCLUSIVE (exit 2) at `-np 1` where no multi-sequence dispatch can occur. A PASS in the
 second case would reproduce exactly the failure that hid the defect it was written for.
+
+## Instruments added 2026-08-09, and the category the three did not have
+
+⚠ **The same staleness this file's own header warns about, recurring against the file that warns about
+it.** The header says the COUNTS are not written here because four scripts were added in one night and
+a hardcoded number silently went wrong. **Four more were added on 2026-08-09.** The counts were fine —
+`coverage_census.sh` derives them (**47 total, 36 unattended**, up from 29/18). **The PROSE was not**,
+and none of the four appeared here until this entry. ⇒ *The earlier fix solved the numeric half and left
+the descriptive half exactly as fragile.*
+
+| script | category | what it produces | needs a model? |
+|---|---|---|---|
+| `arch_selfconsist_probe.sh` | **WALL** | 3 arms — static ×N in one process, static in a SECOND process, paged — to separate a **random** flip from a **systematic** one. Read-off is written IN the file, before any run. | yes |
+| `arm_delta_vs_depth.sh` | **WALL** | the paged-vs-static logprob delta **on the same token** across context depths. Deliberately not text equality. | yes |
+| `margin_distribution.sh` | **WALL** | the model's top-2 margin distribution over many generated positions, and the **predicted false-fail rate** of a byte-equality gate. **REFUSES** on <50 positions or a distinct-token ratio <0.20. | yes |
+| `lint_paged_consumers.sh` | ⚠ **SOURCE LINT — a fourth category** | whether every paged consumer announces itself, so `arch_serve_gate` can see it. exit 0/1/2 = PASS/FAIL/VOID. | **NO — no model, no GPU, runs anywhere** |
+
+⚠ **`lint_paged_consumers.sh` does not fit the three categories and I am not squeezing it in to keep the
+table tidy.** GATE / WALL / REFUSES all describe things that *serve a model and observe it*. This reads
+**source**. It is the only instrument here that can run with no GPU, no weights and no server, which
+makes it the only one that could ever go in CI. `coverage_census.sh` classifies it a GATE — defensible,
+since it emits a real PASS/FAIL/VOID — but the distinction that matters to a reader is **what it looks
+at**, not what it returns.
+
+⚠ **The three WALLs above are WALLs on purpose.** None emits PASS/FAIL, because none should: a delta, a
+margin distribution and a self-consistency triple are **magnitudes**, and the whole lesson of
+2026-08-09 is that a magnitude scored as a verdict is how a 1.03× tie got filed as a defect. **Scoring
+them would recreate the defect they exist to prevent.**
