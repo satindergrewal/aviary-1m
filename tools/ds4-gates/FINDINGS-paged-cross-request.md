@@ -355,3 +355,55 @@ identical at N=512, diverging by N=1024).
 refuted on the merits — the test that was supposed to settle it was shown to be vacuous. Tonight's
 partial-*chunk* variable is the same family one level up (batch rather than block). Recorded as a
 possible early sighting, **not** asserted as the same defect.
+
+## ⚠ REFUTED SAME NIGHT: the remainder is not the variable either
+
+The decisive test held `-ub 512` and walked the remainder by varying prompt length. Pre-registered
+prediction was "remainder <= 131 CLEAN". **It failed at 131.**
+
+| N | remainder | paged | static |
+|---|---|---|---|
+| 7683 | 3 | CLEAN | — |
+| 7747 | 67 | CLEAN | — |
+| 7811 | 131 | **CORRUPTS** | — |
+| 7840 | 160 | **CORRUPTS** | — |
+| 7872 | 192 | **CORRUPTS** | — |
+| 7907 | 227 | **CORRUPTS** | — |
+| 7939 | 259 | **CORRUPTS** | — |
+| 8035 | 355 | **CORRUPTS** | — |
+| 8128 | 448 | **CORRUPTS** | **CLEAN** |
+
+Last chunk 131 is CLEAN at `ub=384` (N=7427) and CORRUPT at `ub=512` (N=7811). Same last-chunk size,
+opposite outcome. So both single-variable theories now have a killing counterexample:
+
+- **pure ubatch** — `ub=512` is clean at remainder 3 and corrupt at remainder 259.
+- **pure remainder** — remainder 131 is clean at `ub=384` and corrupt at `ub=512`.
+
+The 8/8 split stands as data and dies as an explanation: one prompt length cannot distinguish the
+remainder from anything else that moves with it.
+
+### Premises checked before asserting the refutation
+- `-b == -ub` in **both** sweeps, read from the server banners (`n_batch = n_ubatch = 384/400/432/512`).
+  Had `-b` stayed 512 while `-ub` varied, the whole x-axis would have been fiction.
+- Env identical across sweeps: `DS4P_PAGED_HYBRID/SWA/METAL_CHAMP=1`, `n_ctx=32768`.
+- Block allocation confirms the lengths reached the server: 121/122/123 blocks for N=7683/7747/7811.
+- **Accidental control:** N was stepped by exactly 64, so all three points leave the *same* partial-block
+  fill (61 unused tokens in the last block). Two clean, one corrupt ⇒ **partial last BLOCK fill is not
+  the variable**, ruled out by construction rather than by argument.
+
+### ⚠ Order confound in the sweep harness
+`start_srv` is called **once**, before the loop, so those 8 points are 24 sequential requests on **one**
+server. Request "1" of remainder 131 is really request #7. For a defect whose signature is *first request
+clean, later requests wrong*, a monotone corrupt tail is equally explained by a **sticky state that
+tripped at request #7**. The ascending sweep cannot separate the two.
+
+Resolution arms, fresh server each: **A** remainder 131 alone (sticky ⇒ req1 clean; geometry ⇒ 3/3
+corrupt) · **B** descending, 448 then 3 · **C** 355 then 67 (is the state recoverable).
+
+### What survives the confound
+`-ub 512` is **CLEAN at N=7683** and **CORRUPT at N=7427**, each as the first prompt on its own fresh
+server, each with identical repeats. Same binary, same flags, same ubatch, opposite outcome.
+**Prompt geometry governs; the ubatch setting does not.**
+
+The static arm retrieves the needle at N=8128 where paged misses 3/3, so the corrupting prompts are
+fine and every paged failure above is a real paged failure.
