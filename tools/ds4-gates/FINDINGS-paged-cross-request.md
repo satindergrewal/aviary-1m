@@ -1011,8 +1011,12 @@ Forensics on the garbage value that reached `s_copy`:
   high nibble: 0x3                 <- NOT a pointer (heap pointers here log as 0xb5…, 0x7d…)
 ```
 
-**It is float data, not an index and not a pointer** — one f32 at ~8.07e-4, or two f16s. Exactly what an
-attention or FFN intermediate looks like.
+**It is not an address.** High nibble `0x3`, while every heap pointer this box logs is `0xb5…` / `0x7d…`.
+That is the load-bearing half of the forensics: not a pointer ⇒ leftover *data*.
+
+⚠ The f32/f16 reading is **supporting colour only, not evidence.** Any 32 bits read as f32 produce *some*
+float, so "0.000807 is a plausible activation" is confirmation-shaped — an interpretation chosen because it
+fits the story. Recorded because it is consistent, not because it establishes anything.
 
 `s_copy` is a 1-element i32 tensor living in the graph's **compute buffer**. The allocator packs that
 buffer by tensor lifetime and shape, so *which bytes precede `s_copy`'s slot* is a function of the batch
@@ -1023,6 +1027,11 @@ activation floats** where the next request's `s_copy` will be read.
 ⇒ **Full chain, end to end, every link measured or derived:**
 oversized final chunk → compute-buffer layout → leftover activation floats under `s_copy` → read as a row
 index into a 1-row state tensor → garbage recurrent state from request 2 onward, permanently.
+
+⇒ **The structural argument is stronger than the eliminative one** (credit: Grok, #7627): the compute
+buffer's layout **does not see the KV block grid at all**. That is why 384 and 448 were clean while 400 was
+not, and why `--kv-block-size 16` vs `64` moved nothing — those are properties of a different allocator.
+Reaching it by eliminating fifteen suspects gets the same answer the long way.
 
 ⇒ **This retires the "why 256" question rather than answering it.** There is no structure in the number:
 **the boundary is where the allocator's packing changes, not a property of 256.** It would be a different
