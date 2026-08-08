@@ -796,3 +796,72 @@ Each would have produced a confident, clean-looking negative:
 **Every one was caught by checking whether the instrument fired, before reading what it said.**
 
 Probe committed default-off as fork `e4a115df7`.
+
+---
+
+# ★★★ ROOT CAUSE AND FIX: an attention-only guard was skipping the RECURRENT input every batch
+
+```cpp
+void llm_graph_input_mem_hybrid::set_input(const llama_ubatch * ubatch) {
+    if (inp_attn->self_k_idxs == nullptr || inp_attn->self_k_idxs->buffer == nullptr) {
+        ... "static attn inputs unconsumed (all attention layers took the paged path)"
+        return;                       // <-- and everything below it
+    }
+    ...
+    if (inp_rs->s_copy) {             // <-- THE RECURRENT HANDOFF. Never reached under paging.
+        for (i < n_rs) data[i] = mctx->get_recr()->s_copy(i);
+    }
+}
+```
+
+Under paging every attention layer takes the paged branch, so the static attention inputs are unconsumed
+and the allocator leaves them without buffers. The guard is **correct about attention**. The `return` also
+skipped the recurrent block, which has nothing to do with attention.
+
+⇒ **`s_copy` was written once, at graph construction, on the 2-token warmup batch, and never refreshed
+for any real batch.** On this arch that is **24 of 32 layers** carrying recurrent state through indices
+nobody updates, for the life of the server.
+
+## Measured before the fix was written
+| | |
+|---|---|
+| `llm_graph_result::set_inputs` calls during one request | **31** (31 batches — the call site *is* reached) |
+| `llm_graph_input_mem_hybrid` present in the input list | **all 31** (`typeid` on every input) |
+| recurrent write executions | **1** (graph build only) |
+
+Naming the inputs is what cracked it: counting said "the hybrid input is absent", and it was there all
+along — the function was entered and returned early.
+
+## Fix and verification
+Scope the guard: skip only the attention writes, let the recurrent block run. Original intent preserved.
+
+| arm | before | after |
+|---|---|---|
+| `ub=512` span 256 × 3 | req1 FOUND / req2+ MISS | **FOUND, FOUND, FOUND** |
+| `ub=400` span 259 × 3 | req1 FOUND / req2+ MISS | **FOUND, FOUND, FOUND** |
+| `ub=512` span 255 × 3 | CLEAN | CLEAN — no regression |
+| long, short, long | (ledger-fix arm) | all 200, all correct |
+
+`DS4P_RSLOG` asserts the recurrent write now fires **once per batch** — 93 serving writes for 3 requests,
+was **0**. Without that assertion the four greens would not be readable. Two different trigger geometries,
+different ubatches, different chunk starts. Fork `6391c5e63`, local only.
+
+## ⇒ The span-256 rule was a SYMPTOM, not the disease
+It describes exactly *when* the stale indices became visible in the output — 25 points, one token wide,
+all still true — but it was never the cause. That is why fifteen suspects came back clean, why the carrier
+survived `seq_rm`, why it ignored the block grid, and why it first bit at chunk 2: **chunk 2 is the first
+batch that needs carried state.**
+
+## ★ Three root causes tonight, one class
+**A guard written for A silently disables B.**
+1. the prompt mirror — cleared, but not the context ledger;
+2. the context ledger — cleared at launch, but only the mirror half;
+3. the attention guard — skipped attention, and took the recurrent input with it.
+
+Three separate defects, one file, one night. Worth a review rule rather than three patches: **an early
+return inside a function that serves two subsystems.**
+
+## Still open
+- All three fixes are **local and unpushed**.
+- `-ub 128` should no longer be needed; the full 25-point grid is re-running against this build.
+- Gemma4-12B running **48 of 48 layers static** under paging is unexplained and unrelated to this bug.
