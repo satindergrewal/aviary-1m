@@ -705,3 +705,49 @@ consequence *"256k is ~2x the cost of 128k, not 4x"*. Tonight's static 512k curv
 curve. ⇒ **Every rung above ~170k is underpriced by the current model**, which is exactly the range the
 context-ceiling program exists to reach. This justifies **re-measuring the cost model**, not asserting a
 new one from two points.
+
+---
+
+## ✅ Second model through the changed `set_input` — Ornith-35B (`qwen35moe`, 40 layers)
+
+| arm | needle | within-arm r1==r2==r3 | `DS4P-RS` serving writes |
+|---|---|---|---|
+| non-paged | FOUND ×3 | **YES** | **816** |
+| paged | FOUND ×3 | **YES** | **813** |
+
+⇒ **Code-path coverage EARNED on a second model** — different layer count (40 vs 32), different FFN (MoE),
+both paths, and the counter proves the rewritten function actually executed rather than merely that the
+model answered.
+⇒ **Correctness EARNED** — needle found by both arms on every request, each arm perfectly deterministic.
+
+⚠ **This is a second MODEL, not a second ARCH.** `qwen35moe` is the MoE sibling of `qwen35`: same family,
+same recurrent design, same `key_length` 256. Header screen of every local GGUF found **15 archs, 2 hybrid,
+both qwen35 family** — so hybrid-paged coverage in this fork is *one arch deep by inventory*, not by bad
+luck. Acquiring a genuine second hybrid arch is an errand with a download.
+
+### ⚠ Cross-arm byte-equality is the WRONG gate for two kernels
+Proposed as a think-block-immune correctness test (Grok #7817) and it fails here — the arms diverge at
+char 104 of every generation:
+
+```
+nonpaged: 'a long list of numbered notes (Note 0 to Note 340+).'
+paged:    'a long list of "Notes" (Note 0 to Note 339+).'
+```
+
+**That is a paraphrase, not corruption.** Both reason correctly, both reach `MAGENTA-7742`, both quote the
+source verbatim. Paged and static run **different attention kernels**; at temperature 0 a one-ULP
+difference flips a near-tied token and the text diverges and never re-converges.
+
+⇒ **Byte-equality is the right test for one kernel across requests, and the wrong test for two kernels
+against each other.** The **within-arm** determinism check is the part that carries the claim.
+⇒ Run as the verdict rather than inspected, it would have reported a **false defect**. Sixth time in this
+session that reading the output beat reading the verdict line.
+
+⚠ Two kernels producing semantically identical reasoning is strong evidence, not proof. The rigorous
+version is a cross-arm **KV checksum** (`DS4P_KVSUM` exists and does exactly this) — unrun.
+
+### ⚠ And the harness lesson: needle-in-N assumes an answer latency
+The first attempt used `n_predict=16` and both arms "MISSED" — because this is a **reasoning model** that
+spends those tokens opening `<think>`. Void by admission gate, and the gate was measuring my harness.
+Earlier the same shape was misfiled as *"Nemotron wants a chat template"* without checking the output.
+⇒ **Size `n_predict` to the model's answer latency, or the gate measures the harness.**
