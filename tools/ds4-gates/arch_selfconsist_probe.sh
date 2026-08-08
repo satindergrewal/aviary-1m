@@ -46,7 +46,7 @@ run() { # $1 port  $2 label  $3 reps  $4.. flags
 }
 
 echo "=== qwen3vlmoe req-1 divergence: is STATIC self-consistent? ==="
-run 9301 "A static#1" 1
+run 9301 "A static#1" 3
 run 9302 "B static#2" 1
 run 9303 "C paged"    3 --kv-paged
 echo "=== DONE ==="
