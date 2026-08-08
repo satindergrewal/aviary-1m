@@ -84,7 +84,12 @@ probe() { # $1=tag $2=flags
 
     # ★ THE PRIME -- one request, run to completion, on the same slots the pair will use.
     local p; p=$(ask "$PRIME")
-    case "$p" in ""|"<UNPARSEABLE>"|"<ERR:"*) echo "$tag: PRIME FAILED ($p) -- rep aborted, NOT scored (would degrade to COLD)" | tee -a "$OUT"; kill $pid 2>/dev/null; return 1;; esac
+    case "$p" in ""|"<UNPARSEABLE>"|"<ERR:"*) echo "$tag: PRIME FAILED ($p) -- rep aborted, NOT scored (would degrade to COLD)" | tee -a "$OUT"
+        # ⚠ AND SAY WHY. I first recorded this site as "log not in scope at that point" and that was
+        # WRONG -- the server's log is $LOGDIR/$tag.log, written at line 70, in scope here. A reason
+        # given for leaving something undone is a claim like any other and gets checked like one.
+        command -v gate_cause_from_log >/dev/null 2>&1 && gate_cause_from_log "$LOGDIR/$tag.log" "$tag prime" | tee -a "$OUT"
+        kill $pid 2>/dev/null; return 1;; esac
 
     # now the concurrent pair, WARM
     local ra rb
