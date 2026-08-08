@@ -1,0 +1,37 @@
+tip: 4b7e0066c dirty=0  model=ornith-1.0-9b-1M-IQ2_M.gguf  reps=3  regime=WARM
+  static-r1      np=4  prime=4.   post=4.   consume=-1     -> SUSPECT
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  
+  paged-r1       np=4  prime=4.   post=4.   consume=10240  -> SUSPECT
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  
+  paged-r2       np=4  prime=4.   post=4.   consume=10240  -> SUSPECT
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  
+  static-r2      np=4  prime=4.   post=4.   consume=-1     -> SUSPECT
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  
+  static-r3      np=4  prime=4.   post=4.   consume=-1     -> SUSPECT
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  
+  paged-r3       np=4  prime=4.   post=4.   consume=10240  -> SUSPECT
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  
+-----
+static: 0 clean / 3 bad     paged: 0 clean / 3 bad
+verdicts: static:SUSPECT paged:SUSPECT paged:SUSPECT static:SUSPECT static:SUSPECT paged:SUSPECT
+WARM MULTI-SLOT GATE: **VOID** -- static (no paging) scored 3 bad. The gate is measuring itself, not the code.
+  (a dirty static arm can never indict paging; fix the harness before reading the paged column)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260809-0229.txt

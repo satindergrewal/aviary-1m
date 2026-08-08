@@ -27,26 +27,46 @@ OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-$(date +%Y
 PORT=${MS_PORT:-21500}
 echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  model=$(basename "$M")  reps=$REPS  regime=WARM" | tee "$OUT"
 
-A='Count from one to five, in words, separated by commas. Answer only.'
-B='Name the first five letters of the alphabet, separated by commas. Answer only.'
+# ⚠ N distinct prompts with UNIQUE answers -- a swap between ANY two sequences must be detectable.
+PROMPTS=(
+  'Count from one to five, in words, separated by commas. Answer only.'
+  'Name the first five letters of the alphabet, separated by commas. Answer only.'
+  'Name the first five planets from the Sun, separated by commas. Answer only.'
+  'Name the days Saturday and Sunday and the day between Monday and Wednesday, separated by commas. Answer only.'
+)
+EXPECT=( 'three.*four.*five' 'b, *c, *d' 'venus|mercury' 'tuesday' )
 PRIME='What is two plus two? Answer with the number only.'
 
-ask() { curl -s --max-time 300 -X POST "http://127.0.0.1:$PORT/completion" -H 'Content-Type: application/json' \
-        -d "{\"prompt\":$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$1"),\"n_predict\":256,\"temperature\":0,\"seed\":1,\"cache_prompt\":false}" \
+ask() {
+  local ep body
+  if [ "${MS_CHAT:-0}" = "1" ]; then
+      ep="/v1/chat/completions"
+      body="{\"messages\":[{\"role\":\"user\",\"content\":$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$1")}],\"max_tokens\":256,\"temperature\":0,\"seed\":1}"
+  else
+      ep="/completion"
+      body="{\"prompt\":$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$1"),\"n_predict\":256,\"temperature\":0,\"seed\":1,\"cache_prompt\":false}"
+  fi
+  curl -s -w '\nHTTP:%{http_code}' --max-time 300 -X POST "http://127.0.0.1:$PORT$ep" -H 'Content-Type: application/json' \
+        -d "$body" \
         | python3 -c 'import json,sys
-try: d=json.load(sys.stdin)
-except Exception: print("<UNPARSEABLE>"); raise SystemExit
-c = d.get("content","")
+raw = sys.stdin.read()
+code = raw.rsplit("HTTP:",1)[1].strip() if "HTTP:" in raw else "???"
+raw = raw.rsplit("\nHTTP:",1)[0]
+sys.stdin = None
+try: d=json.loads(raw)
+except Exception: print(f"<UNPARSEABLE http={code}>"); raise SystemExit
+c = d.get("content") or (d.get("choices",[{}])[0].get("message",{}) or {}).get("content","") or ""
 import re as _re
 c = _re.sub(r"<think>.*?</think>", " ", c, flags=_re.S)       # answer lives AFTER the think block
 c = _re.sub(r"^.*?(?:Thinking Process|<think>).*$", " ", c, flags=_re.S) if "</think>" not in d.get("content","") and "<think>" in d.get("content","") else c
-print(("<ERR:"+str(d["error"].get("message"))[:40]+">") if "error" in d else c.strip().replace(chr(10)," ")[:120])'; }
+out = ("<ERR:"+str(d["error"].get("message"))[:40]+">") if "error" in d else c.strip().replace(chr(10)," ")[:120]
+print(out if out.strip() else f"<EMPTY http={code}>")'; }
 
 probe() { # $1=tag $2=flags
     local tag="$1" flags="$2"
     pkill -x llama-server >/dev/null 2>&1; sleep 2
-    env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 nohup "$SRV" -m "$M" -ngl 99 -c 8192 -np 2 -b 512 -ub 512 \
-        --port $PORT --no-warmup -lv ${MS_LV:-4} $flags > "$LOGDIR/$tag.log" 2>&1 &
+    env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 nohup "$SRV" -m "$M" -ngl 99 -c 8192 -np ${MS_NP:-2} -b 512 -ub 512 \
+        --port $PORT --no-warmup -lv ${MS_LV:-4} ${MS_CHAT:+--jinja} $flags > "$LOGDIR/$tag.log" 2>&1 &
     local pid=$!
     for i in $(seq 1 300); do
         [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORT/health 2>/dev/null)" = "200" ] && break
@@ -67,10 +87,13 @@ probe() { # $1=tag $2=flags
 
     # now the concurrent pair, WARM
     local ra rb
-    ask "$A" > "$LOGDIR/$tag-A.txt" & local pa=$!
-    ask "$B" > "$LOGDIR/$tag-B.txt" & local pb=$!
-    wait $pa; wait $pb
-    ra=$(cat "$LOGDIR/$tag-A.txt"); rb=$(cat "$LOGDIR/$tag-B.txt")
+    local n=${MS_NP:-2} i pids=()
+    for i in $(seq 1 "$n"); do
+        ask "${PROMPTS[$((i-1))]}" > "$LOGDIR/$tag-S$i.txt" & pids+=($!)
+    done
+    for i in "${pids[@]}"; do wait "$i"; done
+    local -a R=()
+    for i in $(seq 1 "$n"); do R+=("$(cat "$LOGDIR/$tag-S$i.txt")"); done
 
     # ★ THIRD REQUEST, SEQUENTIAL, AFTER THE PAIR (Grok #7991). prime->pair only measures the pair
     # reading the PRIME's residue; tonight's defect struck the request AFTER the poisoning event, so
@@ -82,15 +105,20 @@ probe() { # $1=tag $2=flags
     kill $pid 2>/dev/null; sleep 1
 
     # A must contain counting, B must contain letters. Cross-contamination = A holding B's answer.
-    local va="?" ; echo "$ra" | grep -qiE 'three|four|five' && va=OK
-    local vb="?" ; echo "$rb" | grep -qiE '\bc\b|\bd\b|\be\b' && vb=OK
-    local verdict=CLEAN
-    [ "$va" = OK ] && [ "$vb" = OK ] || verdict=SUSPECT
+    local verdict=CLEAN i j
+    for i in $(seq 1 "$n"); do
+        # each sequence must contain ITS OWN marker...
+        echo "${R[$((i-1))]}" | grep -qiE "${EXPECT[$((i-1))]}" || verdict=SUSPECT
+        # ...and must NOT contain any OTHER sequence's marker. N*(N-1) ordered pairs, not one.
+        for j in $(seq 1 "$n"); do
+            [ "$i" = "$j" ] && continue
+            echo "${R[$((i-1))]}" | grep -qiE "${EXPECT[$((j-1))]}" && verdict=CROSS-CONTAMINATED
+        done
+    done
     [ "$v3" = OK ] || verdict=POST-PAIR-DIRTY   # the pair left something behind
     [ "$consumed" = "0" ] && verdict=VOID-NO-CONSUMER   # paged flags set, no layer consumed -> vacuous
-    echo "$ra" | grep -qiE '\ba, *b, *c\b' && verdict=CROSS-CONTAMINATED
-    echo "$rb" | grep -qiE 'one, *two, *three' && verdict=CROSS-CONTAMINATED
-    printf "  %-14s prime=%-5s A=%-32s B=%-32s post=%-5s consume=%-6s -> %s\n" "$tag" "${p:0:5}" "${ra:0:32}" "${rb:0:32}" "${p3:0:5}" "$consumed" "$verdict" | tee -a "$OUT"
+    printf "  %-14s np=%-2s prime=%-4s post=%-4s consume=%-6s -> %s\n" "$tag" "$n" "${p:0:4}" "${p3:0:4}" "$consumed" "$verdict" | tee -a "$OUT"
+    for i in $(seq 1 "$n"); do printf "      S%-2s %s\n" "$i" "$(echo "${R[$((i-1))]}" | head -c 62)" | tee -a "$OUT"; done
     echo "$verdict"
 }
 

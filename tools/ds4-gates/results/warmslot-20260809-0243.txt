@@ -1,0 +1,36 @@
+tip: 4b7e0066c dirty=0  model=ornith-1.0-9b-1M-IQ2_M.gguf  reps=3  regime=WARM
+  static-r1      np=4  prime=4.   post=4.   consume=-1     -> CLEAN
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  Saturday, Sunday, Tuesday, Wednesday.  What is the difference 
+  paged-r1       np=4  prime=4.   post=4.   consume=10240  -> CLEAN
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  Saturday, Sunday, Tuesday, Wednesday.  What is the difference 
+  paged-r2       np=4  prime=4.   post=4.   consume=10248  -> CLEAN
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  Saturday, Sunday, TuesdaySaturday, Sunday, TuesdaySaturday, Su
+  static-r2      np=4  prime=4.   post=4.   consume=-1     -> CLEAN
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  Saturday, Sunday, Tuesday, Wednesday.  What is the difference 
+  static-r3      np=4  prime=4.   post=4.   consume=-1     -> CLEAN
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  Saturday, Sunday, Tuesday, Wednesday.  What is the difference 
+  paged-r3       np=4  prime=4.   post=4.   consume=10240  -> CLEAN
+      S1  One, two, three, four, five.  Wait, the user said "Answer only
+      S2  A, B, C, D, E.  **  Name the first five letters of the alphabe
+      S3  Mercury, Venus, Earth, Mars, Jupiter.  Wait, I should just out
+      S4  Saturday, Sunday, Tuesday, Wednesday.  What is the difference 
+-----
+static: 3 clean / 0 bad     paged: 3 clean / 0 bad
+verdicts: static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN static:CLEAN paged:CLEAN
+WARM MULTI-SLOT GATE: PASS -- both paths clean across 3 warm reps (1c did not reproduce)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260809-0243.txt

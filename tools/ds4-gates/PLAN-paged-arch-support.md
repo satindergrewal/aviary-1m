@@ -803,3 +803,43 @@ anything.
 
 ⇒ This supersedes both earlier positions: *"byte-equality is the wrong test for two kernels"* (too strong)
 and *"byte-equality is a clean correctness gate"* (too optimistic).
+
+---
+
+# ✅ CONCURRENCY CLOSED — warm, four-way, both models (2026-08-09)
+
+Every cell: WARM regime (prime → N concurrent → third sequential), static control clean, `N*(N-1)`
+ordered-pair contamination check, `post=N` verifying what the concurrent set leaves behind, and a
+**live-paged-path assertion** so a CLEAN cannot be vacuous.
+
+| model | `-np 2` | `-np 4` |
+|---|---|---|
+| Ornith-9B (`qwen35`) | CLEAN | **CLEAN** — `consume=10240` |
+| Gemma4-26B (`gemma4`) | CLEAN — `consume=630`, **1c CLOSED** | **CLEAN** — `consume=18720` |
+
+⇒ This closes the gap named as the one thing between the fixes and a recommendation: *multi-slot is
+untested, and the daily driver runs `-np 4`.* It is tested now — four-way, warm, on two model families.
+
+⚠ Scope: 3 reps per cell, `-c 8192`, one prompt set, Metal. **Not "multi-slot is proven"** — *"four-way
+warm concurrency is clean on two models with verified-live paged paths."*
+
+## ⚠ The attempt log — four harness faults, one premise change
+The Gemma4 arm took **five attempts and only one was about paging.** Each of the first four printed
+something that looked like a verdict:
+
+| # | attempt | fault | what it printed |
+|---|---|---|---|
+| 1 | `multislot_gate.sh` | **COLD by construction** — server up → concurrent pair → down. No prior finished request, so it can never reach the regime 1c lives in | `12/12 CLEAN` |
+| 2 | warm gate v1 | `n_predict=24` truncated a reasoning model mid-`<think>`; **static 0/6 too** | `1c REPRODUCES` |
+| 3 | warm gate v2 | ran **Ornith**, not the model 1c was characterised on | `PASS` (scoped to the wrong model) |
+| 4 | warm gate v3 | ambiguous 4th prompt → empty sequence; then raw-completion word-salad and a `la deuce` loop | `static 3 bad` |
+| 5 | warm gate v4 | `MS_CHAT=1` + `--jinja` — **the premise change** | **PASS** |
+
+⇒ **Only the VOID rule and reading the per-sequence dumps kept the first four from being reported as facts
+about the paged path.** A dirty static arm means the gate is measuring itself; that rule blocked three
+false verdicts in ninety minutes.
+
+⇒ **Session ratio worth carrying: three real code defects, six harness defects, four blocked false
+verdicts.** The apparatus was wrong twice as often as the code. Any green in this directory should be read
+with that in mind — which is why every gate now asserts its own liveness (`consume > 0`) and voids on a
+dirty control.

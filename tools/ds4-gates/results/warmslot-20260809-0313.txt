@@ -1,0 +1,36 @@
+tip: 4b7e0066c dirty=0  model=gemma4-26b-a4b-uncensored-1M-Q4_K_M.gguf  reps=3  regime=WARM
+  static-r1      np=4  prime=4    post=4    consume=-1     -> CLEAN
+      S1  one, two, three, four, five
+      S2  A, B, C, D, E
+      S3  Mercury, Venus, Earth, Mars, Jupiter
+      S4  Saturday, Sunday, Tuesday
+  paged-r1       np=4  prime=4    post=4    consume=18720  -> CLEAN
+      S1  one, two, three, four, five
+      S2  A, B, C, D, E
+      S3  Mercury, Venus, Earth, Mars, Jupiter
+      S4  Saturday, Sunday, Tuesday
+  paged-r2       np=4  prime=4    post=4    consume=18720  -> CLEAN
+      S1  one, two, three, four, five
+      S2  A, B, C, D, E
+      S3  Mercury, Venus, Earth, Mars, Jupiter
+      S4  Saturday, Sunday, Tuesday
+  static-r2      np=4  prime=4    post=4    consume=-1     -> CLEAN
+      S1  one, two, three, four, five
+      S2  A, B, C, D, E
+      S3  Mercury, Venus, Earth, Mars, Jupiter
+      S4  Saturday, Sunday, Tuesday
+  static-r3      np=4  prime=4    post=4    consume=-1     -> CLEAN
+      S1  one, two, three, four, five
+      S2  A, B, C, D, E
+      S3  Mercury, Venus, Earth, Mars, Jupiter
+      S4  Saturday, Sunday, Tuesday
+  paged-r3       np=4  prime=4    post=4    consume=18720  -> CLEAN
+      S1  one, two, three, four, five
+      S2  A, B, C, D, E
+      S3  Mercury, Venus, Earth, Mars, Jupiter
+      S4  Saturday, Sunday, Tuesday
+-----
+static: 3 clean / 0 bad     paged: 3 clean / 0 bad
+verdicts: static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN static:CLEAN paged:CLEAN
+WARM MULTI-SLOT GATE: PASS -- both paths clean across 3 warm reps (1c did not reproduce)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260809-0313.txt

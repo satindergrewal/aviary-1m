@@ -56,3 +56,20 @@ gate_verdict() { # $1=static_bad $2=paged_bad $3=label
         echo "$3: PASS -- both paths clean"; return 0
     fi
 }
+
+# ---- PRE-LAUNCH: SMOKE, NOT `bash -n` ------------------------------------------------------------
+# ⚠ `bash -n` is a PARSER pass. An unbound variable under `set -u` is a RUNTIME fault and sails straight
+#   through it -- verified on this box:
+#       printf 'set -u\necho "$undefined"' > t.sh ; bash -n t.sh  -> PASSES SILENTLY
+#                                                    bash    t.sh  -> unbound variable
+#   Claiming "bash -n would have caught it" was FALSE and was repeated in the next message after being
+#   said once. An instrument claim gets the same verification as a code claim. (correction: Grok #8033)
+#
+# ⚠ `shellcheck` (SC2154) would catch it statically and is NOT INSTALLED on this box. Do not write a
+#   checklist step that cannot be executed here.
+#
+# ⇒ THE STEP THAT WORKS: a ONE-REP SMOKE before the full grid. It executes every line the grid executes,
+#   costs ~40 s, and would have caught all three of tonight's runtime faults -- the unbound variable, the
+#   n_predict truncation, and the empty 4th sequence.
+#       MS_REPS=1 ./<gate>.sh    # read the per-sequence dump, THEN run the grid
+gate_smoke_note() { echo "pre-launch: MS_REPS=1 smoke (bash -n does NOT catch runtime faults; shellcheck absent here)"; }
