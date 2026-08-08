@@ -751,3 +751,31 @@ The first attempt used `n_predict=16` and both arms "MISSED" — because this is
 spends those tokens opening `<think>`. Void by admission gate, and the gate was measuring my harness.
 Earlier the same shape was misfiled as *"Nemotron wants a chat template"* without checking the output.
 ⇒ **Size `n_predict` to the model's answer latency, or the gate measures the harness.**
+
+### ★ The paraphrase is a NEAR-TIE — measured, and cross-arm equality is *sound but flaky*
+`n_probs=2` on the completion request, two **distinct** prompt lengths (the vary-length law applied):
+
+| prompt | outcome | top-2 gap at the divergence token |
+|---|---|---|
+| A — 7,936 tok | diverges at char 104, token#29 | non-paged **0.0033** · paged 0.0623 |
+| **B — 7,935 tok** | **generations byte-IDENTICAL, 413 chars, both arms** | — no divergence |
+
+⇒ **Near-tie confirmed.** 0.0033 logprob between the top-2 candidates is ~0.3% of a nat — one ULP of
+numerics difference flips it. The structural alternative predicted a *confident* token; it is not one.
+
+⇒ ★ **And prompt B passes cross-arm byte-equality outright.** So the earlier verdict — *"byte-equality is
+the wrong test for two kernels"* — is **too strong**. Sharper: **it is a valid test that fails
+stochastically**, at whatever rate a generation encounters an early near-tie. One token of prompt length
+separates a pass from a fail.
+
+⇒ **The vary-length law earned its keep in the same run it was applied.** A single prompt would have given
+prompt A alone and the wrong conclusion; two gave the counterexample immediately.
+
+⚠ Unexplained and not load-bearing: paged's gap at that token is 0.062 against static's 0.0033 — same
+token index, different confidences, consistent with tiny numeric differences already accumulated by
+token 29.
+
+⚠ **Method note, self-inflicted:** the earlier second-model run sent **one prompt three times**, so
+"all three requests diverge at char 104" was one measurement reported three times, and the within-arm
+check was a repeat-request determinism test rather than three samples. The vary-length design note had
+been written, argued and committed **four hours earlier** — and the next script written did not follow it.
