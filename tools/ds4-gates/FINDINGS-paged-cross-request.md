@@ -222,3 +222,66 @@ O(n²) term.
 paired 1M run has ~1-in-3 odds of an uninterpretable paged arm after half a day. **A short-context
 detector is therefore the precondition for measuring the top of the range at all**, not merely a
 convenience.
+
+---
+
+# ★★ 2026-08-08 — REPRODUCED DETERMINISTICALLY AT 8k. It is cross-request, not long-context.
+
+Ten sequential requests, one paged server, ~7,979-token prompt (needle at 50%), ~15 s each:
+
+```
+run  1: FOUND ' MAGENTA-7742\n\n<think>\nThe user wa'
+run  2: MISS  ' 1234567890\n\nNote 34'
+run  3..10: MISS, byte-identical
+FAILURES: 9 / 10
+```
+
+**Request #1 correct. Every subsequent request wrong, byte-identical.** At a prompt length **6x below**
+the range this document previously recorded (~50-73k).
+
+⇒ **Context length was never the variable.** Every failure observed this session was at 225k or 512k
+because that is where the looking happened. The trigger is a **second request on a live paged server**.
+
+This is the pattern this file already named — *"first-request-correct, all-later-requests-wrong ...
+survived an intervening unrelated prompt"* — now reproduced deterministically and cheaply.
+
+## The "~33% intermittent rate" was an artefact of the harnesses
+
+| harness | sends a warmup request? | 225k paged outcome |
+|---|---|---|
+| `parity_bins.sh` | **YES** | **FAIL** |
+| `ladder.sh` | **YES** | **FAIL** |
+| `parity_fair.sh` | no | PASS |
+| `parity_ab.sh` | no | PASS |
+| `parity256k.sh` | no | PASS |
+| `parity_rep.sh` | YES | PASS ← **real exception, not explained** |
+
+Both failures came from harnesses whose warmup made the measured request **#2**. All three no-warmup
+harnesses passed. **The variable was in the test scripts, not in the paged path.** A deterministic bug
+was treated as stochastic for hours, and a pooled failure rate plus an interleaved A/B were built on
+top of that phantom.
+
+⚠ `parity_rep` sends a warmup and passed. 5 of 6 is a strong signal, not a law. The canary is the
+cleaner evidence.
+
+⚠ **The check that established this nearly returned the opposite.** The first version grepped for
+`warm`, which also matches the `--no-warmup` *server flag*, and reported YES for all six harnesses —
+i.e. "warmup does not explain it". One character class between a correct finding and a confidently
+wrong one, in the check meant to settle the question.
+
+## The detector this unlocks
+**Two ~15-second 8k requests.** Request 1 clean + request 2 wrong ⇒ the paged path is broken. No long
+context, no 4-5 hour prefill, deterministic. Previously the cheapest known reproduction was a
+40-minute 225k needle run.
+
+## Ladder result (all four arms, needle-gated)
+| arm | ctx | kernel | wall | needle |
+|---|---|---|---|---|
+| p225 | 262144 | CHAMPION | 1020 s | **FAIL** |
+| s225 | 262144 | STATIC | 1039 s | pass |
+| p512 | 524288 | CHAMPION | 4469 s | **FAIL** |
+| s512 | 524288 | STATIC | 4597 s | pass |
+
+**Paged failed both, static passed both.** `s512` retrieving a needle at **501,733 tokens — 2x the
+model's native 250k** — also removes the YaRN-extrapolation caveat: `p512`'s failure was this defect,
+not context degradation. Prefill throughput was within 1% across arms at both sizes.
