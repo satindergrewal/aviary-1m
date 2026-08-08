@@ -752,3 +752,47 @@ resets.
 ⚠ Unpaid: *"`seq_rm` clears the recurrent state"* is read from source, **not measured**. Every conclusion
 above about what the fix rules out depends on it. The instrument is a direct read of the recurrent tensors
 — same shape as `debug_seq_kv_checksum`, different memory module.
+
+---
+
+# ⚠ Open thread: the recurrent input is not being set during paged serving
+
+The intra-request recurrent carry is the one handoff a between-request `seq_rm` can never test, and it
+happens exactly where the damage lands. `s_copy` names the cell each sequence's recurrent state is taken
+**from**, so it *is* that handoff.
+
+**Measured (`DS4P_RSLOG`, both a clean and a triggering run, two requests each):**
+
+| | requests | `DS4P-RS` lines | who |
+|---|---|---|---|
+| span 256 trigger | 2 | **1** | `hybrid` |
+| span 255 clean | 2 | **1** | `hybrid` |
+
+**One line, at graph build, on a 2-token batch. Zero across 32 prefill chunks and 32 decode steps.**
+The probe is *outside* the `if (s_copy)` guard, so this is "the function is not entered", not "the tensor
+was null". `llm_graph_input_rs::set_input` is instrumented in the same build and never fires either.
+
+Three facts that cannot all be true:
+1. `qwen35.cpp:155` calls `build_inp_mem_hybrid()`, so the input is constructed.
+2. `llm_graph_result::set_inputs()` iterates **every** input unconditionally.
+3. The probe fires once, at build.
+
+⇒ Either the paged graph does not carry this input, or it does not reach the `set_inputs` call site at
+`llama-context.cpp:1488`. **If the recurrent input is never refreshed per batch during paged serving,
+that is a stale-input defect of exactly this bug's shape** — but the two readings point at different
+files and a line count cannot separate them. Next: enumerate the 10 `build_rs` sites and instrument the
+one the paged graph actually takes.
+
+## ⚠ Four instrument failures on this one question
+Each would have produced a confident, clean-looking negative:
+1. the KV checksum printed **one layer of eight** — every positional claim was scoped to layer 3;
+2. the recurrent probe went into **`llm_graph_input_rs`**, a class this model never calls — it fired zero
+   times and the silence read as "identical";
+3. it then sat **inside the `if (s_copy)` guard**, where "no tensor" and "never called" are
+   indistinguishable;
+4. the analyser script broke on a `sed` edit and printed a Python traceback — while still printing
+   `=== DONE ===`. The counts above are read from the logs with `grep`, not from that script.
+
+**Every one was caught by checking whether the instrument fired, before reading what it said.**
+
+Probe committed default-off as fork `e4a115df7`.
