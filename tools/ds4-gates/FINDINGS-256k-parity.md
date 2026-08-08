@@ -800,14 +800,25 @@ Needle-gated, presence asserted (abort-not-warn), one server per arm, PID-pinned
 "unresolved at 6%", priced as one confirmation arm, *not* rounded to parity. Static landed 4,637 ⇒
 **clean parity branch**.
 
-## ★ The decode advantage GROWS with context
-| rung | wall | decode |
+## ★ The decode gap widens with context — but decompose it before quoting it
+| rung | wall | decode gap |
 |---|---|---|
 | 225k | paged 1.7% faster | 1.558× |
 | **512k** | paged 0.3% faster | **2.12×** |
 
+⚠ **The gap grows because static decays harder, not because paged gets faster** (credit: Grok, #7807):
+
+| arm | tg 225k → 512k | decay |
+|---|---|---|
+| static | 15.67 → 6.86 | **2.28× slower** |
+| paged | 24.42 → 14.56 | **1.68× slower** |
+
+Both arms lose decode throughput with depth; **static loses it 1.36× faster.** So the honest claim is
+*"paged decode holds up better at depth"*, **not** *"paged decode improves with depth"* — different
+statements, and the data supports the second one only.
+
 **Prefill is parity because attention decay dominates both arms equally. Decode is where paging pays, and
-it pays more the deeper you go.**
+the payoff is resilience rather than speed-up.**
 
 ## Predictions and how they landed
 - *"paged will be ~2× slower at 512k"* (mine, registered at 40% of the static arm) — **refuted by its own
