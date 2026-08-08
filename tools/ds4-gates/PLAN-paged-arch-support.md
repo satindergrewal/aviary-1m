@@ -663,3 +663,45 @@ its headline context size pays 40+ minutes per hypothesis and therefore tests fa
 
 ⚠ Written as a design note rather than applied: thirteen gate edits should not land while a measurement
 holds the GPU lock, and none of tonight's work has reached the owner yet.
+
+### ⚠ And the 1M rung costs TIME as well as memory — price both before committing
+
+Prefill is **superlinear well past the old "knee"**. Fitted from the two static points:
+
+| | tokens | wall |
+|---|---|---|
+| 225k static | 220,070 | 985.9 s (measured) |
+| 512k static | 501,733 | ~4,400 s (projected floor) |
+
+⇒ **t ~ N^1.815** — 2.28× the tokens for ~4.5× the time.
+
+| exponent | 1M per arm |
+|---|---|
+| N^1.0 (linear) | 1.2 h |
+| N^1.5 | 2.7 h |
+| **N^1.815 (fitted)** | **4.3 h** |
+| N^2.0 | 5.7 h |
+
+⇒ **The 1M rung is an overnight spend, twice** (paged + static). Honest bracket: **2.7–5.7 h per arm,
+4.3 h best fit.**
+
+⇒ ★ **`q8_0` buys memory, not attention FLOPs** (credit: Grok). The quantisation that makes 1M *fit* in
+68 GiB does nothing for what it *costs* — the decay travels with it.
+
+⚠ **The exponent is a two-point fit and one point had not landed when it was made.** Fitting a shape to
+two samples is the exact error corrected twice on 2026-08-08 (the linear extrapolation, and the defect-era
+"knee then plateau"). Done deliberately here because a *bracketed* estimate beats none for a spend
+decision — 1M itself is the third point that would confirm it.
+
+⇒ **Price the 1M rung at 68 GiB *and* ~4–6 h per arm, two arms.** Both numbers travel together.
+
+## ⚠ The defect-era prefill cost model is dead
+`long-context-measurement-state` records a **knee at ~122k then a plateau ~156 tok/s**, and the planning
+consequence *"256k is ~2x the cost of 128k, not 4x"*. Tonight's static 512k curve:
+
+`~235 tok/s early → ~83 at 64% → still falling at 74%`
+
+**There is no plateau.** The original reading was a 170k-token window taken for the shape of the whole
+curve. ⇒ **Every rung above ~170k is underpriced by the current model**, which is exactly the range the
+context-ceiling program exists to reach. This justifies **re-measuring the cost model**, not asserting a
+new one from two points.
