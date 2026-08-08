@@ -545,3 +545,51 @@ per-batch timing for the paged loop (the 20k-bin curve is uncomputable on that a
 `A B A B` attribution · ~50k intermittent defect · Metal/CUDA parity · 512k–1M ladder · multi-model ·
 paged speculation checkpoint port (`spec_ckpt` + `load_tgt`, currently correct-by-refusal) ·
 head_dim ≤ 64 branch of the shared-memory prediction (no vehicle on the box)
+
+---
+
+## Small, precise defects found 2026-08-08 (not the corruption; separate items)
+
+**1. An unfittable pool ABORTS instead of exiting cleanly.**
+`common_fit_paged_kv_blocks` emits a genuinely excellent error — the failing number, the budget, *the
+largest `n_ctx` that would fit*, and four named remedies with the env var's current value:
+
+```
+requested n_ctx=524288 x 1 seq needs 12288 KV blocks (96.0 GiB), but the memory budget allows 11269 (88.0 GiB).
+    Largest n_ctx that fits here: ~480768. Options: lower -c, lower -np, raise the budget with --margin,
+    reduce LLAMA_PAGED_POOL_HEADROOM (now 1.50), or pass --paged-pool-clamp to shrink automatically.
+```
+…and the process then dies on `GGML_ASSERT(n_gpu_blocks && "n_gpu_blocks need to be greater than 0.")`
+at `llama-kv-cache-paged.cpp:263`, whose text points at the wrong place. **Fix: return the error, do not
+assert.** The diagnosis already exists one line above the crash.
+
+**2. The error advertises a flag that does not exist.**
+It recommends `--paged-pool-clamp`. There is **no parser entry** for it in `common/arg.cpp`;
+`params.paged_pool_clamp` has no CLI binding. **Either wire the flag or stop advertising it.**
+
+**3. The paged path emits no prefill progress.**
+The static path prints `prompt processing, n_tokens = …, progress = 0.NN` per chunk. Paged prints one
+allocation line, then silence — on a 17-minute 225k prefill (or ~75 min at 512k) a working run and a
+stalled one are indistinguishable. Design written up (rate-limit on 5% crossings, not per chunk; do not
+print during the ~21 pre-request graph builds). Site: the per-candidate batch loop in
+`llama-paged-scheduler-impl.cpp`, where `DS4P_CHUNKLOG` already reads every needed value.
+
+## ★ Headroom is a policy ceiling, not a hardware one
+`LLAMA_PAGED_POOL_HEADROOM` defaults to **1.5**, applied to the bare context requirement *before* any
+allocation — *"headroom for fragmentation and for the sharing/spill the paged cache exists to do"*.
+
+| headroom | blocks for `-c 524288` | GiB | vs 88.0 GiB budget |
+|---|---|---|---|
+| **1.50 (default)** | 12,288 | 96.0 | **refuses** |
+| 1.25 | 10,240 | 80.0 | fits |
+| 1.05 | 8,601 | 67.2 | fits |
+
+512k needs **64 GiB** of KV and the box had **88 GiB** available. ⇒ **Every "512k does not fit on this
+box" in this lane should be re-read as "512k does not fit *at 1.5× headroom*."** That is a different
+sentence, and it is one env var rather than an architecture change.
+
+⚠ **Open QUESTION, not a finding:** is 1.5 measured or chosen? The purpose is documented; the value's
+justification is not. If chosen as a safe-looking round number, part of this lane's context ceiling is
+self-imposed. If measured, there is a low-headroom failure mode not yet met. ⚠ A 512k PASS at headroom
+1.05 with `-np 1` and one request is **the least demanding configuration of that rung** — not "512k works".
+Multi-slot at low headroom is untested.
