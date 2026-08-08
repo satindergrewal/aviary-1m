@@ -143,3 +143,82 @@ Until something can fail on demand, no bisect is worth running.
 6. **Include a control arm that reproduces the KNOWN result.** The `-c` sweep's baseline came back
    clean, which is the only reason the intermittency was caught at all.
 7. **Never build on an n=1 result you have already flagged as n=1.**
+
+---
+
+# 2026-08-08 — reproduced at 225k, with the champion ACTIVE, and a first rate estimate
+
+This session hit the same defect independently and re-derived most of this document from scratch
+before reading it. What follows is what it adds.
+
+## Range extended: ~50-73k → 224,992 tokens
+
+| context | config | runs | result |
+|---|---|---|---|
+| ~50-73k | `DS4P_METAL_CHAMP` **unset**, bs=16 | ~30 obs | documented above |
+| **224,992** | **CHAMPION ACTIVE**, bs=64, `--no-kv-unified` | **2 of 6** | **FAIL** |
+
+⇒ **Not champion-specific in the other direction either.** This document recorded it with the champion
+*unset*; it also fires with the champion *active* at bs=64. The kernel is not the variable.
+
+## First rate estimate — this document says "rate unmeasured"
+
+Paged + champion at 225k, all inside the model's native 250k:
+
+| | runs |
+|---|---|
+| pass | `parity_fair/paged_opt`, `parity_rep/rep_paged_first`, `parity_ab/B_champ_nolazy`, `notrace/resp` |
+| **FAIL** | `parity_bins/paged_first`, `ladder/p225` |
+
+**4 pass / 2 fail ≈ 33%.** Pooling is legitimate *only because* the failures do not track any config
+variable (below).
+
+## Three suspects blamed and retracted this session — all config-independent, as this file predicted
+
+| blamed | evidence | why it died |
+|---|---|---|
+| paging in general | 1 failing run | static clean under identical conditions, then the same config passed 4x |
+| `DS4P_PP_TRACE` (an instrument added that day) | 1 failing traced run, 4 untraced passes | the next untraced run reproduced it |
+| `LLAMA_PAGED_POOL_HEADROOM=1.05` | 1 failing run at 1.05 | **the other failure ran at the default 1.5** |
+
+**The two failures differ in both variables that were blamed.** This file's "config-independent" line
+already said so; it was re-derived the expensive way.
+
+⚠ **Graph reuse is still the only unexcluded candidate — and it cannot be the cause of *these*
+failures.** Measured on the ladder arms: `s225` (clean, static) `graphs reused = 14`; `p225`
+(corrupted, paged) `graphs reused = 0`. Reuse is structurally disabled on the paged path, so it is
+**constant across passing and failing paged runs** and explains neither. "Control is vacuous" means
+**untested**, not guilty. Building `can_reuse` remains worth doing to *close* the suspect.
+
+## The 88-vs-88 diff reproduces at 4.5x the length
+
+| | failing (p225) | passing (notrace) |
+|---|---|---|
+| `initializing paged KV cache` | 1 | 1 |
+| `took the STATIC path` | 88 | 88 |
+| `CHAMP-PAGED ACTIVE` | 1 | 1 |
+| `n_gpu_blocks` | 2 | 2 |
+
+Identical on every logged axis, then different tokens — exactly as recorded at ~50k. **`prompt_n` is
+224992 on both**, so the full prompt is ingested; it counts tokens *submitted*, not tokens *attended*,
+and cannot distinguish corruption from silent truncation.
+
+## Failure output is context-dependent, not a fixed string
+`' 123456789012345'` at 225k · `'\n187878787878787'` at 501k. Degenerate digit sequences in both
+cases, but **not the same string** — so "byte-identical, therefore deterministic state" holds *within*
+a context size and breaks *across* one.
+
+## ⚠ 512k is PENDING, not a third failure
+`ladder/p512` (501,733 tokens) returned garbage — but that is **2x the model's native 250k**, and
+`memory/yarn-context-honesty.md` records that extrapolation beyond native is expected to be unstable.
+Without its paired static arm this cannot separate a paging defect from YaRN degradation. **Not
+counted in the rate above.**
+
+## Measured prefill cost (holds regardless of output correctness)
+225k ≈ 215 tok/s · 512k ≈ 112 tok/s — roughly half the throughput for 2.2x the context, the expected
+O(n²) term.
+
+⇒ Extrapolating (n=2, labelled as such): **1M prefill ≈ 4-5 h per arm.** At a ~33% failure rate, a
+paired 1M run has ~1-in-3 odds of an uninterpretable paged arm after half a day. **A short-context
+detector is therefore the precondition for measuring the top of the range at all**, not merely a
+convenience.
