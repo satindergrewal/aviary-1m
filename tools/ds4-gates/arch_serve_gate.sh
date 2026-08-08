@@ -195,15 +195,14 @@ start() { # $1 = static|paged   -> PORT, SRVPID
     #   "GGML_ASSERT(ggml_is_contiguous(q) && "paged attn: q must be contiguous ...") failed"
     # and the gate showed six frames of `_ZN18common_init_result...` instead. A diagnostic buried
     # under its own stack trace is a diagnostic nobody reads.
-    local why
-    why=$(grep -aE "GGML_ASSERT|GGML_ABORT|error:|failed to |not supported|out of memory" \
-          "$LOGDIR/$1.log" | grep -av "^ *[0-9]* " | tail -3)
-    if [ -n "$why" ]; then
-        echo "  cause:" | tee -a "$OUT"
-        printf '%s\n' "$why" | cut -c1-190 | sed 's/^/  ! /' | tee -a "$OUT"
+    # ⚠ WAS A PRIVATE `tail -3`, WHICH REPORTS CONSEQUENCES. Measured 2026-08-09 against a real
+    # failure log: the fault was `exceeds max context (9050 > 8192)` and tail-3 printed "failed to find
+    # a memory slot" and "speculative decoding not supported" -- both true, both downstream. The shared
+    # helper reports the FIRST matches (the fault) plus the LAST (the fatal consequence).
+    if command -v gate_cause_from_log >/dev/null 2>&1; then
+        gate_cause_from_log "$LOGDIR/$1.log" "$1 arm" | tee -a "$OUT"
     else
-        echo "  no assert/abort/error line found; last lines:" | tee -a "$OUT"
-        tail -6 "$LOGDIR/$1.log" | sed 's/^/  | /' | tee -a "$OUT"
+        echo "  ⚠ _gate_common.sh not loaded -- no cause available, and that is a harness fault" | tee -a "$OUT"
     fi
     return 1
 }

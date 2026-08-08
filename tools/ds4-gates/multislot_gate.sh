@@ -9,6 +9,7 @@
 # over by the gate's own `exit`, while `grep -l scrub_abs_paths` still listed the gate as a caller,
 # because grep counts TEXT and not control flow. On EXIT it runs whatever path the gate takes.
 . "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+. "$(dirname "$0")/_gate_common.sh" 2>/dev/null || true
 trap 'scrub_abs_paths "${OUT:-}"' EXIT   # ${OUT:-} : fires on early exits too, before OUT is set
 
 # MULTI-SLOT GATE -- the regime every other gate in this lane silently excluded.
@@ -106,7 +107,9 @@ probe() { # $1 arm  $2 rep  $3 server args
             echo "$tag: REFUSED-BY-DESIGN ($(grep -oE "needs DS4P_PAGED_SWA=1|not yet supported for hybrid architectures" "$LOGDIR/$tag.log" | head -1)) -- not a defect, but this arm cannot answer the question" | tee -a "$OUT"
             verdicts+=("$1:REFUSED-BY-DESIGN")
         else
-            echo "$tag: NEVER_READY" | tee -a "$OUT"; verdicts+=("$1:NEVER_READY"); fails=$((fails+1))
+            echo "$tag: NEVER_READY" | tee -a "$OUT"
+            command -v gate_cause_from_log >/dev/null 2>&1 && gate_cause_from_log "${log:-}" "$tag" | tee -a "$OUT"
+            verdicts+=("$1:NEVER_READY"); fails=$((fails+1))
         fi
         return
     fi

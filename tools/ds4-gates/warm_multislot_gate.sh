@@ -2,6 +2,7 @@
 # ⚠ PRIVACY: writes into tools/ds4-gates/results/, which is TRACKED. Scrub on EXIT, as a trap and not a
 # trailing call -- a trailing scrub is jumped over by the gate's own `exit`.
 . "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+. "$(dirname "$0")/_gate_common.sh" 2>/dev/null || true
 trap 'scrub_abs_paths "${OUT:-}"' EXIT
 #
 # WARM MULTI-SLOT GATE -- the regime `multislot_gate.sh` and `content_diff_probe.sh` both exclude.

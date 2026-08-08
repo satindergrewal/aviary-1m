@@ -9,6 +9,7 @@
 # over by the gate's own `exit`, while `grep -l scrub_abs_paths` still listed the gate as a caller,
 # because grep counts TEXT and not control flow. On EXIT it runs whatever path the gate takes.
 . "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+. "$(dirname "$0")/_gate_common.sh" 2>/dev/null || true
 trap 'scrub_abs_paths "${OUT:-}"' EXIT   # ${OUT:-} : fires on early exits too, before OUT is set
 
 # LONG-CONTEXT GATE -- the coverage hole that matters most to what this lane is FOR.
@@ -98,7 +99,12 @@ declare -A ptok
 probe() { # $1 arm  $2 extra args
     local log="$LOGDIR/$1.log" marker
     if ! start_srv "$1" "$2"; then
-        echo "$1: NEVER_READY -- results unusable, not a clean arm" | tee -a "$OUT"; fails=$((fails+1)); return
+        echo "$1: NEVER_READY -- results unusable, not a clean arm" | tee -a "$OUT"
+        # ⚠ AND SAY WHY. A dead arm and a degraded arm render identically as a missing column; two
+        # harness faults on 2026-08-09 (a -c overflow and a port collision) both produced a convincing
+        # picture of paging failing at depth and were diagnosable only by opening this log by hand.
+        command -v gate_cause_from_log >/dev/null 2>&1 && gate_cause_from_log "$log" "$1" | tee -a "$OUT"
+        fails=$((fails+1)); return
     fi
     # presence marker, checked per arm and in BOTH directions
     marker=$(grep -c "initializing paged KV cache" "$log" 2>/dev/null); marker=${marker:-0}

@@ -141,3 +141,49 @@ gate_grade_divergence() { # $1=static_gap_triplet (from gate_top2_gap on the STA
     echo "  so the arms disagree where the model is CONFIDENT. This one is gradeable as a defect."
     return 1
 }
+
+# ---- DEAD ARM: SAY WHY, DO NOT JUST SAY DEAD ------------------------------------------------------
+# ⚠ THE GAP THE 2026-08-09 AUDIT FOUND, present in four gates at once. Every one of them DETECTS a
+# server that never came up and aborts rather than scoring it -- which is the important half and was
+# already right. None of them prints the server's OWN CAUSE.
+#
+# That half matters because a dead arm and a degraded arm render IDENTICALLY as "the paged column is
+# missing". Twice in one night a harness fault produced a picture of paging collapsing at length:
+#
+#   -c overflow      "queue_request: request 0 exceeds max context (9050 > 8192)"  -> paged arm refused
+#   port collision   "exiting due to HTTP server error"                            -> every arm died
+#
+# Both were deterministic, both looked like data, both pointed the same alarming way, and NEITHER was
+# catchable by re-running. Each was diagnosed only by opening a log by hand and reading three lines.
+# This puts those three lines in front of the reader instead.
+gate_cause_from_log() { # $1 = server log  $2 = label
+    local log="${1:-}" label="${2:-arm}"
+    if [ ! -s "$log" ]; then
+        echo "  $label DID NOT SERVE -- and its log is missing or empty, so the cause is UNKNOWN."
+        echo "  Do not read this as a paging result; it is not a result at all."
+        return
+    fi
+    echo "  $label DID NOT SERVE -- cause, from its own log:"
+    # ⚠ SURFACE THE FAULT, NOT THE STACK. On an abort the last lines are BACKTRACE FRAMES while the one
+    # line naming the fault scrolled past above them. Filtering out frame lines is what makes this
+    # readable; a diagnostic buried under its own stack trace is a diagnostic nobody reads.
+    # ⚠⚠ THE FIRST MATCH, NOT THE LAST. I wrote "surface the fault, not the stack" above and then
+    # implemented `tail -3`, which shows the LAST errors -- and the last errors are usually
+    # CONSEQUENCES. Caught by running this against a real failure log from earlier tonight: the fault
+    # was `queue_request: request 0 exceeds max context (9050 > 8192)`, and tail-3 reported
+    # "failed to find a memory slot" and "speculative decoding not supported" instead -- both true,
+    # both downstream, neither the cause. First two matches (the fault) plus the last (the fatal
+    # consequence, if different) is the shape that reads correctly.
+    local first last
+    first=$(grep -aE "GGML_ASSERT|GGML_ABORT|exceeds max context|rejected the request|HTTP server error|error:|failed to |not supported|out of memory|needs DS4P_" "$log" \
+          | grep -av "^ *[0-9]* " | head -2)
+    last=$(grep -aE "GGML_ASSERT|GGML_ABORT|exceeds max context|rejected the request|HTTP server error|error:|failed to |not supported|out of memory|needs DS4P_" "$log" \
+          | grep -av "^ *[0-9]* " | tail -1)
+    if [ -n "$first" ]; then
+        printf '%s\n' "$first" | cut -c1-190 | sed 's/^/  ! FIRST: /'
+        [ "$last" != "$(printf '%s' "$first" | tail -1)" ] && printf '%s\n' "$last" | cut -c1-190 | sed 's/^/  ! LAST:  /'
+    else
+        echo "  no assert/abort/error line matched; last lines of the log:"
+        tail -4 "$log" | cut -c1-170 | sed 's/^/  | /'
+    fi
+}
