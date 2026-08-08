@@ -629,3 +629,37 @@ exact shape of the defect-era comparisons.
 Provenance worth keeping: `common.cpp:1284` records that an earlier sizing budgeted 512 B/row against an
 actual 272 B/row and *"silently spent the context budget that quantising the KV cache was meant to buy
 back, which is the entire point of the feature."* That fight has already been had once.
+
+---
+
+## ★★ DESIGN NOTE: a gate that repeats one request tests determinism, not correctness
+
+**Thirteen gates in this lane send one prompt shape repeatedly.** That is why a three-request crash
+survived weeks of testing: `long, short, long` is not an exotic sequence, it is *a conversation*, and
+nothing here ever produced one.
+
+**Every defect found on 2026-08-08 lived in the transition between requests:**
+| defect | what crossed the boundary |
+|---|---|
+| prompt mirror | `slot.prompt.tokens` outliving the pool it described |
+| context ledger | the previous request's last position, rejecting the next batch |
+| recurrent input | allocator bytes under `s_copy`, read as a row index |
+
+A suite built from repeated identical requests is blind to all three **by construction**. That is not a
+gap in the gates; it is a gap in what a gate *is* here.
+
+### The mechanical change — one line per gate
+> Every gate that sends N requests should send them at **two prompt lengths, alternating.**
+
+- **Cost:** one extra prompt file, one modulo in the request loop.
+- **Catches:** the crash (`long, short, long`), the corruption (a multi-chunk request following a
+  triggering one), and the whole class of *"state that survives a request boundary."*
+
+### And the cheaper structural lesson
+**Find at the cheapest context that reproduces; verify at the expensive one.** Every result that mattered
+on 2026-08-08 came from **8k prompts running in ~90 seconds** — roughly twenty hypotheses tested in one
+session. The 225k and 512k runs *verified generalisation*; they found nothing. A lane that tests only at
+its headline context size pays 40+ minutes per hypothesis and therefore tests far fewer of them.
+
+⚠ Written as a design note rather than applied: thirteen gate edits should not land while a measurement
+holds the GPU lock, and none of tonight's work has reached the owner yet.
