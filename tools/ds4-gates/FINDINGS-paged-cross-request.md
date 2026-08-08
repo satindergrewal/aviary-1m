@@ -865,3 +865,50 @@ return inside a function that serves two subsystems.**
 - All three fixes are **local and unpushed**.
 - `-ub 128` should no longer be needed; the full 25-point grid is re-running against this build.
 - Gemma4-12B running **48 of 48 layers static** under paging is unexplained and unrelated to this bug.
+
+---
+
+# ✅ VERIFIED: the original ubatch sweep, re-run against the fix
+
+The grid the investigation **started** from — same 7427 prompt, same eight ubatch values, 4 requests per
+point, fresh server each, protocol matched to the original. It predates every theory formed during this
+session, so it cannot have been fitted to the fix.
+
+| ub | final-chunk span | before | after |
+|---|---|---|---|
+| 256 | 3 | CLEAN | CLEAN |
+| 320 | 67 | CLEAN | CLEAN |
+| 384 | 131 | CLEAN | CLEAN |
+| 432 | 131 | CLEAN | CLEAN |
+| 400 | 259 | **CORRUPT** | **CLEAN** |
+| 416 | 387 | **CORRUPT** | **CLEAN** |
+| 448 | 259 | **CORRUPT** | **CLEAN** |
+| 512 | 259 | **CORRUPT** | **CLEAN** |
+
+**8/8 clean, 4/4 FOUND at every point.** The four that corrupted on every build now pass; the four that
+were always clean are unchanged. Different ubatches, different chunk counts, different chunk-2 start
+positions (400 and 416 are not block-aligned), different spans.
+
+⚠ `ub=416` (span 387, the largest in the grid and the only one past six blocks) was named **before** the
+run as the point most likely to survive the fix if it only handled the common case. It came back clean 4/4.
+
+⚠ `ub=432` is the point whose non-monotonic result — clean *between* 416 and 448 corrupting — killed the
+first theory and set the night's direction. It is still clean, for a different reason than the one
+originally proposed.
+
+Plus the `sepbracket` grid, also predating the fix: `rem 3 @ 8195` CLEAN, **`rem 259 @ 8451` CLEAN (was
+TRIGGERS)**, `rem 160/192/227` CLEAN.
+
+## Final state
+| defect | status |
+|---|---|
+| silent cross-request corruption | **FIXED** — `6391c5e63`, root-caused, 8/8 + 5/5 pre-existing grids green |
+| `long, short, long` → HTTP 500 + abort | **FIXED** — `4c3b18144`, root-caused, regressions green |
+| prompt mirror outliving its pool | **FIXED** — `bc8274a80` (earlier) |
+
+`-ub 128` is no longer required. All three fixes are **local and unpushed**, and tested on Ornith-9B on
+Metal only — `llm_graph_input_mem_hybrid` is generic to every hybrid arch, so the fix is reasoned correct
+beyond that and *measured* only there.
+
+**Still open and unrelated:** Gemma4-12B runs **48 of 48 layers static** under paging while the pool and
+champion markers look healthy.
