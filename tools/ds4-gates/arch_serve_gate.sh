@@ -264,7 +264,13 @@ except Exception: print('MALFORMED')"
 # the context returns a server error, and an error compared against an error MATCHES.
 SEQ_LONG1="${AG_SEQ_LONG1:-$(python3 -c "print(('The following is a list of numbered facts about geography. ' + ' '.join(f'Fact {i}: city number {i} lies on a river.' for i in range(1, 150))) + ' Question: the capital of France is')")}"
 SEQ_SHORT="${AG_SEQ_SHORT:-The capital of Japan is}"
-SEQ_LONG2="${AG_SEQ_LONG2:-$(python3 -c "print(('Below is a numbered inventory of laboratory equipment. ' + ' '.join(f'Item {i}: beaker {i} holds {i*3} millilitres.' for i in range(1, 190))) + ' Question: the capital of Italy is')")}"
+# ⚠ THE FILLER'S SUBJECT MATTER IS LOAD-BEARING, WHICH I FOUND BY BREAKING IT. The first LONG2 filled
+# with laboratory inventory ("Item 12: beaker 12 holds 36 millilitres.") and both `nemotron` and
+# `qwen3vl` answered the trailing question with a bare "?" -- degenerate, VOIDing two otherwise fine
+# rows. LONG1's geography filler, same grammar and the same trailing question form, worked on both.
+# So the leg's arbiter can be destroyed by the padding rather than by anything under test. Keep the
+# filler in the same domain as the question being asked.
+SEQ_LONG2="${AG_SEQ_LONG2:-$(python3 -c "print(('The following is a list of numbered facts about rivers and towns. ' + ' '.join(f'Note {i}: river number {i} flows past town {i}.' for i in range(1, 190))) + ' Question: the capital of Italy is')")}"
 
 ask_seq() { # echoes exactly 3 lines, one per request, in order
     ask_one "$SEQ_LONG1" "$NPRED"
