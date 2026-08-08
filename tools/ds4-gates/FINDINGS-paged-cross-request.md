@@ -473,3 +473,64 @@ needs a same-kernel control).
 Bound the final chunk below the threshold for **every** prompt: **`-ub 128`**. `-ub 256` permits a
 255-token final chunk and, at a non-block-multiple ubatch, a span above 256 — it is prompt-dependent,
 not safe.
+
+---
+
+# The constant: 256 entries, NOT the block size — and NOT the champion kernel
+
+`--kv-block-size 16` (which **refuses** the champion: `CHAMP-PAGED REFUSED (bs!=64) D=256 bs=16`, so the
+run uses the scalar paged kernel):
+
+| span | verdict |
+|---|---|
+| 32 | CLEAN |
+| 128 | CLEAN |
+| 255 | CLEAN |
+| 256 | **TRIGGERS** ← positive control |
+| 256 (2nd length) | **TRIGGERS** |
+
+The positive control fires, so the clean points are evidence rather than absence. Two conclusions:
+
+1. **The threshold is 256 irrespective of block size.** "4 blocks" predicts 64 at bs=16; a span of 128
+   sailed through. Dead.
+2. **The bug is not in the champion kernel.** Two different attention kernels, same 256 boundary, same
+   sticky signature ⇒ whatever is sized for 256 sits **upstream of the kernel choice**.
+
+## Boundary, consolidated
+| CLEAN | TRIGGERS |
+|---|---|
+| span 255 N=7935 bs64 champ | span 256 N=7936 bs64 champ |
+| span 255 N=8447 bs64 champ | span 256 N=8448 bs64 champ |
+| span 255 bs16 scalar | span 256 N=7936 bs16 scalar |
+| span 128 bs16 scalar | span 256 N=8448 bs16 scalar |
+| span 32 bs16 scalar | span 257 N=7937 bs64 |
+| span 227 N=7907 bs64 | span 511 N=7679 bs64 |
+| spans 3 / 67 / 131 / 160 / 192 | span 259 `ub=400` (offset 32) bs64 |
+
+25 fresh-server points, zero violations, boundary sharp to **one token**.
+
+## ⚠ Three second-model attempts, all VOID — and the admission bar that came out of them
+`256 entries` and `head_dim = 256` are the same number on Ornith and cannot be separated on it.
+
+| model | head_dim | outcome |
+|---|---|---|
+| Qwen3.5-4B-DFlash | 128 | **not a model** — a draft head (`dflash requires ctx_other`, 6 blocks, `target_layers`) |
+| Qwen3-4B-Q8_0 | 128 | garbage (`妫妫妫…`) at request 1 — **and identical garbage on the STATIC path**, so the model, not paging |
+| Nemotron-Mini-4B | 128 | bare `\n` at request 1 on every span — wants a chat template |
+| Gemma4-12B | 512 | clean at 255/256/511/512 — **and 48 of 48 layers took the STATIC path** |
+
+**Gemma ran zero paged layers.** The pool was allocated, the champion was loaded, and the no-consumer
+guard stayed silent — all three are *producer-side* signals. Ornith for comparison: 8 of 32 layers
+static (the SWA layers), 24 running paged.
+
+⇒ **Admission bar for any model in this investigation:** distinct layers logging `took the STATIC path`
+must be **strictly less than `n_layer`**, plus request 1 coherent and correct. One grep, applied before
+any span is scored.
+
+⇒ ⚠ **Separate, larger finding for the arch-support file:** the paged path silently declines an entire
+arch while reporting a healthy startup. Gemma4 is on the 19-list and this file's own notes record it as
+PASSING under `DS4P_PAGED_SWA=1`; on this checkpoint it runs fully static with the pool allocated and
+the champion loaded. Whatever that PASS measured, it was not paged attention.
+
+**So the constant is still `256 entries` vs `head_dim=256`, unresolved**, and resolving it needs a model
+that clears the admission bar.
