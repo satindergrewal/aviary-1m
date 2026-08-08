@@ -1039,3 +1039,48 @@ value on a different model, a different backend, or a different graph. That is w
 built on it failed — block counts, remainders, brackets, `head_dim`, `n_ctx` padding — **they were looking
 for meaning in an allocator artefact.** The threshold was real, reproducible to one token, and
 *not about arithmetic at all.*
+
+---
+
+# ★★★★★ INDUCED ON DEMAND — the mechanism switched on at will, at the predicted coordinate
+
+`DS4P_RSPOISON` overwrites `s_copy` **after** the normal write. All five arms as pre-registered
+(chat #7634, before the run):
+
+| arm | prompt | poison | predicted | observed |
+|---|---|---|---|---|
+| A | span 255 (clean) | `0x3A53A800` | CORRUPTS | **CORRUPT** — MISS on **request 1** |
+| B | span 255 (clean) | none | CLEAN | CLEAN — control |
+| C | span 255 (clean) | **`0`** | CLEAN | **CLEAN** |
+| D | span 255 (clean) | `0xDEADBEEF` | CORRUPTS | **CORRUPT** |
+| E | span 256 (trigger) | none | CLEAN | CLEAN — the fix holds |
+
+⇒ **Arm C is clean: the side-effect branch is dead.** Writing 0 over 0 is a no-op, exactly as it must be if
+the mechanism is the *value*. This was the only remaining home for *"`set_input` running at all is what
+fixes it, through something other than `s_copy`"* — closed by measurement, not argument.
+
+⇒ **Arm D corrupts:** the indictment is the **garbage-read path itself**, not the specific value. Any
+non-row index does it; there is no hidden structure in `0x3A53A800`.
+
+## The signature prediction held — including the part that had to DIFFER
+Registered in advance: the induced damage must look **unlike** the natural defect, because poison applies
+from batch 1 and removes the fresh-allocation-is-zero condition that makes request 1 clean naturally.
+**Arm A misses on request 1**, as predicted.
+
+Coordinate, compared the correct way — **arm A req1 (poisoned) vs arm B req1 (clean), same prompt:**
+
+| N | 256 | 512 | **513** | 576 | 1024 | 7935 |
+|---|---|---|---|---|---|---|
+| | SAME | SAME | **DIFFER** | DIFFER | DIFFER | DIFFER |
+
+⇒ **Earliest bad position 512 == the ubatch — the exact coordinate the natural defect produced.**
+
+⚠ **A false negative was one step away.** Within arm A, req1-vs-req2 shows SAME everywhere up to 7935 —
+because *both* requests are poisoned identically and therefore agree. Reading that as "no coordinate"
+would have been a null from comparing two identically-broken runs. **The cross-arm comparison is the one
+that answers it.**
+
+## Final status
+**Root-caused · mechanism derived · induced on demand at the predicted coordinate with the predicted
+signature · verified at 8k (8/8 and 5/5 pre-existing grids) and at 225k (430 chunks, needle PASS) · faster
+than static on wall, prefill and decode.** Nothing remains inferred.
