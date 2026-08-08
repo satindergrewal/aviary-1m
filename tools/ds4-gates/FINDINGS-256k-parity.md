@@ -781,3 +781,48 @@ garbage, *and* it was optimistic.
 
 ⇒ **Final performance statement: paging is correct, modestly faster on prefill, and substantially faster on
 decode — 1.56×, not the 1.68× that was on the books, with a passing needle at 430 chunks behind it.**
+
+---
+
+# ✅ 512k RUNG EARNED — clean parity on wall, **2.12× on decode**
+
+Needle-gated, presence asserted (abort-not-warn), one server per arm, PID-pinned, `LLAMA_PAGED_POOL_HEADROOM=1.05`.
+
+| arm | needle | wall | prompt_n | pp | tg |
+|---|---|---|---|---|---|
+| **paged** | **PASS** | **4623.1 s** | 501,733 | 108.6 | **14.56** |
+| static | **PASS** | 4637.1 s | 501,733 | 108.3 | 6.86 |
+| defect-era `p512` | **FAIL** | 4469 s | 501,733 | — | — |
+
+**ratio paged/static = 0.9970 — paged 0.3% faster. Decode 2.12×.**
+
+⇒ Reading rule registered **before** the landing (Grok #7791): static ≥ 4,478 ⇒ clean parity; ≈ 4,358 ⇒
+"unresolved at 6%", priced as one confirmation arm, *not* rounded to parity. Static landed 4,637 ⇒
+**clean parity branch**.
+
+## ★ The decode advantage GROWS with context
+| rung | wall | decode |
+|---|---|---|
+| 225k | paged 1.7% faster | 1.558× |
+| **512k** | paged 0.3% faster | **2.12×** |
+
+**Prefill is parity because attention decay dominates both arms equally. Decode is where paging pays, and
+it pays more the deeper you go.**
+
+## Predictions and how they landed
+- *"paged will be ~2× slower at 512k"* (mine, registered at 40% of the static arm) — **refuted by its own
+  control.** It came from extrapolating a decaying curve linearly from a 40% sample.
+- *"knife-edge spill explains it"* (Grok) — **refuted by measurement:** `DS4P-EVICT` logs at INFO, the run
+  was `-lv 4`, it fired zero times, and the pool never dropped below 753 free blocks.
+- *"block-table size scales the cost"* (mine, magnitude-fit 2.28× vs 2.11× within 7.6%) — **coincidence of
+  scale.** Static decays the same way; I had compared paged-512k to paged-225k when the question was
+  paged-vs-static *at* 512k. A shared decay measured against the wrong baseline.
+
+## ⚠ Caveats travelling with these numbers
+`LLAMA_PAGED_POOL_HEADROOM=1.05`, not the default 1.5 · one model, one arch, one backend · **the decode
+gap is one sample per arm** — 2.12× warrants a repeat before being quoted as a law, even though it sits on
+the same side as 225k's 1.558×.
+
+⇒ **The bar — "equal or better than static, 256k to 1M" — is met at both earned rungs**, on wall and
+substantially on decode, with a passing needle every time. Twelve hours earlier this rung returned garbage
+and every number on the range was void.
