@@ -57,7 +57,11 @@ ADDED=$(printf '%s\n' "$DIFF" | grep '^+' | grep -v '^+++')
 #   - IPv6 outside the 2001:db8:: documentation range
 PAT_PATH='/Users/[a-zA-Z0-9._-]+|/home/[a-zA-Z0-9._-]+'
 PAT_NAME='[Ss][Aa][Tt][Ii][Nn][Dd][Ee][Rr]'
-PAT_IP4='\b([0-9]{1,3}\.){3}[0-9]{1,3}\b'
+# ⚠ OCTET-VALIDATED, NOT `[0-9]{1,3}` FOUR TIMES. The loose form matched llama.cpp's own log
+# timestamps -- `0.00.321.268` is four dot-separated numbers and looks exactly like an address. It
+# blocked a legitimate commit on 2026-08-09. The response to a false positive is to make the PATTERN
+# right, never to wave the hit through: 321 and 268 are not octets, and a real address always is.
+PAT_IP4='\b((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\b'
 PAT_IP6='\b([0-9a-fA-F]{1,4}:){3,}[0-9a-fA-F]{1,4}\b'
 
 # Allowed by the rule: documentation ranges and loopback. Everything else in those shapes is a hit.

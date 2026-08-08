@@ -164,9 +164,24 @@ start() { # $1 = static|paged   -> PORT, SRVPID
         # being reported is not evidence, however plausible it reads.
         grep -aiE "not yet supported for hybrid architectures|not yet supported for KV-sharing|needs DS4P_PAGED_SWA=1|requires DS4P_PAGED_HYBRID=1" \
             "$LOGDIR/$1.log" | head -1 | cut -c1-150 | sed 's/^/  | /' | tee -a "$OUT"
-        echo "  Set AG_ENV to the enabling flag and re-run, e.g." | tee -a "$OUT"
-        echo "    AG_ENV=DS4P_PAGED_HYBRID=1  $0 $ARCH <model>     # hybrid archs" | tee -a "$OUT"
-        echo "    AG_ENV=DS4P_PAGED_SWA=1     $0 $ARCH <model>     # SWA archs" | tee -a "$OUT"
+        # ⚠ NOT EVERY DESIGNED REFUSAL HAS AN ENABLING FLAG, AND SUGGESTING ONE SENDS THE READER IN
+        # CIRCLES. Printed the hybrid/SWA hint unconditionally until 2026-08-09, when `gemma4` was
+        # re-run with DS4P_PAGED_SWA=1 and refused again -- by a DIFFERENT guard. Its blocker is
+        # KV-SHARING (`n_layer_kv_from_start`), which has no env var because there is no
+        # implementation behind one: the layers that reuse an earlier layer's cache would read the
+        # STATIC cache, which paging never fills, and attend over empty KV. The guard is the only
+        # thing standing between that arch and a silently wrong answer.
+        if grep -qi "not yet supported for KV-sharing" "$LOGDIR/$1.log" 2>/dev/null; then
+            echo "  ⚠ NO ENABLING FLAG EXISTS FOR THIS ONE. The blocker is KV-SHARING, not SWA and not" | tee -a "$OUT"
+            echo "  hybrid: some layers reuse an earlier layer's cache, and paging never fills the" | tee -a "$OUT"
+            echo "  static cache they read. Enabling it would produce a silently wrong answer, which" | tee -a "$OUT"
+            echo "  is strictly worse than refusing. See FINDINGS-paged-kv-sharing-splitbrain.md --" | tee -a "$OUT"
+            echo "  diagnosed, unfixed, and blocked on implementation rather than on a vehicle." | tee -a "$OUT"
+        else
+            echo "  Set AG_ENV to the enabling flag and re-run, e.g." | tee -a "$OUT"
+            echo "    AG_ENV=DS4P_PAGED_HYBRID=1  $0 $ARCH <model>     # hybrid archs" | tee -a "$OUT"
+            echo "    AG_ENV=DS4P_PAGED_SWA=1     $0 $ARCH <model>     # SWA archs" | tee -a "$OUT"
+        fi
         echo "  Until then this gate CANNOT answer for this arch. Not a pass, not a failure." | tee -a "$OUT"
         return 3
     fi

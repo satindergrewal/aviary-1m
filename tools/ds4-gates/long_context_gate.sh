@@ -42,6 +42,13 @@ LOGDIR=${CLAUDE_JOB_DIR:-/tmp}/longctx
 OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/long-context-$(date +%Y%m%d-%H%M).txt
 mkdir -p "$LOGDIR" "$(dirname "$OUT")"
 echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  ctx=$CTX  fill~${FILL}tok" | tee "$OUT"
+# ⚠ RECORD THE VEHICLE. This header used to print tip, ctx and fill and NOT the model, so every result
+# file was silent about what it measured -- recoverable only by reading the script's default at the
+# time, or the server log if it still existed. On 2026-08-09 that mattered: `qwen35moe` turned out
+# never to have run paged, and whether the 225k parity table survived depended entirely on which
+# Ornith it had loaded. It was the 9B, confirmed from the loader's own line -- but a result that
+# cannot name its own vehicle is one download away from being unreadable.
+echo "model: $(basename "$M")  (LC_MODEL to override)" | tee -a "$OUT"
 
 NEEDLE="MAGENTA-7742"
 
