@@ -713,3 +713,42 @@ padding · block allocation and freelist order · `max_blocks`/stride · `n_past
 graph reuse · compute-buffer sizing · the context memory ledger.
 
 **Still standing:** the final prefill chunk's span from its block-aligned start, at exactly 256.
+
+---
+
+# ⚠ "Request 1 is clean" is a property of a FRESH SERVER, not of the defect
+
+Pre-fix, `short, long` corrupted the long on its **first** request, which looked like a third route with
+no span-256 trigger in its history. Re-run under the fix, with a **pure** arm added (no triggering prompt
+anywhere):
+
+| arm | sequence | result |
+|---|---|---|
+| control | longCLEAN × 2 | FOUND, FOUND |
+| **pure** | short, longCLEAN, longCLEAN | **FOUND, FOUND, FOUND** |
+| orig | short, longTRIG | FOUND, **MISS** |
+
+⚠ **The pure arm is not evidence the fix closed anything.** Pre-fix arm F was `short, short, longCLEAN` →
+all FOUND: a short in front of a clean long was *already* clean. The pure arm has no pre-fix baseline of
+its own and confirms something that was already true. Crediting the patch with this would have been a
+"no baseline, credited anyway" error.
+
+⇒ **Arm C was never a short-route.** It was the razor bug firing on the trigger prompt's *first* request
+because the server was no longer fresh. The short removed the fresh-server condition; it poisoned nothing.
+
+| history | prompt | outcome |
+|---|---|---|
+| fresh server | trigger | request 1 CLEAN, request 2+ wrong |
+| **any** prior request | trigger | request 1 **already** wrong |
+| any prior request | clean | clean, forever |
+
+⇒ **Two defects, cleanly separated — now tested rather than assumed.** There is no third route.
+
+⇒ ★ And it sharpens the open item: the razor's damage **survives a full `seq_rm` between requests**, so
+its carrier is **not** anything the context memory module owns. That excludes the ledger outright and
+constrains the recurrent-state theory to the case where what the chunk handoff reads is not what `seq_rm`
+resets.
+
+⚠ Unpaid: *"`seq_rm` clears the recurrent state"* is read from source, **not measured**. Every conclusion
+above about what the fix rules out depends on it. The instrument is a direct read of the recurrent tensors
+— same shape as `debug_seq_kv_checksum`, different memory module.
