@@ -534,3 +534,66 @@ the champion loaded. Whatever that PASS measured, it was not paged attention.
 
 **So the constant is still `256 entries` vs `head_dim=256`, unresolved**, and resolving it needs a model
 that clears the admission bar.
+
+---
+
+# Localisation: the damage is at the first token of the NEXT request's second chunk
+
+## The coordinate
+KV read back through the block table, request 1 vs request 2, bisected on N:
+
+| arm | first diverging N | earliest bad position |
+|---|---|---|
+| span 256 (TRIGGERS), ub=512 | 513 | **512** |
+| span 255 (CLEAN), ub=512 | 7935 | tail only — the benign per-request tail difference |
+| span 259 (TRIGGERS), ub=400 | 401 | **400** |
+| span 83 (CLEAN), ub=432 | 7427 | tail only |
+
+**The damage lands on the first token of the second prefill chunk, wherever that chunk starts.** Move the
+ubatch, the damage moves with it, one token exact, twice.
+
+⚠ **Not the block grid.** At `ub=400` the block boundaries are 384 and 448; both are clean and 400 is not.
+
+⚠ **A clean run also diverges at the tail.** "The caches differ" was never the signal — *how far back the
+difference reaches* is. Running only the trigger arm would have produced a finding true of clean runs too.
+
+⚠ **Request 1 answers correctly out of a cache that is already wrong.** Every output-based gate in this
+file is therefore weaker than it looks: they cannot see damage that has not surfaced yet.
+
+## Ruled out, each with a firing control
+| suspect | how it died |
+|---|---|
+| block allocation / freelist order | same 7427 prompt: `ub=400` (triggers) and `ub=432` (clean) both `CHECKOUT n=117 / RELEASE n=117` twice — **byte-identical** |
+| `max_blocks` / consumer stride | chunk ledger: `stride=125` in both requests |
+| `n_past`, resolved write slots | chunk ledger: `n_past`, `slot_first`, `slot_last`, `bt_len` **identical** for chunks 1-3 and the last chunk |
+| graph reuse | `DS4P_NO_GRAPH_REUSE=1` → still TRIGGERS (control: reuse ON still triggers; clean prompt stays clean) |
+| compute-buffer sizing | the `does not match expectation` warning is identical between clean and corrupt at every ubatch — it tracks the ubatch, not the defect |
+
+⚠ **Bookkeeping trap:** `request_id` is **0 for both requests** (one slot, id reused). Grouping the chunk
+ledger by rid compares a request against itself and looks completely normal. Split on `n_past` resetting
+to 0.
+
+## ★ What the model actually is
+`DS4P_KVSUM_LAYERS=32` (the probe previously printed **one** layer, so every earlier positional claim was
+a claim about layer 3):
+
+- **8 layers** have a paged tensor — 3, 7, 11, 15, 19, 23, 27, 31 — and **all 8 first diverge at N=513**.
+- **24 layers** return `-1`: no paged tensor at all.
+- `arch = qwen35`, `n_swa = 0`, `llama_memory_recurrent: 50.25 MiB, 32 layers`.
+
+**Ornith-9B is 8 full-attention layers and 24 recurrent layers** (Qwen3-Next shape: three linear-attention
+layers, then one attention layer). The non-paged layers are **not** SWA layers — `n_swa = 0`.
+
+⇒ The 24 recurrent layers carry state that is **not in the paged cache and has never been checksummed**.
+Layers 0-2 are recurrent and feed layer 3, the first paged layer and the first to show damage. Recurrent
+state entering chunk 2 wrong on request 2 would corrupt layer 3's K/V at position 512 and cascade — which
+is a route from a trigger at the end of request 1 to damage at the start of request 2 without any
+scheduler value changing.
+
+⚠ Connects to the existing scar *recurrent state is never rolled back* (found for speculation, guarded by
+refusing paged speculation at `n_rs_seq > 0`; the rollback itself was never fixed). Second implication of
+the same subsystem, first one in plain serving. **Not** asserted as the same bug — the speculation case
+needed rejected drafts and this one has none.
+
+⚠ The 88 `took the STATIC path` warnings all fire **before** the first request (line 209 vs 356) — graph
+construction, not per-batch fallback.
