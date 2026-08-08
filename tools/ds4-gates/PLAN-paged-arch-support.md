@@ -593,3 +593,39 @@ justification is not. If chosen as a safe-looking round number, part of this lan
 self-imposed. If measured, there is a low-headroom failure mode not yet met. ⚠ A 512k PASS at headroom
 1.05 with `-np 1` and one request is **the least demanding configuration of that rung** — not "512k works".
 Multi-slot at low headroom is untested.
+
+## ★ The 1M rung: reachable, and it is q8-vs-q8
+
+Back-solved from tonight's own init (`bytes_per_block = 8,388,608`):
+`2 × n_heads_kv × 64 × n_layers × ggml_row_size(type, 256)` ⇒ **n_heads_kv × n_layers = 128**, i.e. 16 KV
+heads over Ornith's **8 attention layers**. The pool covers those 8 only; the other 24 are recurrent and
+their entire state is 50.25 MiB, which moves nothing here.
+
+`ggml_row_size(q8_0, 256)` = 8 blocks × 34 B = **272 B** against f16's **512 B** — **53.1%**, not the
+nominal half.
+
+| context | f16 | q8_0 | q8_0 @ 1.25× headroom |
+|---|---|---|---|
+| 512k | 64.0 GiB | 34.0 GiB | 42.5 GiB |
+| **1M** | **128.0 GiB** — over budget at *any* headroom | **68.0 GiB** | **85.0 GiB — fits in 88.0** |
+
+⇒ **1M is reachable on this box at q8_0 banded paged KV**, with ~3 GiB to spare even at 1.25× headroom.
+It is **not** reachable at f16 at any headroom, and lowering headroom cannot fix that.
+
+⚠ **q8_0 paged is not plain `-ctk q8_0`.** The kernel rejects it unless banded:
+`"paged KV cache type not supported by the kernel (f16/bf16/f32, or q8_0 with LLAMA_BANDED_QUANT_KV)"`.
+The plan is **paged + q8_0 + `LLAMA_BANDED_QUANT_KV`**, and the unearned piece is exactly what the B4
+closure flagged: the kernel arcs passed, **end-to-end on a real model did not run**.
+
+⚠ **The static arm hits the same wall.** Same 8 layers, same head dim ⇒ static 1M at f16 is also 128 GiB,
+without even a headroom multiplier to blame. **So the top rung is q8-vs-q8**, and the bar (paged ≤ 1.0×
+static) is undefined until both arms are named q8_0.
+
+⇒ Without that clause, a future session runs paged at q8_0, compares it against an **f16 static number
+from the 256k table**, and reports a ratio that measures the KV quantisation rather than the paging —
+**two arms differing in more than the thing under test**, which is this lane's most repeated error and the
+exact shape of the defect-era comparisons.
+
+Provenance worth keeping: `common.cpp:1284` records that an earlier sizing budgeted 512 B/row against an
+actual 272 B/row and *"silently spent the context budget that quantising the KV cache was meant to buy
+back, which is the entire point of the feature."* That fight has already been had once.
