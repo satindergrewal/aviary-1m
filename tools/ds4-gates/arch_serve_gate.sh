@@ -19,6 +19,14 @@
 #
 #   build_attn_paged_or_null -> ggml_paged_attn_banded   20 archs, warns on the failure side
 #   build_attn_inp_kv_auto   -> ggml_paged_attn          11 archs, warns NEVER, in either arm
+#   ⚠ AND A THIRD, FOUND 2026-08-09 BY SWEEPING EVERY MODEL FILE: inkling.cpp calls
+#     build_attn_inp_kv_paged() then ggml_paged_attn_banded DIRECTLY, bypassing both helpers. It
+#     emitted NO marker, so this gate would have printed `DS4P-CONSUME banded=0 auto=0` and VOIDed
+#     Inkling with "no graph consumed the paged context" -- FALSE; that path pages correctly.
+#     ⚠⚠ That is the IDENTICAL line that meant a REAL defect on qwen35moe the same day. Same reading,
+#     opposite meanings. A marker that does not cover every funnel collapses a working architecture and
+#     a broken one into one log line. Marker added to inkling; if a FOURTH route ever appears, this
+#     gate reports it as unwired and is wrong, so the enumeration above is load-bearing.
 #
 # So the original rule would have FALSE-VOIDed all eleven auto-path architectures as unwired while
 # they were paging perfectly well. Reading "paged is live" out of a warning count is inferring a
