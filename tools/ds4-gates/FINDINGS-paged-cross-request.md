@@ -999,3 +999,34 @@ the fix cannot work by correcting the index — it works by overwriting garbage.
 
 ⇒ Status: **root-caused, mechanism derived, verified at 8k (8/8 + 5/5 pre-existing grids) and at 225k
 (430 chunks, needle PASS), and faster than static on all three measures.**
+
+## The WHEN sentence: why 256, and why no arithmetic theory ever fit
+
+Forensics on the garbage value that reached `s_copy`:
+
+```
+978561024 = 0x3A53A800    bytes LE: 00 A8 53 3A
+  as f32:      0.000807404518      <- a plausible activation magnitude
+  as f16 pair: -0.03125, 0.79053   <- two plausible f16 activations
+  high nibble: 0x3                 <- NOT a pointer (heap pointers here log as 0xb5…, 0x7d…)
+```
+
+**It is float data, not an index and not a pointer** — one f32 at ~8.07e-4, or two f16s. Exactly what an
+attention or FFN intermediate looks like.
+
+`s_copy` is a 1-element i32 tensor living in the graph's **compute buffer**. The allocator packs that
+buffer by tensor lifetime and shape, so *which bytes precede `s_copy`'s slot* is a function of the batch
+shapes in the graph — and the final prefill chunk is the one shape that varies independently of everything
+else. When the previous request's final chunk spans ≥ 256 entries, the resulting layout leaves **leftover
+activation floats** where the next request's `s_copy` will be read.
+
+⇒ **Full chain, end to end, every link measured or derived:**
+oversized final chunk → compute-buffer layout → leftover activation floats under `s_copy` → read as a row
+index into a 1-row state tensor → garbage recurrent state from request 2 onward, permanently.
+
+⇒ **This retires the "why 256" question rather than answering it.** There is no structure in the number:
+**the boundary is where the allocator's packing changes, not a property of 256.** It would be a different
+value on a different model, a different backend, or a different graph. That is why every arithmetic theory
+built on it failed — block counts, remainders, brackets, `head_dim`, `n_ctx` padding — **they were looking
+for meaning in an allocator artefact.** The threshold was real, reproducible to one token, and
+*not about arithmetic at all.*
