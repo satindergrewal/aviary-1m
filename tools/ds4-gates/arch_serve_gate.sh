@@ -61,6 +61,12 @@ fi
 shift 2
 EXTRA=("$@")
 
+# ⚠ DS4P_RSLOG RIDES ON THE PAGED ARM UNCONDITIONALLY. It is the only positive marker that the
+# recurrent input is re-written per batch, and the defect it detects is silent in output on request 1
+# by construction. Left opt-in it would be off on every future arch row, which is how the class went
+# undetected across 94 result files. On the paged arm only, so the static arm's counters are untouched.
+AG_ENV_PAGED="${AG_ENV_PAGED:-} DS4P_RSLOG=1"
+
 [ -f "$MODEL" ] || { echo "missing model: $(basename "$MODEL")" >&2; exit 2; }
 
 WT=${WT:-$HOME/Documents/GitHub/llama.cpp-ds4ports}
@@ -109,7 +115,16 @@ start() { # $1 = static|paged   -> PORT, SRVPID
     # gate would have VOIDed a working arch because its own probe was filtered out. Caught only
     # because the marker was verified for PRESENCE on a known-good model before being trusted.
     [ -n "${AG_MMPROJ:-}" ] && flags+=(--mmproj "$AG_MMPROJ" --jinja)
-    env ${AG_ENV:-} "$SRV" -m "$MODEL" -ngl 99 -c "$CTX" -np 1 -b 512 -ub 512 \
+    # ⚠ AG_ENV_PAGED IS APPLIED TO THE PAGED ARM ONLY, AND THAT ASYMMETRY IS THE POINT.
+    # The sensitivity control below poisons `s_copy`, which lives in llm_graph_input_mem_hybrid::
+    # set_input -- a function a hybrid model runs in BOTH arms. Poisoned through AG_ENV it would
+    # corrupt static and paged identically, they would AGREE, and the control would report the leg as
+    # INSENSITIVE while actually proving it works. A control that fails closed by accident is worse
+    # than no control. DS4P_RSLOG rides here too so the static arm's counters stay untouched.
+    local armenv="${AG_ENV:-}"
+    [ "$1" = paged ] && armenv="$armenv ${AG_ENV_PAGED:-}"
+    # shellcheck disable=SC2086
+    env $armenv "$SRV" -m "$MODEL" -ngl 99 -c "$CTX" -np 1 -b 512 -ub 512 \
         --port "$PORT" --no-warmup -lv 5 "${flags[@]}" "${EXTRA[@]}" > "$LOGDIR/$1.log" 2>&1 &
     SRVPID=$!
     local i
@@ -203,16 +218,58 @@ try: print(json.load(sys.stdin)['choices'][0]['message']['content'].replace(chr(
 except Exception: print('MALFORMED')"
         return
     fi
-    python3 -c "
-import json
-print(json.dumps({'prompt': '''$PROMPT''', 'n_predict': $NPRED, 'temperature': 0,
-                  'seed': 1, 'cache_prompt': False}))" > "$LOGDIR/req.json"
-    curl -s --max-time 600 -X POST "http://127.0.0.1:$PORT/completion" \
+    ask_one "$PROMPT" "$NPRED"
+}
+
+# ★ ask_one -- one raw completion, prompt and length passed in. Split out of ask() so the sequence
+# leg can send DIFFERENT prompts without duplicating the request/parse code. `cache_prompt: False` is
+# kept: the leg tests carried STATE, not the prompt cache, and a cache hit would skip the prefill
+# whose chunk-2 handoff is the thing under test.
+ask_one() { # $1 prompt  $2 n_predict
+    AO_P="$1" AO_N="$2" python3 -c "
+import json, os
+print(json.dumps({'prompt': os.environ['AO_P'], 'n_predict': int(os.environ['AO_N']),
+                  'temperature': 0, 'seed': 1, 'cache_prompt': False}))" > "$LOGDIR/req.json"
+    curl -s --max-time 900 -X POST "http://127.0.0.1:$PORT/completion" \
         -H 'Content-Type: application/json' -d @"$LOGDIR/req.json" \
       | python3 -c "
 import json,sys
 try: print(json.load(sys.stdin).get('content','').replace(chr(10),' '))
 except Exception: print('MALFORMED')"
+}
+
+# ★★ THE SEQUENCE LEG -- three requests to ONE server, LONG, SHORT, LONG.
+#
+# WHY THIS EXISTS. Every one of the 94 result files this gate has produced is a ONE-REQUEST verdict
+# against a FRESH server, and the two defects this lane actually found are both invisible in that
+# shape:
+#
+#   cross-request corruption  request 1 is CLEAN (the recurrent buffer is zero on fresh allocation);
+#                             it first bites at request 2 / chunk 2, the first batch needing carried
+#                             state
+#   prompt_clear crash        needs `long, short, long` -- thirteen gates missed it because none ever
+#                             sent a SHORT prompt after a LONG one
+#
+# So a matrix of single-request greens cannot see either, on any arch, and re-running it on a fixed
+# binary would produce fresh greens that still could not see them. The leg is the fix for the harness,
+# not for the code.
+#
+# ⚠ THE PROMPTS MUST DIFFER IN LENGTH AND IN CONTENT. Sending one prompt three times re-tests the
+# prompt cache; sending three prompts of equal length never builds the short-after-long ledger state.
+# Both mistakes have been made in this lane, the second of them three hours after writing down the law.
+#
+# ⚠ AND THEY MUST FIT IN -c $CTX WITH ROOM FOR n_predict. Sized at ~1.8k and ~2.6k tokens against the
+# 4096 default: several 512-token chunks each, so the chunk-2 handoff is exercised, with headroom that
+# does not depend on a tokenizer this gate must work across 15 architectures. A prompt that overflows
+# the context returns a server error, and an error compared against an error MATCHES.
+SEQ_LONG1="${AG_SEQ_LONG1:-$(python3 -c "print(('The following is a list of numbered facts about geography. ' + ' '.join(f'Fact {i}: city number {i} lies on a river.' for i in range(1, 150))) + ' Question: the capital of France is')")}"
+SEQ_SHORT="${AG_SEQ_SHORT:-The capital of Japan is}"
+SEQ_LONG2="${AG_SEQ_LONG2:-$(python3 -c "print(('Below is a numbered inventory of laboratory equipment. ' + ' '.join(f'Item {i}: beaker {i} holds {i*3} millilitres.' for i in range(1, 190))) + ' Question: the capital of Italy is')")}"
+
+ask_seq() { # echoes exactly 3 lines, one per request, in order
+    ask_one "$SEQ_LONG1" "$NPRED"
+    ask_one "$SEQ_SHORT" "$NPRED"
+    ask_one "$SEQ_LONG2" "$NPRED"
 }
 
 # counts, kept SEPARATE. Lumping them hides which failure mode fired: 'no paged context at all' and
@@ -244,6 +301,16 @@ c_pool()  { post_slice "$1" | grep -ac "DS4P-CHECKOUT"; }
 # gate is even ENTITLED to run.
 c_band()  { post_slice "$1" | grep -ac "DS4P-CONSUME banded"; }
 c_auto()  { post_slice "$1" | grep -ac "DS4P-CONSUME auto"; }
+# ★ THE REGRESSION ASSERTION FOR THE 2026-08-08 CORRUPTION FIX, and the hybrid detector in one count.
+# `DS4P-RS who=hybrid` is emitted once per call of llm_graph_input_mem_hybrid::set_input, i.e. once per
+# serving batch on a hybrid arch. The defect made that function return before the recurrent write, so
+# the write executed EXACTLY ONCE -- at graph construction, on the 2-token warmup batch -- for the whole
+# server lifetime. The probe sits OUTSIDE the `if (s_copy)` guard on purpose, so `s_copy=<null>` (tensor
+# absent) and silence (never called) are different lines rather than the same nothing.
+#   0 post-slice  -> this arch is not hybrid, or the hybrid path is not taken
+#   1 post-slice  -> ⚠ THE DEFECT IS BACK: one write, then frozen indices for every later batch
+#   >1            -> the recurrent input is refreshed per batch, which is the fixed behaviour
+c_rs()    { post_slice "$1" | grep -ac "DS4P-RS who=hybrid"; }
 # startup-only counts, reported separately so the contamination stays VISIBLE rather than deleted
 c_nopg_pre() { local a b; a=$(grep -ac "took the STATIC path -- no paged context" "$1"); b=$(c_nopg "$1"); echo $((a-b)); }
 
@@ -255,6 +322,7 @@ start static; rc_s=$?
 [ "$rc_s" -eq 3 ] && { echo "log: $OUT"; exit 3; }
 [ "$rc_s" -ne 0 ] && exit 1
 S_OUT=$(ask)
+S_SEQ=$(ask_seq)
 kill "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""; sleep 2
 
 # ⚠ THE ARCH IS READ FROM THE LOADER, NOT THE FILENAME. A repo named "...starcoder..." can hold a
@@ -336,6 +404,7 @@ if [ "$rc_p" -eq 3 ]; then
 fi
 [ "$rc_p" -ne 0 ] && exit 1
 P_OUT=$(ask)
+P_SEQ=$(ask_seq)
 kill "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""
 
 P_ARCH=$(grep -m1 "print_info: arch" "$LOGDIR/paged.log" | sed 's/.*= *//' | tr -d ' \r')
@@ -383,6 +452,101 @@ if [ "$S_OUT" != "$P_OUT" ]; then
     rc=1
 fi
 
+# ---------------- sequence leg: long, short, long, on ONE server ----------------
+P_RS=$(c_rs "$LOGDIR/paged.log")
+HYBRID=no; [ "${P_RS:-0}" -gt 0 ] && HYBRID=yes
+echo "  multi-request leg: hybrid=$HYBRID  recurrent writes after first request=$P_RS" | tee -a "$OUT"
+
+# ⚠ THE REGRESSION ASSERTION GOES BEFORE THE OUTPUT COMPARISON, because it fires on runs whose output
+# still matches. That is the whole character of the defect: request 1 is clean, so a gate that only
+# reads text calls it a pass. Exactly one write means the function ran once and returned early ever
+# after -- the 2026-08-08 defect verbatim.
+if [ "$HYBRID" = yes ] && [ "$P_RS" -eq 1 ]; then
+    echo "*** FAIL: the recurrent input was written ONCE across every serving batch. ***" | tee -a "$OUT"
+    echo "    That is the 2026-08-08 corruption regressing: llm_graph_input_mem_hybrid::set_input is" | tee -a "$OUT"
+    echo "    returning before its recurrent block, so s_copy holds whatever the warmup batch left" | tee -a "$OUT"
+    echo "    there. Output may still match -- request 1 is clean because the buffer starts zeroed." | tee -a "$OUT"
+    rc=1
+fi
+
+seq_line() { printf '%s\n' "$2" | sed -n "$1p"; }
+
+# ⚠⚠ THE STATIC SEQUENCE IS THE ARBITER HERE TOO, AND IT CAN BE DEGENERATE FOR REASONS THAT HAVE
+# NOTHING TO DO WITH PAGING. These prompts are ~2k tokens; overflow the context, hit a template
+# problem, or trip a refusal and the server returns an error or an empty string -- IN BOTH ARMS. Two
+# errors compare EQUAL and the leg prints three green rows. Same trap the single-request reference
+# already guards, one function further down, which is how it would have been missed.
+for i in 1 2 3; do
+    read -r L D <<EOF
+$(seq_line "$i" "$S_SEQ" | python3 -c "
+import sys
+s = sys.stdin.read()
+print(sum(c.isalpha() for c in s), len(set(s.strip())))")
+EOF
+    if [ "${L:-0}" -lt 3 ] || [ "${D:-0}" -lt 4 ]; then
+        echo "VOID: static sequence request $i is degenerate -- [$(seq_line "$i" "$S_SEQ")]" | tee -a "$OUT"
+        echo "  ($L letters, $D distinct chars). The multi-request leg has no arbiter, and a paged arm" | tee -a "$OUT"
+        echo "  returning the same nothing would compare EQUAL. Fix the vehicle or shrink the prompts" | tee -a "$OUT"
+        echo "  (AG_SEQ_LONG1/AG_SEQ_LONG2); this says nothing about paging either way." | tee -a "$OUT"
+        echo "log: $OUT"; exit 2
+    fi
+done
+
+SEQ_DIVERGED=0
+for i in 1 2 3; do
+    a=$(seq_line "$i" "$S_SEQ"); b=$(seq_line "$i" "$P_SEQ")
+    lbl=$([ "$i" = 2 ] && echo "short" || echo "long")
+    if [ "$a" != "$b" ]; then
+        SEQ_DIVERGED=1
+        echo "*** FAIL: request $i of 3 ($lbl) DIVERGED between static and paged. ***" | tee -a "$OUT"
+        echo "    static [$a]" | tee -a "$OUT"
+        echo "    paged  [$b]" | tee -a "$OUT"
+        rc=1
+    else
+        printf '    req %d/3 %-5s match  [%s]\n' "$i" "$lbl" "$a" | tee -a "$OUT"
+    fi
+done
+
+# ★★ SENSITIVITY CONTROL. Without it a green here is unreadable: it means either "state is carried
+# correctly" or "this leg cannot see state at all", and those are the same picture. DS4P_RSPOISON
+# overwrites s_copy AFTER the normal write, so a leg that can see recurrent state MUST diverge.
+#
+# ⚠ PAGED ARM ONLY. The poison lives in a function a hybrid model runs in BOTH arms; applied to both,
+# the two would corrupt identically, AGREE, and the control would report itself insensitive while
+# actually working. Asymmetry is what makes it a control.
+#
+# ⚠ Runs only on hybrid archs -- there is no recurrent state to poison anywhere else, so on a
+# non-hybrid arch the leg's power is UNMEASURED and the verdict says so rather than implying it.
+if [ "$HYBRID" = yes ] && [ -z "${AG_NO_CONTROL:-}" ] && [ "$SEQ_DIVERGED" -eq 0 ]; then
+    echo "  sensitivity control: re-running the PAGED arm with DS4P_RSPOISON=0xDEADBEEF ..." | tee -a "$OUT"
+    # ⚠ the control reuses start(), which writes $LOGDIR/paged.log. Keep the real arm's log, or every
+    # count printed above becomes unreproducible from the file that is still sitting there afterwards.
+    cp "$LOGDIR/paged.log" "$LOGDIR/paged-main.log" 2>/dev/null
+    AG_ENV_PAGED="$AG_ENV_PAGED DS4P_RSPOISON=0xDEADBEEF"
+    if start paged; then
+        C_OUT=$(ask); C_SEQ=$(ask_seq)
+        kill "$SRVPID" 2>/dev/null; wait "$SRVPID" 2>/dev/null; SRVPID=""
+        CTRL_FIRED=0
+        [ "$C_OUT" != "$S_OUT" ] && CTRL_FIRED=1
+        for i in 1 2 3; do
+            [ "$(seq_line "$i" "$C_SEQ")" != "$(seq_line "$i" "$S_SEQ")" ] && CTRL_FIRED=1
+        done
+        if [ "$CTRL_FIRED" -eq 1 ]; then
+            echo "    CONTROL FIRED -- poisoned recurrent state produced different text, so the leg" | tee -a "$OUT"
+            echo "    above is sensitive to recurrent state and its match is a measurement." | tee -a "$OUT"
+        else
+            echo "VOID: the poison control did NOT fire. Corrupting s_copy on the paged arm changed" | tee -a "$OUT"
+            echo "  nothing in the output, so this leg cannot see recurrent state and its green says" | tee -a "$OUT"
+            echo "  nothing about carried state. Do not record this arch as multi-request verified." | tee -a "$OUT"
+            echo "    static  [$S_OUT]" | tee -a "$OUT"
+            echo "    poisoned[$C_OUT]" | tee -a "$OUT"
+            rc=2
+        fi
+    else
+        echo "  ⚠ control arm did not serve; sensitivity UNPROVEN for this row." | tee -a "$OUT"
+    fi
+fi
+
 if [ "$FUNNEL" = banded ] || [ "$FUNNEL" = mixed ]; then
     # ⚠ ONLY MEANINGFUL ON THIS FUNNEL, and only after the static arm proved the counter can move.
     if [ "${S_NOPG:-0}" -eq 0 ]; then
@@ -407,6 +571,16 @@ if [ "$rc" -eq 0 ]; then
         echo "  ⚠ WEAKER RESULT THAN THE BANDED FUNNEL. The auto path has no per-layer fallback and" | tee -a "$OUT"
         echo "  emits no static-path warning, so this gate CANNOT prove every layer was carried. It" | tee -a "$OUT"
         echo "  proves paged ran ($P_CONS consume events) and the text matches. Record it that way." | tee -a "$OUT"
+    fi
+    if [ "$HYBRID" = yes ]; then
+        echo "  multi-request: 3 requests (long, short, long) on ONE server all match, recurrent input" | tee -a "$OUT"
+        echo "  re-written $P_RS times after the first request, and a poisoned control proved the leg" | tee -a "$OUT"
+        echo "  can see recurrent state. This row is NOT a single-request verdict." | tee -a "$OUT"
+    else
+        echo "  multi-request: 3 requests (long, short, long) on ONE server all match. ⚠ NON-HYBRID, so" | tee -a "$OUT"
+        echo "  there is no recurrent state to poison and the leg's POWER IS UNMEASURED here: it covers" | tee -a "$OUT"
+        echo "  the short-after-long ledger shape, and nothing proves it would catch a subtler carry" | tee -a "$OUT"
+        echo "  defect on this arch. Weaker than the hybrid rows, on purpose, and recorded as such." | tee -a "$OUT"
     fi
     echo "  ⚠ SCOPE: short prompt at -c $CTX. Says the arch is WIRED and CORRECT at small context." | tee -a "$OUT"
     echo "  Says nothing about long context, nothing about speed, and the ~50k intermittent paged" | tee -a "$OUT"
