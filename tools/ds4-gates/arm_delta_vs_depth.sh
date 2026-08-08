@@ -129,3 +129,9 @@ echo "log: $OUT" | tee -a "$OUT"
 echo "READ IT: ARM_DELTA flat across depth -> a fixed numerical offset; the tie threshold can stay fixed."
 echo "         ARM_DELTA growing          -> the 256k-1M cross-arm gate needs a DEPTH-SCALED threshold,"
 echo "                                       and paged correctness at depth is a real open question."
+
+# ⚠ SCRUB ON EXIT. Both these scripts print `log: $OUT` -- an ABSOLUTE path containing the home
+# directory -- into the result file they then commit. They SOURCED _no_abs_paths.sh and never CALLED
+# it, so the include looked like protection and did nothing. Caught by privacy_guard.sh refusing the
+# commit; the arch gate has always called it from its cleanup trap. Sourcing is not calling.
+scrub_abs_paths "$OUT" 2>/dev/null || true

@@ -1,0 +1,7 @@
+arm-delta vs depth: Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
+tip: ae9e496e8  depths: 1500 6000 24000 96000
+metric: logprob of STATIC's top-1 token, read in BOTH arms. Text equality is not the metric.
+   depth   n_eval  static_top1  paged_top1   static_gap  ARM_DELTA  flip
+    1500     1440  ' on'        ' on'           0.16931    0.00572  -
+    6000     6398  ' on'        ' on'           0.18473   -0.00169  -
+   24000    27387  ' located'   ' located'      0.50037   -0.03740  -

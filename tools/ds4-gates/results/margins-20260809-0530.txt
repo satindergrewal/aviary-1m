@@ -1,0 +1,19 @@
+margin distribution: Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf  n_generate=300  prompt~6000tok  
+tip: ae9e496e8
+  positions measured: 300   prompt_tokens=6403
+  margin percentiles: p1=3.53366 p5=6.13638 p25=10.76346 median=12.08624
+
+  PREDICTED FLIP RATE -- fraction of positions whose top-2 margin is under a given delta.
+  Read as: an arm-to-arm delta of D flips this share of tokens, i.e. a byte-equality gate
+  over N generated tokens false-fails with probability ~ 1-(1-rate)^N.
+    delta 0.002  ->    0/300 =  0.00%   P(>=1 flip in 200 tok)=  0.0%   in 2000 tok=  0.0%
+    delta 0.005  ->    0/300 =  0.00%   P(>=1 flip in 200 tok)=  0.0%   in 2000 tok=  0.0%
+    delta 0.02   ->    0/300 =  0.00%   P(>=1 flip in 200 tok)=  0.0%   in 2000 tok=  0.0%
+    delta 0.05   ->    0/300 =  0.00%   P(>=1 flip in 200 tok)=  0.0%   in 2000 tok=  0.0%
+    delta 0.168  ->    0/300 =  0.00%   P(>=1 flip in 200 tok)=  0.0%   in 2000 tok=  0.0%
+    delta 0.35   ->    0/300 =  0.00%   P(>=1 flip in 200 tok)=  0.0%   in 2000 tok=  0.0%
+
+  ⚠ SCOPE: one arch, one quant, one prompt, greedy. The margin distribution is a property of the
+  MODEL at these positions; the delta is a property of the KERNEL PAIR. This file measures only
+  the first. Combining them predicts a rate -- it does not measure one.
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/margins-20260809-0530.txt

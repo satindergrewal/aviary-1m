@@ -66,7 +66,7 @@ import json, os
 n = int(int(os.environ['D']) / 15.4)
 p = ('The following is a list of numbered facts about geography. ' +
      ' '.join(f'Fact {i}: city number {i} lies on a river.' for i in range(1, max(n,2))) +
-     ' Question: describe the river system of Europe in detail.')
+     ' \\n\\nEssay. The rivers of Europe have shaped its cities in ways that')
 print(json.dumps({'prompt': p, 'n_predict': int(os.environ['NP']), 'temperature': 0,
                   'seed': 1, 'cache_prompt': False, 'n_probs': 2}))" > "$T/md.json"
 
@@ -86,8 +86,40 @@ for e in cp:
 if not margins:
     print("NO MARGINS -- the run produced no top_logprobs. Do not read this as 'no near-ties'.")
     raise SystemExit(2)
+# ⚠⚠ REFUSE, DO NOT REPORT. The first run of this script returned ONE position -- the model emitted EOS
+# immediately on a raw completion -- and the table below duly printed "0.00% flip rate" at every delta,
+# from n=1. A reassuring, precise, meaningless answer that LOOKS like the result I was hoping for. A
+# percentile from a handful of samples is not a distribution, and a flip rate from one position is not
+# a rate. Same class as every other trap tonight: a degenerate result rendering as a clean one.
+MIN_POS = 50
+if len(margins) < MIN_POS:
+    print(f"REFUSING: only {len(margins)} position(s) measured, need >= {MIN_POS}.")
+    print(f"  stop_type={d.get('stop_type')!r} tokens_predicted={d.get('tokens_predicted')}")
+    print("  A flip RATE needs a distribution. Fix the prompt so generation continues (a base model")
+    print("  on a raw completion will emit EOS immediately if the prompt reads as finished), or pass")
+    print("  a chat template. This says NOTHING about near-ties either way.")
+    raise SystemExit(2)
+# ⚠⚠ AND THE SECOND DEGENERACY, ONE LEVEL UP FROM THE FIRST. After fixing "only 1 position", the probe
+# happily measured 300 -- of a ROTE LIST CONTINUATION ("Fact 391: city number 391 lies on a river."),
+# 300 tokens with **20 distinct values**, distinct ratio 0.07. Margins came out 3.5-12 logprob and the
+# flip rate printed 0.00% at every delta. True, and about the FILLER, not about text: a model copying a
+# pattern is maximally confident, so the distribution contains no near-ties BY CONSTRUCTION.
+# The qwen3vlmoe flip happened at the first genuinely uncertain position after a question -- exactly the
+# kind this sample had none of. Fixing "too few samples" produced "many samples of a trivial task".
+toks = [e.get('token') for e in cp]
+ratio = len(set(toks)) / max(len(toks), 1)
+MIN_RATIO = 0.20
+if ratio < MIN_RATIO:
+    print(f"REFUSING: generated text is ROTE -- {len(set(toks))} distinct of {len(toks)} tokens "
+          f"(ratio {ratio:.2f} < {MIN_RATIO}).")
+    print(f"  sample: {d.get('content','')[:90]!r}")
+    print("  A model copying a pattern is maximally confident, so this distribution has no near-ties")
+    print("  BY CONSTRUCTION and its 0% flip rate is about the PROMPT, not about the kernels. Use a")
+    print("  prompt that generates varied prose.")
+    raise SystemExit(2)
 margins.sort()
 n = len(margins)
+print(f"  distinct-token ratio: {ratio:.2f} ({len(set(toks))}/{len(toks)}) -- above the {MIN_RATIO} floor")
 print(f"  positions measured: {n}   prompt_tokens={d.get('tokens_evaluated')}")
 print(f"  margin percentiles: p1={margins[n//100]:.5f} p5={margins[n//20]:.5f} "
       f"p25={margins[n//4]:.5f} median={margins[n//2]:.5f}")
@@ -109,3 +141,9 @@ print("  MODEL at these positions; the delta is a property of the KERNEL PAIR. T
 print("  the first. Combining them predicts a rate -- it does not measure one.")
 PY
 echo "log: $OUT" | tee -a "$OUT"
+
+# ⚠ SCRUB ON EXIT. Both these scripts print `log: $OUT` -- an ABSOLUTE path containing the home
+# directory -- into the result file they then commit. They SOURCED _no_abs_paths.sh and never CALLED
+# it, so the include looked like protection and did nothing. Caught by privacy_guard.sh refusing the
+# commit; the arch gate has always called it from its cleanup trap. Sourcing is not calling.
+scrub_abs_paths "$OUT" 2>/dev/null || true
