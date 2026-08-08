@@ -957,3 +957,45 @@ could not have appeared, and the output failure it was paired with reproduces on
 ⇒ What *is* real: the shape contract fires **64** times on this arch (two head dims, 512 global vs 256
 SWA, against a pool allocated once at 512) and degrades to the static path rather than corrupting. That is
 a loud, principled refusal working as designed — the opposite of a silent decline.
+
+---
+
+# ★★★★ MECHANISM DERIVED: the buffer held an out-of-range row index, and only on the trigger geometry
+
+`DS4P_RSPRE` reads `s_copy` **immediately before** `set_input` writes it. Both geometries, two requests
+each, 63 probe lines apiece:
+
+| arm | non-zero pre-write values |
+|---|---|
+| span 256 (**TRIGGER**) | **one**, at probe line 33: `ntok=512 n_rs=1 pre= 978561024` |
+| span 255 (CLEAN) | **none** — all 63 are 0 |
+
+Probe line 33 of 63 = 1 build line + 31 batches of request 1 + **the first batch of request 2** — exactly
+where the defect bites, and the clean prompt never produces it.
+
+## The complete chain
+1. `set_input` returned early under paging ⇒ `s_copy` was **never written** for any serving batch.
+2. Request 1's buffer holds 0 (fresh allocation) ⇒ **request 1 is correct**.
+3. At request 2's first batch the buffer holds **978,561,024** — allocator garbage — **and only when the
+   previous request's chunk geometry left it that way. That is the span-256 trigger.**
+4. `s_copy` is a **row index** consumed by `get_state_rows` into a **1-row** state tensor. 978 million is
+   not a row ⇒ garbage recurrent state ⇒ corrupted output from request 2 onward, permanently.
+5. The fix writes 0 on every batch, so the garbage never reaches the graph.
+
+## It accounts for every property that survived fifteen eliminated suspects
+- **request 1 clean, request 2+ wrong** — the buffer is zero on first allocation and dirty afterwards.
+- **sticky for the server's life** — a wrong state row poisons the carry, and nothing restores it.
+- **survives `seq_rm`** — nothing re-reads that buffer; the ledger clear cannot touch it.
+- **ignores the block grid** (384/448 clean, 400 not) — `s_copy` is not block-addressed.
+- **first bites at chunk 2, at position == ubatch** — chunk 1 starts from a legitimately zeroed state, so
+  a bad row index is harmless there; only chunk 2 onward depends on the carried row.
+- **the span-256 threshold** — whether that buffer is dirty at request 2's first batch is a function of the
+  previous request's allocation pattern, which is a function of its chunk geometry.
+
+⚠ The falsifier was registered in advance: *"pre-write zero everywhere ⇒ my story is wrong and the fix
+works for a reason I have not identified."* It came back **non-zero, trigger arm only, at the predicted
+batch**. The written value is provably constant (`0` in all 94 recorded batches, `n_rs=1`, `head=0`), so
+the fix cannot work by correcting the index — it works by overwriting garbage.
+
+⇒ Status: **root-caused, mechanism derived, verified at 8k (8/8 + 5/5 pre-existing grids) and at 225k
+(430 chunks, needle PASS), and faster than static on all three measures.**
