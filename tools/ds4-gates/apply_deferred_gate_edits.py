@@ -88,9 +88,27 @@ echo "tip: $(gate_tip_stamp "$WT")  ctx=$CTX'''),
 #
 # ⇒ Per-run directory keyed by ctx and time, plus a `latest` symlink so anything reaching for the
 #   old fixed path still finds the most recent run.
-D=${CLAUDE_JOB_DIR:-/tmp}/parity/c${CTX}-$(date +%Y%m%d-%H%M%S); mkdir -p "$D"
-ln -sfn "$D" "${CLAUDE_JOB_DIR:-/tmp}/parity/latest" 2>/dev/null
+#
+# ⚠⚠⚠ AND THIS EDIT NEARLY DISABLED THE ONE-SERVER-AT-A-TIME LOCK. `LOCK=$D/gpu.lock` sits at :82,
+# THIRTEEN LINES BELOW THIS ONE. Making $D unique per invocation would give two concurrent gate runs
+# their OWN lock directory each, so both would acquire it and both would start a server on the same
+# GPU -- mutual exclusion gone, silently, and the symptom would be two slow arms nobody could
+# attribute. **Guard-for-A-disables-B: an edit for evidence preservation switching off contention
+# control, in the same file, in the same change.** That is a ★★★ class in this lane with three
+# prior instances, and it was caught by reading the neighbourhood of the anchor rather than the
+# anchor. ⇒ DPARENT is the FIXED path and the lock stays on it (edit E); only the run dir moves.
+DPARENT=${CLAUDE_JOB_DIR:-/tmp}/parity; mkdir -p "$DPARENT"
+D=$DPARENT/c${CTX}-$(date +%Y%m%d-%H%M%S); mkdir -p "$D"
+ln -sfn "$D" "$DPARENT/latest" 2>/dev/null
 echo "  run dir: .../parity/$(basename "$D")   (previous runs are no longer overwritten)"'''),
+
+    # ---------------------------------------------------------------- E
+    ("E: pin gpu.lock to the FIXED parent -- D is now per-run (pairs with D)",
+     '''LOCK=$D/gpu.lock''',
+     '''# ⚠⚠ THE LOCK MUST NOT LIVE UNDER THE PER-RUN $D. It is what makes concurrent invocations
+# exclude each other, so it has to be at a path they SHARE. When $D became per-run (edit D) this
+# line would have handed every invocation its own lock and let them all run at once.
+LOCK=$DPARENT/gpu.lock'''),
 ]
 
 
