@@ -42,7 +42,10 @@ FILL=${LC_FILL:-14000}      # approximate prompt tokens
 LOGDIR=${CLAUDE_JOB_DIR:-/tmp}/longctx
 OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/long-context-$(date +%Y%m%d-%H%M).txt
 mkdir -p "$LOGDIR" "$(dirname "$OUT")"
-echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  ctx=$CTX  fill~${FILL}tok" | tee "$OUT"
+# ⚠ STAMP THE KERNEL SELECTORS. block_size and DS4P_METAL_CHAMP decide WHICH paged kernel runs -- and
+# on some geometries whether one runs at all (head_dim 256 at bs=64 without the champion refuses every
+# layer). A result file that does not name them cannot be read years later, or an hour later.
+echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  ctx=$CTX  fill~${FILL}tok  block=${LC_BLOCK:-32}  champ=${DS4P_METAL_CHAMP:-0}  pool=auto-fit" | tee "$OUT"
 # ⚠ RECORD THE VEHICLE. This header used to print tip, ctx and fill and NOT the model, so every result
 # file was silent about what it measured -- recoverable only by reading the script's default at the
 # time, or the server log if it still existed. On 2026-08-09 that mattered: `qwen35moe` turned out
@@ -144,7 +147,26 @@ except Exception: print(-1)')
 echo "--- STATIC (control) ---" | tee -a "$OUT"
 probe static ""
 echo "--- PAGED ---" | tee -a "$OUT"
-probe paged "--kv-paged --kv-block-size 32 -ngpub 4096 -ncpub 512"
+# ⚠⚠ `-ngpub 4096` WAS HARDCODED HERE AND CAPPED THIS GATE AT 131,072 TOKENS. 4096 blocks x
+# block_size 32 = 131,072 -- so at 256k the pool physically could not hold the context, the needle was
+# lost, and the gate printed a paging DEFECT for a capacity failure of its own making. An explicit
+# `-ngpub` also disables the auto-fit governor entirely, which is what `LLAMA_PAGED_POOL_HEADROOM`
+# exists to tune: setting the headroom while passing `-ngpub` changes nothing at all.
+# ⇒ No explicit pool size. Auto-fit sizes it from `-c`, exactly as paged_parity_gate.sh does.
+# ⚠ The block size stays 32 and the champion stays OFF **on purpose**: this gate answers CORRECTNESS
+#   (needle found / not found), not speed, and the scalar path at bs=32 is a legitimate and different
+#   kernel to cover. LC_BLOCK / DS4P_METAL_CHAMP override it; both are stamped in the header so a
+#   result can never be read against the wrong kernel.
+probe paged "--kv-paged --kv-block-size ${LC_BLOCK:-32}"
+
+# ⚠⚠ AND THE ARM MUST PROVE IT PAGED. `initializing paged KV cache` above proves the POOL WAS BUILT
+# and nothing else. On 2026-08-09 that exact distinction let paged_parity_gate report 4.5 hours of
+# "parity" from an arm where every attention layer had been refused and silently fell back to static.
+# Allocation is not consumption -- LAW 6 in _gate_common.sh, using the engine's own WARN-level check.
+if command -v gate_assert_paged_consumed >/dev/null 2>&1; then
+    gate_assert_paged_consumed "$LOGDIR/paged.log" "paged arm" "$(gate_n_predict 2>/dev/null || echo 512)" | tee -a "$OUT"
+    [ "${PIPESTATUS[0]}" = "1" ] && { echo "  ⇒ every needle result above is a STATIC result. Not a paging verdict." | tee -a "$OUT"; fails=$((fails+1)); }
+fi
 
 echo "-----" | tee -a "$OUT"
 # ⚠ VERIFY THE PROMPT WAS ACTUALLY LONG. A truncated or rejected prompt retrieves nothing and looks

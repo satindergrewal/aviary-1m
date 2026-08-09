@@ -213,3 +213,49 @@ gate_run_capped() { # $1 = command, $2 = seconds (default 30)
       ( sleep "$secs"; kill "$p" 2>/dev/null ) & local w=$!
       wait "$p" 2>/dev/null; kill "$w" 2>/dev/null )
 }
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# LAW 6: A PAGED ARM MUST PROVE IT PAGED. Allocation is not consumption.
+#
+# ⚠⚠ 2026-08-09, the most expensive instrument failure in this lane. `paged_parity_gate.sh` validated
+# its paged arm with `grep -c n_gpu_blocks > 0` -- which proves the POOL WAS BUILT and nothing else.
+# On the 35B (`head_dim 256`) at `--kv-block-size 64` every attention layer was REFUSED
+# (`64*256 = 16384 > 8192`, the scalar kernel's staged-tile budget) and fell back to static. The gate
+# reported a clean paged arm for 4.5 hours. The resulting "parity ties" -- 256k 1.0003, 512k 0.9905 --
+# were **static vs static-with-an-idle-pool**, which is exactly why they looked like ties.
+#
+# ⚠ AND THE OBVIOUS FIX IS A TRAP: `grep DS4P-CONSUME` is useless here. That marker is
+# LLAMA_LOG_DEBUG, DEBUG needs verbosity >= 5 (common/log.h: LOG_LEVEL_DEBUG 5), and these gates run
+# `-lv 4`. The count is ALWAYS zero in their logs, so asserting on it VOIDs every paged arm forever.
+#
+# ⇒ Use the ENGINE's own positive test. llama-context.cpp evaluates `ds4p_paged_consumer_count() == 0`
+#   after 8 decodes and warns once, at WARN, which IS visible. Its absence is meaningful precisely
+#   because the engine performed the check itself -- the caller only has to guarantee the >= 8 decodes
+#   that arm it.
+#
+# usage: gate_assert_paged_consumed <server.log> <label> [n_predict]
+#        rc 0 = consumed · rc 1 = allocated but never consumed (VOID the arm) · rc 2 = cannot tell
+gate_assert_paged_consumed() {
+    local log="$1" label="${2:-paged arm}" npred="${3:-512}"
+    [ -f "$log" ] || { echo "  $label: VOID -- no server log to check ($log)"; return 2; }
+    # ⚠ An instrument that examined nothing must not report a clean pass.
+    if [ ! -s "$log" ]; then echo "  $label: VOID -- server log is EMPTY, nothing was examined"; return 2; fi
+    if [ "$npred" -lt 8 ] 2>/dev/null; then
+        echo "  $label: VOID -- n_predict=$npred is under 8, so the engine's no-consumer check never"
+        echo "        armed. Absence of its warning here proves nothing. Raise n_predict to >= 8."
+        return 2
+    fi
+    if [ "$(grep -ac 'ZERO layers have consumed' "$log")" -gt 0 ]; then
+        echo "  $label: VOID -- a paged pool was allocated and NO LAYER CONSUMED IT. This arm is"
+        echo "        STATIC wearing a paged flag; its wall/pp/tg are static numbers. Cause:"
+        grep -m1 -oE 'paged layer refused:.*' "$log" | sed 's/^/          /'
+        grep -m1 -oE 'n_embd_head_v *= *[0-9]+' "$log" | sed 's/^/          /'
+        echo "          (scalar contract: block_size * head_dim <= 8192; the CHAMPION relaxes it but"
+        echo "           requires block_size == 64 and DS4P_METAL_CHAMP=1)"
+        return 1
+    fi
+    # ⚠ Report partial fallback even on a pass: "paged with two static layers" and "static with a
+    # pool" produce similar-looking numbers and are not the same run.
+    echo "  $label: paged pool CONSUMED ($(grep -ac 'fails the paged capability contract' "$log") layer-refusal warnings)"
+    return 0
+}
