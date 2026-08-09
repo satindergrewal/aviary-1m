@@ -169,7 +169,7 @@ quoted. It was missing from this section for two hours after I wrote it down els
 | 256k / 512k, **bs=64 champ off** | ⛔ **VOID** | the "paged" arm never paged: 3,610 refusals, `64 × 256 > 8192` |
 | 8k, 9B, **pred_n=128** | **prefill 1.0075 (clears)** · **decode 0.9017 (clears)** | clean box, cold-arm check +0.1%. The first decode number in this lane with a real window — **and it says paged is 9.8% SLOWER.** |
 | 8k, 35B, pred_n=14 | wall 1.0095 · prefill 0.999x · decode 0.878x | decode leg inherits the short-window status; prefill leg survives |
-| 512k, **n=1 per arm** | **decode 1.991** · prefill 1.059 · wall 0.936 | paged faster on **all three**. Arms 3-4 pending for the drift bound. |
+| 512k, **n=1 per arm** | **decode 1.991** · prefill 1.059 · wall 0.936 — **likely an UPPER BOUND (cold static pos1)** | paged faster on **all three**. Arms 3-4 pending for the drift bound; the cold penalty sits on STATIC so the corrected ratio moves **DOWN** — 256k went 1.3471 → 1.307 under exactly that correction. |
 | 1M | **not measured — projected below** | Fits in memory (f16 116.1 GiB / q8_0 76.1 GiB of 128). |
 
 ### ★ 1M PROJECTION, and it is the first number that makes the case on its own
