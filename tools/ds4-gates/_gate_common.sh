@@ -303,3 +303,31 @@ gate_assert_paged_consumed() {
     echo "  $label: paged pool CONSUMED ($(grep -ac 'fails the paged capability contract' "$log") layer-refusal warnings)"
     return 0
 }
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# LAW 7: A TIP STAMP IS ONLY PROVENANCE IF THE TREE WAS CLEAN.
+#
+# ⚠⚠ 2026-08-10, caught by Grok on `paged_refusal_gate`'s own artifact: it stamped
+# `tip: 35be827f3` while the binary under test carried a **then-uncommitted edit** -- the very fix
+# being verified. **The stamp could not reproduce the binary it described.** A reader coming back to
+# that file would check out 35be827f3, build it, and get a server that ABORTS where the artifact says
+# it REFUSES.
+#
+# ⚠ This is *a summary is not a commit* in miniature, and it is the same family as every other
+# provenance hole this directory has recorded in one night: predicted_n absent, block_size/champ
+# absent, model basename instead of path. **The field that would have made the record checkable was
+# the field nobody thought to write.**
+#
+# ⇒ `long_context_gate.sh` has printed `dirty=<count>` since it was written. Nothing else did. One
+#   implementation here, so the next gate inherits it instead of re-deciding.
+#
+# usage: gate_tip_stamp [worktree]   ->  "35be827f3" | "35be827f3+dirty(3)"
+gate_tip_stamp() {
+    local wt="${1:-${WT:-$HOME/Documents/GitHub/llama.cpp-ds4ports}}"
+    local tip dirty
+    tip=$(cd "$wt" 2>/dev/null && git rev-parse --short HEAD 2>/dev/null) || { echo "unknown"; return; }
+    dirty=$(cd "$wt" 2>/dev/null && git status --porcelain 2>/dev/null | grep -c .)
+    # ⚠ NOT a boolean. The COUNT tells a reader how far from the commit the binary is -- one edit is a
+    # different situation from thirty, and "dirty" alone flattens them.
+    if [ "${dirty:-0}" -gt 0 ]; then echo "${tip}+dirty(${dirty})"; else echo "$tip"; fi
+}

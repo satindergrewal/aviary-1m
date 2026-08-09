@@ -48,7 +48,7 @@ pick_port() { local p; for p in $(seq 20170 20200); do
 PORT=$(pick_port) || { echo "no free port" >&2; exit 2; }
 
 echo "LAW 6 control pair: $(basename "$M")  ctx=$CTX  npred=$NPRED" | tee "$OUT"
-echo "tip: $(cd "$WT" && git rev-parse --short HEAD)" | tee -a "$OUT"
+echo "tip: $(gate_tip_stamp)" | tee -a "$OUT"
 printf '{"prompt":"Count from one to ten, then stop.","n_predict":%d,"temperature":0,"seed":1,"cache_prompt":false}\n' \
     "$NPRED" > "$D/req.json"
 

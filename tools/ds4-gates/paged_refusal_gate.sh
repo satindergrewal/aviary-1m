@@ -51,7 +51,7 @@ PORT=0; for p in $(seq 20300 20330); do
 [ "$PORT" != 0 ] || { echo "no free port" >&2; exit 2; }
 
 echo "paged refusal gate: $M" | tee "$OUT"
-echo "tip: $(cd "$WT" && git rev-parse --short HEAD)  ctx=$CTX" | tee -a "$OUT"
+echo "tip: $(gate_tip_stamp)  ctx=$CTX" | tee -a "$OUT"
 
 env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 DS4P_METAL_CHAMP=1 \
     "$SRV" -m "$M" -ngl 99 -c "$CTX" -np 1 -b 512 -ub 512 --port "$PORT" --no-warmup -lv 4 \
