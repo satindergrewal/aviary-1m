@@ -27,20 +27,55 @@
 #
 # usage:  privacy_guard.sh [repo-path]     # checks STAGED changes; exit 1 = REFUSE
 #         privacy_guard.sh --worktree      # checks unstaged working tree too
+#         privacy_guard.sh <repo> --range origin/master..HEAD   # what a PUSH would publish
 set -uo pipefail
 
 REPO="."
 MODE=staged
+RANGE=""
+_want_range=0
 for a in "$@"; do
+    if [ "$_want_range" = 1 ]; then RANGE="$a"; _want_range=0; continue; fi
     case "$a" in
         --worktree) MODE=worktree ;;
-        *) REPO="$a" ;;
+        --range)    MODE=range; _want_range=1 ;;
+        *)          REPO="$a" ;;
     esac
 done
 cd "$REPO" || { echo "privacy_guard: no such repo: $REPO" >&2; exit 2; }
 
+# ⚠⚠ THE MODE THIS GUARD DID NOT HAVE, AND THE ONE THAT MATTERS MOST. It could check `staged` and
+# `worktree` -- both PRIVATE states -- and had no way to answer **"what am I about to PUBLISH?"**
+# On 2026-08-10 that gap had a cost: I pushed five commits to a PUBLIC fork this guard has never been
+# pointed at, and they were clean only because a reviewer read them. **Inspection is not a guard.**
+# All three of this project's history rewrites were triggered at the public boundary, so the range
+# a push would send is the diff that actually needed checking.
+#   privacy_guard.sh <repo> --range origin/master..HEAD
 if [ "$MODE" = worktree ]; then
     DIFF=$(git diff; git diff --cached)
+elif [ "$MODE" = range ]; then
+    [ -n "$RANGE" ] || { echo "privacy_guard: --range needs an argument, e.g. origin/master..HEAD" >&2; exit 2; }
+    # ⚠ `git diff <range>` compares two ENDPOINTS and would miss a secret added in one commit and
+    # removed in the next -- which still ships, because the blob stays reachable in the history being
+    # pushed. That is precisely how the 2026-08-09 leak survived a partial scrub. `git log -p` walks
+    # EVERY commit in the range instead.
+    # ⚠⚠ AND THE FIRST VERSION OF THIS LINE HID A BAD REVSPEC BEHIND `2>/dev/null`. Run against the
+    # fork with `origin/ds4-ports..HEAD` -- a ref that DOES NOT EXIST in that clone -- git errored,
+    # stderr went to the void, DIFF came back empty, and the guard reported
+    # **"the range diff is EMPTY ... Stage the change first (git add)"**: the wrong diagnosis for the
+    # wrong mode, from an error I had suppressed. The empty-diff VOID caught it and stopped the
+    # `&&` chain, so nothing passed -- **but a guard that says the wrong reason costs the reader the
+    # time the guard was supposed to save.** Written minutes after fixing this same shape elsewhere.
+    # ⇒ Validate the revspec FIRST and say so; suppress nothing.
+    if ! git rev-parse --verify --quiet "${RANGE%%..*}" >/dev/null || \
+       ! git rev-parse --verify --quiet "${RANGE##*..}" >/dev/null; then
+        echo "privacy_guard: VOID -- '$RANGE' is not a valid revision range in $(pwd)." >&2
+        echo "  Both endpoints must resolve. A missing remote-tracking ref reads as an EMPTY range," >&2
+        echo "  which would otherwise look exactly like 'nothing to check'. Try: git fetch origin" >&2
+        echo "  and check 'git branch -r' for the ref's real name." >&2
+        exit 2
+    fi
+    DIFF=$(git log -p --no-merges --format='' "$RANGE")
 else
     DIFF=$(git diff --cached)
 fi
@@ -117,8 +152,16 @@ NADD=$(printf '%s\n' "$ADDED" | grep -c . )
 NDIFF=$(printf '%s\n' "$DIFF" | grep -c . )
 if [ "${NDIFF:-0}" -eq 0 ]; then
     echo "privacy guard: VOID -- the $MODE diff is EMPTY, so nothing was examined." >&2
-    echo "  This is NOT a pass. Stage the change first (git add), or pass --worktree to include" >&2
-    echo "  unstaged edits. Exiting 2 so an && chain stops here instead of reading it as clean." >&2
+    # ⚠ MODE-SPECIFIC ADVICE. The single staged-mode message was printed for a range whose refs did
+    # not resolve, telling the reader to `git add` when the real problem was a nonexistent ref.
+    if [ "$MODE" = range ]; then
+        echo "  This is NOT a pass. The range '$RANGE' resolved but contains no commits -- nothing" >&2
+        echo "  would be published by it. If you expected commits here, check the range direction." >&2
+    else
+        echo "  This is NOT a pass. Stage the change first (git add), or pass --worktree to include" >&2
+        echo "  unstaged edits." >&2
+    fi
+    echo "  Exiting 2 so an && chain stops here instead of reading it as clean." >&2
     exit 2
 fi
 if [ "${NADD:-0}" -eq 0 ]; then
