@@ -29,8 +29,43 @@ PREFILL  0.9830   effect  1.7% vs drift 14.8%  ->  UNREADABLE
 DECODE   1.3471   effect 34.7% vs drift  5.9%  ->  paged FASTER, CLEARS
 ```
 
-All four arms proved consumption; **zero** capability-contract refusals; needle PASS on every arm.
-**The read was pre-registered before the data and matched branch for branch.**
+Needle PASS on every arm, and the read was **pre-registered before the data** and matched branch for
+branch.
+
+### ⚠⚠ "ALL FOUR ARMS PROVED CONSUMPTION" WAS AN INFERENCE FROM SILENCE. IT IS NOW A MEASUREMENT.
+
+The first version of this section said consumption was proven. It was **inferred from the engine's
+no-consumer alarm staying quiet**, and the gate that wrote it **could not see the branch that was
+actually firing**. Grok caught it in a log this gate had already scored clean:
+
+```
+fails the paged capability contract     0    <- the only branch the gate counted
+took the STATIC path -- no paged context  110  <- never counted, and firing,
+                                               on exactly layers 3,7,11,...,39
+```
+
+⇒ **Resolved by a `-lv 5` decider, split on the request marker rather than on startup:**
+
+```
+                        whole    AFTER the request starts
+DS4P-CONSUME banded       640          640
+DS4P-CONSUME auto           0            0
+took the STATIC path      210            0
+layers consuming after request start:    [3,7,11,15,19,23,27,31,35,39]
+layers on static path after request start: []
+```
+
+**All 210 static-path warnings are RESERVE-TIME graph builds** — llama-server builds ~21 reserve
+graphs before the paged context exists. **Every full-attention layer consumes at request time.**
+The resolution is **WHEN, not WHETHER**, and counting reserve-time fallbacks as failures would be as
+wrong as ignoring them.
+
+⇒ **The decode measured here WAS paged attention. 1.307× stands as a paged-KV result.**
+
+⚠ The decider itself nearly lied: the first attempt split the log with `tail -n +$(wc -l ...)`, `wc`
+returned leading whitespace, `tail` errored *illegal offset*, the split file was **empty**, and it
+printed **four zeros that looked exactly like a measurement**. **Verify the splitter split
+something.**
 
 ### ⚠ THE CAVEAT, NOT BURIED: the cold-arm check fired WITH `warm=1`
 
