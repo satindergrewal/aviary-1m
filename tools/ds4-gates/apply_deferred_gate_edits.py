@@ -72,6 +72,25 @@ echo "tip: $(gate_tip_stamp "$WT")  ctx=$CTX'''),
             return 1
         fi
         printf '  warm-up %-6s discarded  (%.0fs)\\n' "$a" "$(python3 -c "print($t1-$t0)")" | tee -a "$OUT"'''),
+
+    # ---------------------------------------------------------------- D
+    ("D: PER-RUN $D -- every invocation clobbered the previous run's logs",
+     '''D=${CLAUDE_JOB_DIR:-/tmp}/parity; mkdir -p "$D"''',
+     '''# ⚠⚠ $D WAS A FIXED PATH, SO EVERY INVOCATION DESTROYED THE PREVIOUS ONE'S EVIDENCE -- and the
+# sweep that drives this gate invokes it FOUR TIMES IN A ROW. `decode_ctx_sweep.sh` runs rungs
+# 8k/32k/64k/128k through here back to back; each rung overwrote the last rung's logs, and the 512k
+# run overwrote all of them. The per-rung `.txt` verdicts survived because they carry the ctx in
+# their filename; **the logs, which hold the only within-run data this lane has, did not.**
+#
+# Found on 2026-08-10 when the prefill-curve analysis wanted to test its plateau at a second rung
+# and there was nothing left to test it against. Same class as pos4 overwriting pos1, one level up:
+# **the artifacts that get a unique name survive and the ones that do not are silently destroyed.**
+#
+# ⇒ Per-run directory keyed by ctx and time, plus a `latest` symlink so anything reaching for the
+#   old fixed path still finds the most recent run.
+D=${CLAUDE_JOB_DIR:-/tmp}/parity/c${CTX}-$(date +%Y%m%d-%H%M%S); mkdir -p "$D"
+ln -sfn "$D" "${CLAUDE_JOB_DIR:-/tmp}/parity/latest" 2>/dev/null
+echo "  run dir: .../parity/$(basename "$D")   (previous runs are no longer overwritten)"'''),
 ]
 
 
