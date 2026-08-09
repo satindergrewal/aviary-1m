@@ -15,9 +15,43 @@ ranges, not 2k, 32k, 64k etc."*
 
 | rung | verdict | evidence |
 |---|---|---|
-| 256k | **as fast as: MET** (dirty) | ABBA, effect 0.0% vs drift 2.2% -> UNRESOLVED = tie. ⚠ The run was contaminated (see "candidate" below). |
-| 512k | **as fast as: MET** | ABBA, effect 1.0% vs drift 2.6% -> UNRESOLVED = tie. Warm-vs-warm 1.0036. |
+| 256k | ⛔ **VOID** | the "paged" arm never paged — see below |
+| 512k | ⛔ **VOID** | same |
+| 8k | **paged is 30% SLOWER** | first honest paged run on this model: WALL 1.3035, prefill 0.765x, decode 0.767x. One ordering, below the bar range, not a verdict. |
 | 1M | **not measured** | Fits in memory (f16 116.1 GiB / q8_0 76.1 GiB of 128). Cost is ~20-24 h and ~5.5 tok/s decode. Owner's call. |
+
+> ### ⛔⛔ EVERY 35B PARITY NUMBER FROM 2026-08-09 IS VOID. THE PAGED ARM WAS NOT PAGING.
+>
+> From the paged arm's own log, all at WARN level:
+>
+> ```
+> DS4P-CHECKOUT           1     pool allocated
+> DS4P-SET              110     context attached to the graph
+> capability contract  3610     every attention layer REFUSED
+>
+> "paged layer refused: layer 3: block_size x head_dim exceeds the staged-tile
+>  budget (need block_size*head_dim <= 8192)"
+> ```
+>
+> Ornith-35B is `n_embd_head_v = 256`, `n_layer = 40`, and the gate ran `--kv-block-size 64`.
+> **64 × 256 = 16,384.** Refused layers 3, 7, 11, …, 39 — every 4th of 40, exactly the full-attention
+> set on this hybrid; the other 30 are recurrent. **100% of attention fell back to static.**
+>
+> ⇒ The 256k tie (1.0003) and the 512k tie (0.9905) were **static vs static-with-an-idle-pool**, which
+> explains them perfectly and retroactively: 0.3% paged drift, decode a dead heat, effect always
+> inside noise. They were the same code path.
+>
+> ⚠ The gate's validity check asserted `n_gpu_blocks > 0`. **That proves the pool was BUILT and
+> nothing else.** CHECKOUT proves allocation; CONSUME proves consumption — a distinction already
+> written down in this project — and the instrument was built on the wrong one.
+>
+> ⚠ **The 9B numbers are unaffected**: that harness ran `--kv-block-size 16`, and 16 × 256 = 4,096,
+> inside the budget by accident of history. **The one parameter never re-derived when the model
+> changed is the one that broke**, and because a refused layer falls back to static, the output stayed
+> correct the whole time.
+>
+> **Fixed**: block size is now derived from `n_embd_head_v` by a 10 s geometry probe (clamping down
+> only), and the paged arm VOIDs on the engine's own WARN-level no-consumer alarm.
 
 **"as correct as": MEASURED and PASSING.** 8/8 at 8k, 5/5 pre-existing grids, and 430 chunks at 225k
 with needle PASS — `FINDINGS-paged-cross-request.md`, final section.
