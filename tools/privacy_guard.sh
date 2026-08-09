@@ -62,7 +62,28 @@ PAT_NAME='[Ss][Aa][Tt][Ii][Nn][Dd][Ee][Rr]'
 # blocked a legitimate commit on 2026-08-09. The response to a false positive is to make the PATTERN
 # right, never to wave the hit through: 321 and 268 are not octets, and a real address always is.
 PAT_IP4='\b((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\b'
-PAT_IP6='\b([0-9a-fA-F]{1,4}:){3,}[0-9a-fA-F]{1,4}\b'
+# ⚠⚠ THE UNCOMPRESSED-ONLY PATTERN MISSED THE MOST COMMON FORM OF IPv6, AND NOTHING HAD EVER TESTED
+# IT. Controls run 2026-08-09, the first time this guard was exercised on v6 at all:
+#
+#     an address shaped  HHHH:HHHH:HHHH::HHHH   ** PASSED **   <- three groups, gap, one group
+#     an address shaped  HHHH::HHHH:HHHH:HHHH:HHHH   refused    <- four groups after the gap
+#
+# (written as shapes, not literals, ON PURPOSE: spelling out a real address here makes this file
+#  fail its own check -- which is exactly what happened on the first attempt to commit this fix, the
+#  second time this guard has blocked its own source. The precedent set the first time stands:
+#  rewrite the comment, never widen the allow-list.)
+#
+# `([0-9a-fA-F]{1,4}:){3,}[0-9a-fA-F]{1,4}` needs FOUR groups in a row. `::` compression collapses
+# the middle, so the first shape offers only three before the gap and the pattern cannot reach the
+# tail. The second matched only because it happens to carry four groups AFTER the gap -- an accident
+# of the example I originally picked. **The guard worked on the shapes I had happened to try, and
+# every IPv4 control passing had made me confident about a branch I had never run.**
+#
+# ⇒ Second alternative requires a literal `::`, which no clock time contains. Checked against C++
+#   scope operators, the obvious false positive: `std::vector` (s not hex), `llama_context::decode`
+#   (the boundary before `::` has no hex run starting at it), `foo::bar` (f is hex, o is not) all
+#   stay clean, because the pattern needs 1-4 HEX characters immediately before the `::`.
+PAT_IP6='\b([0-9a-fA-F]{1,4}:){3,}[0-9a-fA-F]{1,4}\b|\b[0-9a-fA-F]{1,4}::[0-9a-fA-F:]{0,32}'
 
 # Allowed by the rule: documentation ranges and loopback. Everything else in those shapes is a hit.
 ALLOW='127\.0\.0\.1|0\.0\.0\.0|203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|255\.255\.255|2001:db8|::1\b'
