@@ -134,6 +134,7 @@ with needle PASS — `FINDINGS-paged-cross-request.md`, final section.
 
 | item | cost | why it needs the GPU |
 |---|---|---|
+| ★ **DECODE CONTEXT SWEEP — the decisive experiment** | **<1 h total** | The 9B at 8k says paged decode is **0.9017×** (slower); the 35B at 256k says **1.3692×** (faster). **Same kernel, same block size, verified** — `head_dim=256 · CHAMPION · bs=64` on both — so it is not a kernel confound. If the fixed-per-step-indirection-vs-growing-attention-cost story is right there is a **crossover length**, and it is findable cheaply: **one model, ABBA, `ignore_eos`, at 8k · 32k · 64k · 128k.** Prefill at those lengths is minutes. A monotone curve crossing zero supports the story; a flat 0.90 everywhere with a jump at 256k refutes it and points somewhere else. **This answers "why" and gets "is it real" for free at the low end; a second 256k point estimate answers neither.** |
 | clean 256k ABBA (warm-up ON, npred=512) | ~1 h | retires the "candidate" stamp on the 256k tie |
 | clean 512k ABBA (warm-up ON, npred=512) | ~3.5 h | tightens the bound + first properly-sampled decode number |
 | `gemma3` paged verification | ~10 min | wired but NOT proven: needs `DS4P-CONSUME > 0` and output matching static |
