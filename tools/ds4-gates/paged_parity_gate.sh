@@ -53,6 +53,17 @@ NPRED=${PP_NPRED:-512}
 # ⇒ Warm BOTH arms before measuring: model file into page cache, Metal pipelines compiled, allocator
 #   first-touch paid. Two short server starts, symmetric, ~2 min against a 3.5 h run.
 WARM=${PP_WARM:-1}
+# ⚠⚠ DEFAULT THE CHAMPION **ON**, because leaving it off does not measure a slower paged path -- on
+# some geometries it measures NO paged path at all. `paged_layer_supported` relaxes the scalar
+# staged-tile bound only when the champion is active (llama-graph.cpp:4548), so at head_dim 256 the
+# three states are:
+#     champ=1, bs=64  -> champion serves it            (the configuration paging exists for)
+#     champ=0, bs=32  -> scalar serves it, slowly
+#     champ=0, bs=64  -> EVERY LAYER REFUSED, silently static  <- what this gate ran all day
+# The third is the one that produced 4.5 h of static-vs-static "parity ties", and the code comment
+# that predicted it is dated 2026-08-06: *"at bs=64/D=256 every layer refused and silently took the
+# static path, making a paged run indistinguishable from static."* Three days later the gate did it.
+export DS4P_METAL_CHAMP=${DS4P_METAL_CHAMP:-1}
 export LLAMA_PAGED_POOL_HEADROOM=${LLAMA_PAGED_POOL_HEADROOM:-1.05}
 
 [ -f "$M" ] || { echo "missing model: $M" >&2; exit 2; }
@@ -80,7 +91,7 @@ echo "paged parity gate: $(basename "$M")" | tee "$OUT"
 # ⚠ `block_req`, NOT `block`. probe_geometry may clamp it, and a header naming a value the run did not
 # use is the stale-header defect this directory has now recorded three times in one day.
 # The value ACTUALLY used is printed by the geometry line below and is the one to quote.
-echo "tip: $(cd "$WT" && git rev-parse --short HEAD)  ctx=$CTX  fill~${FILL}tok  block_req=$BLK  order=$ORDER  headroom=$LLAMA_PAGED_POOL_HEADROOM  npred=$NPRED  warm=$WARM" | tee -a "$OUT"
+echo "tip: $(cd "$WT" && git rev-parse --short HEAD)  ctx=$CTX  fill~${FILL}tok  block_req=$BLK  order=$ORDER  headroom=$LLAMA_PAGED_POOL_HEADROOM  npred=$NPRED  warm=$WARM  champ=$DS4P_METAL_CHAMP" | tee -a "$OUT"
 
 python3 - "$D" "$NEEDLE" "$FILL" "$NPRED" <<'PY' | tee -a "$OUT"
 import json, sys
@@ -103,7 +114,7 @@ arm() { # $1 = static|paged
     local flags=""; [ "$1" = paged ] && flags="--kv-paged --kv-block-size $BLK"
     : > "$D/$1.log"
     # shellcheck disable=SC2086
-    env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 "$SRV" -m "$M" -ngl 99 -c "$CTX" \
+    env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 DS4P_METAL_CHAMP="${DS4P_METAL_CHAMP:-0}" "$SRV" -m "$M" -ngl 99 -c "$CTX" \
         -np 1 -b 512 -ub 512 --port $PORT --no-warmup -lv 4 $flags > "$D/$1.log" 2>&1 &
     PID=$!
     local i
@@ -247,8 +258,29 @@ probe_geometry() {
         return 0
     fi
 
+    # ⚠⚠ THE 8192 BOUND IS THE *SCALAR* KERNEL'S, AND CLAMPING TO IT LOCKS OUT THE FAST PATH.
+    # llama-graph.cpp:4548 --
+    #     champ_geometry = champ_on && block_size == 64 &&
+    #                      (head_dim == 64|96|128|192|256)
+    #     if (!champ_geometry && block_size*head_dim > 8192) reject(...)
+    # The CHAMPION does not stage K/V tiles in threadgroup memory, its footprint is flat in nsg, and
+    # it **contractually requires block_size == 64**. So for head_dim 256 the two configurations are:
+    #     champion  bs=64  -> served, fast path
+    #     scalar    bs=32  -> served, SLOW path
+    # and clamping 64 -> 32 silently chooses the slow one. My first version did exactly that and
+    # measured the scalar kernel losing by 30%, which is a true number about the wrong kernel.
+    # ⇒ If the champion is on and the geometry is one it implements, KEEP 64. Otherwise clamp.
     local maxbs=$(( 8192 / hd ))
     if [ "$maxbs" -lt 16 ]; then maxbs=16; fi          # kernel floor; below this the contract is a different one
+    case "$hd" in
+      64|96|128|192|256)
+        if [ "${DS4P_METAL_CHAMP:-0}" != "0" ] && [ "$BLK" = 64 ]; then
+            echo "  geometry: head_dim=$hd with the CHAMPION kernel -- block_size 64 is its contract," | tee -a "$OUT"
+            echo "            not the scalar staged-tile bound. Keeping 64 (clamping to $maxbs would" | tee -a "$OUT"
+            echo "            silently select the slow scalar path)." | tee -a "$OUT"
+            return 0
+        fi ;;
+    esac
     if [ "$BLK" -gt "$maxbs" ]; then
         echo "  geometry: head_dim=$hd -> block_size must be <= $maxbs (block_size*head_dim <= 8192)." | tee -a "$OUT"
         echo "            requested $BLK would REFUSE every attention layer; using $maxbs." | tee -a "$OUT"
@@ -272,7 +304,7 @@ PYW
         local flags=""; [ "$a" = paged ] && flags="--kv-paged --kv-block-size $BLK"
         t0=$(python3 -c 'import time;print(time.time())')
         # shellcheck disable=SC2086
-        env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 "$SRV" -m "$M" -ngl 99 -c "$CTX" \
+        env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 DS4P_METAL_CHAMP="${DS4P_METAL_CHAMP:-0}" "$SRV" -m "$M" -ngl 99 -c "$CTX" \
             -np 1 -b 512 -ub 512 --port $PORT --no-warmup -lv 4 $flags > "$D/warm-$a.log" 2>&1 &
         PID=$!
         local i ok=0
