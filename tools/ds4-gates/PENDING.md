@@ -19,12 +19,31 @@ ranges, not 2k, 32k, 64k etc."*
 | 512k | **as fast as: MET** | ABBA, effect 1.0% vs drift 2.6% -> UNRESOLVED = tie. Warm-vs-warm 1.0036. |
 | 1M | **not measured** | Fits in memory (f16 116.1 GiB / q8_0 76.1 GiB of 128). Cost is ~20-24 h and ~5.5 tok/s decode. Owner's call. |
 
-⚠⚠ **"AS CORRECT AS" IS NOT MEASURED AT ANY OF THESE RUNGS, AND IT IS THE BIGGER RISK.**
-`FINDINGS-paged-cross-request.md` is OPEN and records **2 of 6 runs FAILING at 224,992 tokens**. The
-needle used to validate every parity run *cannot see it* — the recorded failures include "fluent but
-different from static", and a fluent-but-wrong answer still contains the passcode. Eight needle
-passes today are eight runs of an instrument blind to this failure mode. `output_sanity.py` exists
-now to close that; wiring it into the parity gate is the top CPU-only item below.
+**"as correct as": MEASURED and PASSING.** 8/8 at 8k, 5/5 pre-existing grids, and 430 chunks at 225k
+with needle PASS — `FINDINGS-paged-cross-request.md`, final section.
+
+> ### ⚠⚠ RETRACTION. The first version of this file said the opposite, in bold, and it was wrong.
+>
+> It read: *"AS CORRECT AS IS NOT MEASURED AT ANY OF THESE RUNGS, AND IT IS THE BIGGER RISK ...
+> FINDINGS-paged-cross-request.md is OPEN and records 2 of 6 runs FAILING at 224,992 tokens."*
+>
+> **The finding is CLOSED.** Root-caused and fixed in `6391c5e63` (2026-08-08 17:11), which is an
+> ancestor of the tree these measurements ran on: oversized final prefill chunk → compute-buffer
+> layout → leftover activation floats under `s_copy` → read as a row index into a 1-row state tensor
+> → garbage recurrent state from request 2 onward. Induced on demand across five pre-registered
+> arms, control included.
+>
+> The 2-of-6 rate is retracted **inside that same document** — *"an artefact of the harnesses"*, both
+> failures coming from harnesses whose warmup made the measured request #2.
+>
+> ⇒ **I quoted its status header instead of reading it**, and the header had been stale since the fix
+> landed. Second time in one hour: `PLAN-paged-arch-support.md` has the same shape, I found it, wrote
+> a banner on it, and then repeated the mistake in the next file I opened. **When a document's status
+> header and its final section disagree, the final section is the state.**
+>
+> ⇒ `output_sanity.py` still earns its place — a check that can fail on wrong output is worth having
+> whether or not today's instance is closed — but it is **insurance, not a live alarm**, and the
+> first version of this file sold it as a live alarm.
 
 ---
 
@@ -36,7 +55,7 @@ now to close that; wiring it into the parity gate is the top CPU-only item below
 | clean 512k ABBA (warm-up ON, npred=512) | ~3.5 h | tightens the bound + first properly-sampled decode number |
 | `gemma3` paged verification | ~10 min | wired but NOT proven: needs `DS4P-CONSUME > 0` and output matching static |
 | `gemma4` SWA-restored check | ~10 min | proves the guard fix re-enabled what it broke; needs CONSUME on a layer where `is_swa(il)` is true |
-| paged-corruption rate at 225k | ~6 runs | the open OPEN finding; 2/6 is one data point, not a rate |
+| ~~paged-corruption rate at 225k~~ | — | **CLOSED**, see the retraction above; no runs needed |
 | 1M rung | ~20-24 h | owner's authorization |
 | NIAH sweeps | long | **marked Pending by the owner**, deliberately deferred until paging matches static |
 | inkling paged path | 975B | marker added, never gate-verified |

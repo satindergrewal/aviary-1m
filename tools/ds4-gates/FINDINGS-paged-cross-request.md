@@ -1,8 +1,39 @@
 # Paged KV: an INTERMITTENT correctness failure near ~50k tokens
 
-**Status: OPEN. Real, reproduced dozens of times, NOT champion-specific, predates the
-2026-08-06/07 kernel work. Rate unmeasured. Every length-based conclusion previously in this
-document is WITHDRAWN — see "What was withdrawn and why".**
+## ✅ STATUS: **CLOSED.** Root-caused, fixed in `6391c5e63` (2026-08-08 17:11), induced on demand.
+
+**Read the last section of this file (`INDUCED ON DEMAND`) for the resolution.** Mechanism, end to
+end: oversized final prefill chunk → compute-buffer layout → leftover activation floats under
+`s_copy` → read as a row index into a 1-row state tensor → garbage recurrent state from request 2
+onward. Verified at 8k (8/8 and 5/5 grids) and at 225k (430 chunks, needle PASS), and the paged path
+is *faster* than static on wall, prefill and decode.
+
+> ### ⚠⚠ THE STATUS LINE BELOW SAID `OPEN` FOR HALF A DAY AFTER THE FIX LANDED, AND I QUOTED IT.
+>
+> On 2026-08-09 I read this header, did not read the file, and reported to the foreman and the owner
+> that paging was intermittently corrupting output — *"2 of 6 runs fail at 224,992 tokens"*, *"a
+> third of runs producing wrong text inside the exact band the bar is set on"*, *"as correct as is
+> UNMEASURED at any rung"*. **All three were false**, and the middle one is retracted **inside this
+> same document**: *"The '~33% intermittent rate' was an artefact of the harnesses"* — both failures
+> came from harnesses whose warmup made the measured request **#2**.
+>
+> ⚠ **It was the second time in one hour.** `PLAN-paged-arch-support.md` has a stale top table
+> contradicting its own state section; I found that, wrote a banner on it, identified it as the root
+> cause of the gemma4 regression — **and then walked into the identical trap in the next file I
+> opened.** One document, two answers, stale half on top, both times.
+>
+> ⇒ **The rule this pays for: when a document's status header and its own final section disagree,
+> the FINAL SECTION is the state.** A status header records what was true the last time someone
+> remembered to edit it; the bottom of the file records what was last measured. The header is also
+> the part a reader quotes, which is what makes the drift expensive rather than merely untidy.
+
+---
+
+**Historical status line, kept as the record of what this said before the fix:**
+
+> **Status: OPEN. Real, reproduced dozens of times, NOT champion-specific, predates the
+> 2026-08-06/07 kernel work. Rate unmeasured. Every length-based conclusion previously in this
+> document is WITHDRAWN — see "What was withdrawn and why".**
 
 Config where it was observed: default paged path with `DS4P_METAL_CHAMP` **unset**,
 `--kv-block-size 16 -ngpub 4608 -ncpub 512`, Ornith-1.0-9B-1M IQ2_M,
