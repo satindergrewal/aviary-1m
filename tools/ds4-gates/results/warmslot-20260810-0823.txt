@@ -1,0 +1,15 @@
+tip: a4e8aeb08 dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=1  regime=WARM
+  static-r1      np=2  prime=4    post=4    consume=-1     ptok=40016   blocks=2501   -> CLEAN
+      S1  one, two, three, four, five
+      S2  A, B, C, D, E
+  paged-r1       np=2  prime=4    post=<ERR consume=4310   ptok=22      blocks=1      -> POST-PAIR-DIRTY
+      ⚠ COVERAGE: the longest prompt spans 1 block(s) at --kv-block-size 16.
+        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is
+        scoped to one block per slot. Raise MS_FILL to cross it.
+      S1  <UNPARSEABLE http=000>
+      S2  <UNPARSEABLE http=000>
+-----
+static: 1 clean / 0 bad     paged: 0 clean / 1 bad / 0 refused-by-contract
+verdicts: static:CLEAN paged:POST-PAIR-DIRTY
+WARM MULTI-SLOT GATE: FAIL -- paged 1 bad, static CLEAN (1c REPRODUCES on this binary)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260810-0823.txt

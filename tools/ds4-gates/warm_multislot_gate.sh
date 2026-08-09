@@ -102,7 +102,7 @@ ask() {
       ep="/completion"
       body="{\"prompt\":$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$1"),\"n_predict\":${MS_NPRED:-256},\"temperature\":0,\"seed\":1,\"cache_prompt\":false}"
   fi
-  curl -s -w '\nHTTP:%{http_code}' --max-time 300 -X POST "http://127.0.0.1:$PORT$ep" -H 'Content-Type: application/json' \
+  curl -s -w '\nHTTP:%{http_code}' --max-time ${MS_TIMEOUT:-300} -X POST "http://127.0.0.1:$PORT$ep" -H 'Content-Type: application/json' \
         -d "$body" \
         | python3 -c 'import json,sys
 raw = sys.stdin.read()
@@ -206,7 +206,35 @@ probe() { # $1=tag $2=flags
             echo "${R[$((i-1))]}" | grep -qiE "${EXPECT[$((j-1))]}" && verdict=CROSS-CONTAMINATED
         done
     done
-    [ "$v3" = OK ] || verdict=POST-PAIR-DIRTY   # the pair left something behind
+    # ⚠⚠⚠ A TRANSPORT FAILURE IS NOT A CONTENT VERDICT, AND THE GATE HAD NO WORD FOR IT.
+    # `<UNPARSEABLE http=000>` means curl got NO RESPONSE -- a timeout or a dead server. Twice on
+    # 2026-08-10 that was scored through the content path and the headline read
+    # "FAIL -- 1c REPRODUCES on this binary", a claim about KV CORRUPTION, from evidence that
+    # contained no answer at all:
+    #   champion arm: the server had ABORTED (n_seq!=1)
+    #   scalar arm:   the server was ALIVE and 75% through prefill (30,069/40,016 at t=302s)
+    #                 when --max-time 300 fired. Steady progress, ~99.6 tok/s.
+    # Two completely different situations, one wrong word, and in neither case was anything corrupt.
+    # ⇒ No response is its OWN state. It says the request did not complete; it cannot say why, and
+    #   the gate must not guess. The reason lives in the server log and the verdict points there.
+    local noresp=0 i2
+    for i2 in $(seq 1 "$n"); do
+        case "${R[$((i2-1))]}" in *"http=000"*|*UNPARSEABLE*) noresp=$((noresp+1));; esac
+    done
+    if [ "$noresp" -gt 0 ]; then
+        verdict=VOID-NO-RESPONSE
+        echo "      ⇒ VOID: $noresp of $n sequences returned NO HTTP RESPONSE (timeout at ${MS_TIMEOUT:-300}s, or the server died)." | tee -a "$OUT"
+        echo "        This is NOT a corruption result and must not be read as one -- there is no answer to judge." | tee -a "$OUT"
+        if grep -qc 'ggml_abort\|GGML_ASSERT' "$LOGDIR/$tag.log" 2>/dev/null && [ "$(grep -ac 'ggml_abort\|GGML_ASSERT' "$LOGDIR/$tag.log" 2>/dev/null)" -gt 0 ]; then
+            echo "        The server ABORTED. First cause line:" | tee -a "$OUT"
+            grep -m1 -oE '(GGML_ASSERT|ggml_metal_op_paged_attn|CHAMP-PAGED REFUSED).{0,150}' "$LOGDIR/$tag.log" | sed 's/^/          /' | tee -a "$OUT"
+        else
+            local lastprog; lastprog=$(grep -oE 'progress = [0-9.]+, t = *[0-9.]+ s / *[0-9.]+ tok' "$LOGDIR/$tag.log" 2>/dev/null | tail -1)
+            echo "        The server did NOT abort -- it ran out of time. Last progress: ${lastprog:-<none>}" | tee -a "$OUT"
+            echo "        Raise MS_TIMEOUT (currently ${MS_TIMEOUT:-300}s) to let it finish." | tee -a "$OUT"
+        fi
+    fi
+    [ "$v3" = OK ] || [ "$verdict" = VOID-NO-RESPONSE ] || verdict=POST-PAIR-DIRTY   # the pair left something behind
     # ⚠⚠⚠ consume=0 HAS TWO CAUSES AND THE GATE HAD ONE WORD FOR THEM. (raised by Grok, #9405)
     #
     # Until 2026-08-10 `consume=0` meant "vacuous -- static path wearing paged flags", which is a BUG.
@@ -281,7 +309,7 @@ for r in $(seq 1 "$REPS"); do
     fi
 done
 echo "-----" | tee -a "$OUT"
-sc=0; sb=0; pc=0; pb2=0
+sc=0; sb=0; pc=0; pb2=0; pv=0
 # ⚠ REFUSED-BY-CONTRACT IS NOT "BAD". Counting it as bad is what made a correct run print
 # "1c REPRODUCES". It gets its own tally so the headline can never call it a corruption.
 pr=0
@@ -290,10 +318,19 @@ for v in "${V[@]}"; do case "$v" in
     static:*) sb=$((sb+1));;
     paged:CLEAN) pc=$((pc+1));;
     paged:REFUSED-BY-CONTRACT) pr=$((pr+1));;
+    paged:VOID-NO-RESPONSE) pv=$((pv+1));;
+    static:VOID-NO-RESPONSE) pv=$((pv+1));;
     paged:*) pb2=$((pb2+1));; esac; done
-echo "static: $sc clean / $sb bad     paged: $pc clean / $pb2 bad / $pr refused-by-contract" | tee -a "$OUT"
+echo "static: $sc clean / $sb bad     paged: $pc clean / $pb2 bad / $pr refused-by-contract / $pv no-response" | tee -a "$OUT"
 echo "verdicts: ${V[*]}" | tee -a "$OUT"
-if [ "$sb" -ne 0 ]; then
+# ⚠ A NO-RESPONSE ARM CANNOT INDICT ANYTHING. It is checked BEFORE the corruption headline,
+# because the two runs that produced it on 2026-08-10 both printed "1c REPRODUCES" from evidence
+# that contained no answer at all.
+if [ "${pv:-0}" -ne 0 ]; then
+    echo "WARM MULTI-SLOT GATE: **VOID** -- $pv arm(s) returned NO HTTP RESPONSE (timeout or dead server)." | tee -a "$OUT"
+    echo "  There is no answer to judge, so this run says NOTHING about corruption in either direction." | tee -a "$OUT"
+    echo "  The per-arm block above says whether the server ABORTED or simply ran out of time." | tee -a "$OUT"
+elif [ "$sb" -ne 0 ]; then
     echo "WARM MULTI-SLOT GATE: **VOID** -- static (no paging) scored $sb bad. The gate is measuring itself, not the code." | tee -a "$OUT"
     echo "  (a dirty static arm can never indict paging; fix the harness before reading the paged column)" | tee -a "$OUT"
 elif [ "$pb2" -eq 0 ] && [ "$pr" -gt 0 ]; then
