@@ -79,13 +79,44 @@ depth        paged tok/s   static tok/s   static/paged
   50-100k       296.5         305.6          1.031
  100-150k       197.7         191.3          0.967
  150-200k       147.8         139.5          0.943
+ 200-250k       118.0         111.4          0.944   <- the 4th point, and it FLATTENED
  within-arm decay, full buckets:  paged 4.04x   static 4.67x
 ```
 
-⇒ **The ratio TRENDS monotonically downward. This is "static decays harder" MEASURED, not inferred
-from endpoint averages across six separate server launches.** Endpoint averages structurally cannot
-separate *uniformly slower* from *decays faster*; a matched-depth ratio can, and that is the entire
-reason the number moves.
+⚠⚠ **I PUBLISHED "THE RATIO TRENDS MONOTONICALLY" ON THREE POINTS AND THE FOURTH PLATEAUED IT.**
+Committed at `588c911`, corrected ~20 minutes later when arm 4 crossed 250k. **0.943 → 0.944 is not
+a continuation of a trend, it is a floor.** Three points can only ever show a trend; a plateau needs
+a fourth to be visible at all. **This is the fourth framing to die in this section and the first one
+I caught before the run ended rather than at the next rung.**
+
+⇒ **THE CORRECTED READING, and it is a better mechanism than the one it replaces:**
+
+```
+0-100k     static FASTER   (ratio > 1)     paging's indirection is visible while FFN still dominates
+~100-125k  CROSSOVER
+150k+      PLATEAU 0.944   paged 5.6% faster, and NOT widening
+```
+
+★ **A PLATEAU IS WHAT THE PHYSICS PREDICTS AND "WIDENING FOREVER" IS NOT.** In prefill each batch is
+512 tokens, so attention is a matmul over (512 × context) and the per-token FFN cost is amortised.
+Shallow, FFN dominates and the paged block-table indirection shows as overhead. Deep, attention
+dominates and **both arms scale with the same asymptote** — so the ratio converges to the constant
+ratio of the two attention kernels' deep-context throughput, which is what 0.944 is.
+
+⇒ **INTERNAL CONSISTENCY CHECK, and it lands exactly.** The endpoint prefill numbers for this run
+are static 124.9 / paged 132.3 tok/s → **1.059**, i.e. static/paged = **0.944**. The plateau
+value derived from differenced interval rates and the whole-prompt average agree **to three
+decimals**, by two independent routes through the same data. The endpoint average is the
+depth-weighted mean of the curve, and most of a 400k prompt is deep, so it sits on the plateau.
+
+⚠⚠ **AND THIS CONSTRAINS A CLAIM ELSEWHERE IN THIS FILE: "+35% at 256k with the gap widening" is a
+DECODE result and must not be read as a prefill one.** Prefill's gap does **not** widen past 150k.
+The two are not in conflict — decode reads the *entire* KV cache for *one* token and is far more
+bandwidth-bound, which is exactly where the paged layout's locality pays; prefill amortises that
+over 512 tokens per batch. **Same run, same kernels, opposite shapes, and the mechanism says why.**
+
+⇒ **Falsifiable at 1M:** if the plateau is the attention-kernel asymptote, the 1M prefill ratio is
+also **~0.94**, not something larger. A widening prefill ratio at 1M refutes this mechanism.
 
 ★ **AND THE TREND SURVIVES THE COLD-ARM CONFOUND WHERE A LEVEL WOULD NOT.** A cold penalty scales
 an arm **uniformly**, so it cannot manufacture a depth-**dependent** ratio. **The LEVEL of this
@@ -119,6 +150,13 @@ Per-position log files: staged patch.
 ⇒ **PRE-REGISTERED before arm 4 reaches that depth:** static's **350-400k** interval rate lands in
 **62-69 tok/s** (ratio 0.85-0.94) against paged's measured **73.3**. **If static comes back above
 73.3 there, "static decays harder" is refuted at the depth that actually matters.**
+
+⚠ **THE BAND WAS SET FROM THE TREND READING AND THE PLATEAU NOW PREDICTS ITS TOP EDGE.** A plateau
+at 0.944 puts static at **69.2 tok/s** — one tenth of a point *outside* the band I registered.
+**Recorded rather than widened.** A band moved after seeing which way the data went is not a
+prediction, and this lane already has a scar for a limit calibrated on unchecked runs. So:
+**0.85-0.94 was the trend model's band and it is about to miss high; the plateau model says
+~0.94 exactly.** Whichever lands, one of the two was wrong in a way that was written down first.
 
 ⇒ **THE BAR, complete:** paged decode costs **9-15% below 64k**, is **parity at ~128k**, and is
 **+35% at 256k with the gap widening**. **The owner's range starts at 256k. Inside his range, paging
