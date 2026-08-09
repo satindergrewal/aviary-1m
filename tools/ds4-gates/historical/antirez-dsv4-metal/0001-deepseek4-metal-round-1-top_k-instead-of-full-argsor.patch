@@ -1,0 +1,63 @@
+From b4f1d88561a2188cbc40147d0e66b2201914fda7 Mon Sep 17 00:00:00 2001
+From: [identity stripped -- see the README for provenance]
+Date: Fri, 10 Jul 2026 14:50:02 +1200
+Subject: [PATCH 1/2] deepseek4 metal round 1: top_k instead of full argsort;
+ scale graph budget past ubatch 512
+
+- deepseek4.cpp: ggml_argsort_top_k -> ggml_top_k at both indexer sites. The mask
+  builder consumes indices via order-independent get_rows/set_rows scatter, so the
+  full bitonic sort was wasted work. +5.4% pp3072 (grows with context).
+- llama-context.cpp: DEEPSEEK4 graph_max_nodes 192->768 per token. The 524288 floor
+  masked the undercount up to n_ubatch=512; at 1024 the context reserve overflowed
+  the metadata arena (ggml.c GGML_ASSERT(obj_new)). <=512 sizing unchanged.
+- Verified: test-backend-ops MTL0 TOP_K all OK; greedy seed-1234 48-token golden
+  output exact-match vs baseline; pp3072 132.9 -> 145.8 t/s at ub=1024.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ src/llama-context.cpp    | 6 +++++-
+ src/models/deepseek4.cpp | 4 ++--
+ 2 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index cfcb5699a..ed39984c0 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -2096,7 +2096,11 @@ uint32_t llama_context::graph_max_nodes(uint32_t n_tokens) const {
+         // count is much smaller than the number of GGML objects allocated while
+         // building those graphs, so reserve a larger metadata arena than the
+         // generic tensor-count heuristic would provide.
+-        return std::max<uint32_t>(524288u, n_tokens * 192 + 64u * model.n_tensors());
++        // 192 objs/token undercounts the replay compressor's per-token cluster: the
++        // 524288 floor happens to cover it up to n_ubatch 512, then ggml.c GGML_ASSERT(obj_new)
++        // fires during context reserve at 1024. 768/token keeps <=512 sizing identical
++        // (floor still dominates) and scales correctly above it.
++        return std::max<uint32_t>(524288u, n_tokens * 768 + 64u * model.n_tensors());
+     }
+     uint32_t res = std::max<uint32_t>(1024u, 8u*model.n_tensors());
+     for (const auto & lora : model.loras) {
+diff --git a/src/models/deepseek4.cpp b/src/models/deepseek4.cpp
+index 56af9707e..6930e8f29 100644
+--- a/src/models/deepseek4.cpp
++++ b/src/models/deepseek4.cpp
+@@ -1122,7 +1122,7 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
+                     cb(index_scores, "indexer_scores", il);
+ 
+                     const int top_k = std::min<int64_t>(hparams.indexer_top_k, n_comp);
+-                    ggml_tensor * topk = ggml_argsort_top_k(ctx0, index_scores, top_k);
++                    ggml_tensor * topk = ggml_top_k(ctx0, index_scores, top_k);
+                     cb(topk, "indexer_topk", il);
+ 
+                     ggml_tensor * comp_mask = dsv4_build_compressed_mask_from_topk(ctx0, index_scores, topk);
+@@ -1288,7 +1288,7 @@ llm_build_deepseek4::llm_build_deepseek4(const llama_model & model, const llm_gr
+                             cb(index_scores, "indexer_scores", il);
+ 
+                             const int top_k = std::min<int64_t>(hparams.indexer_top_k, n_comp_visible);
+-                            ggml_tensor * topk = ggml_argsort_top_k(ctx0, index_scores, top_k);
++                            ggml_tensor * topk = ggml_top_k(ctx0, index_scores, top_k);
+                             cb(topk, "indexer_topk", il);
+ 
+                             comp_mask = dsv4_build_compressed_mask_from_topk(ctx0, index_scores, topk);
+-- 
+2.54.0
+
