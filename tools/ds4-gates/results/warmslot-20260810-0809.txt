@@ -1,0 +1,1 @@
+tip: 9eb5b1241 dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=1  regime=WARM

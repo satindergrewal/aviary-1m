@@ -1,0 +1,16 @@
+tip: 9eb5b1241 dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=1  regime=WARM
+  static-r1      np=2  prime=4    post=4    consume=-1     ptok=40006   blocks=625    -> SUSPECT
+      S1  <EMPTY http=200>
+      S2  <EMPTY http=200>
+  paged-r1       np=2  prime=4    post=<ERR consume=2130   ptok=12      blocks=0      -> POST-PAIR-DIRTY
+      ⚠ COVERAGE: the longest prompt spans 0 block(s) at --kv-block-size 64.
+        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is
+        scoped to one block per slot. Raise MS_FILL to cross it.
+      S1  <ERR:paged KV: the scheduler cannot make prog>
+      S2  <ERR:paged KV: the scheduler cannot make prog>
+-----
+static: 0 clean / 1 bad     paged: 0 clean / 1 bad
+verdicts: static:SUSPECT paged:POST-PAIR-DIRTY
+WARM MULTI-SLOT GATE: **VOID** -- static (no paging) scored 1 bad. The gate is measuring itself, not the code.
+  (a dirty static arm can never indict paging; fix the harness before reading the paged column)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260810-0805.txt

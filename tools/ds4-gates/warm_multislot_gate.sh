@@ -39,10 +39,17 @@ echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git sta
 # and `--kv-block-size 16` were HARDCODED, and short prompts cannot cross a block table at all.
 # Three parameters, and a prompt builder.
 #
-# ⚠⚠ DEFAULTS ARE BYTE-IDENTICAL TO THE PREVIOUS BEHAVIOUR ON PURPOSE. MS_CTX=8192, MS_BLK=16,
-# MS_FILL=0 reproduce exactly what this gate did before, so the 2026-08-09 closure it produced is
-# not retroactively re-scoped by an edit made today. A gate whose meaning changes under you is how a
-# green from last week starts describing a different experiment.
+# ⚠⚠ DEFAULTS REPRODUCE THE PREVIOUS BEHAVIOUR, WITH ONE NAMED EXCEPTION. MS_CTX=8192, MS_BLK=16,
+# MS_FILL=0 give exactly the old gate, so the 2026-08-09 closure it produced is not retroactively
+# re-scoped by an edit made today. A gate whose meaning changes under you is how a green from last
+# week starts describing a different experiment.
+#
+# ⚠ THE EXCEPTION, STATED BECAUSE I FIRST WROTE "BYTE-IDENTICAL" AND IT STOPPED BEING TRUE ONE EDIT
+# LATER: the paged pool is now DERIVED (see NGPUB below), so at the old defaults it is **579 blocks
+# instead of the hardcoded 512**. The old 512 was exactly 8192/16 -- the context with ZERO headroom,
+# tight by accident rather than by design. A LARGER pool cannot turn a clean run dirty, so the
+# 2026-08-09 closure still holds; but "byte-identical" was a claim, it became false, and a stale
+# claim in a comment is the thing this directory has the most scars about.
 #
 #   MS_CTX   server context           (default 8192)
 #   MS_BLK   --kv-block-size          (default 16)
@@ -73,14 +80,27 @@ PROMPTS=(
 EXPECT=( 'three.*four.*five' 'b, *c, *d' 'venus|mercury' 'tuesday' )
 PRIME='What is two plus two? Answer with the number only.'
 
+# ⚠⚠ THE PAGED POOL WAS HARDCODED AT `-ngpub 512 -ncpub 128`, AND THAT NUMBER WAS THE OLD CELL.
+#     512 blocks x block 16 = 8192 tokens = EXACTLY the `-c 8192` this gate used to run.
+# So the pool silently fitted the context it was written for and nothing tied the two together.
+# Measured 2026-08-10, first run of the long-context cell: block 64, two concurrent 40,006-token
+# prompts needing 80,012 tokens against a pool of 512 x 64 = 32,768. Both sequences came back
+#     <ERR:paged KV: the scheduler cannot make progress>
+# ⇒ Not a paging defect. **A constant sized for one experiment, silently carried into another** --
+#   and the engine refused by DESIGN rather than crashing, which is the behaviour this lane asked
+#   for elsewhere and is worth recording as working.
+# ⇒ DERIVE it from the two things it actually depends on, so it can never again be right by accident:
+NGPUB=${MS_NGPUB:-$(( (${MS_CTX:-8192} / ${MS_BLK:-16}) * 110 / 100 + 16 ))}   # +10% headroom
+NCPUB=${MS_NCPUB:-$(( NGPUB / 4 ))}
+
 ask() {
   local ep body
   if [ "${MS_CHAT:-0}" = "1" ]; then
       ep="/v1/chat/completions"
-      body="{\"messages\":[{\"role\":\"user\",\"content\":$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$1")}],\"max_tokens\":256,\"temperature\":0,\"seed\":1}"
+      body="{\"messages\":[{\"role\":\"user\",\"content\":$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$1")}],\"max_tokens\":${MS_NPRED:-256},\"temperature\":0,\"seed\":1}"
   else
       ep="/completion"
-      body="{\"prompt\":$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$1"),\"n_predict\":256,\"temperature\":0,\"seed\":1,\"cache_prompt\":false}"
+      body="{\"prompt\":$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$1"),\"n_predict\":${MS_NPRED:-256},\"temperature\":0,\"seed\":1,\"cache_prompt\":false}"
   fi
   curl -s -w '\nHTTP:%{http_code}' --max-time 300 -X POST "http://127.0.0.1:$PORT$ep" -H 'Content-Type: application/json' \
         -d "$body" \
@@ -95,8 +115,17 @@ c = d.get("content") or (d.get("choices",[{}])[0].get("message",{}) or {}).get("
 import re as _re
 c = _re.sub(r"<think>.*?</think>", " ", c, flags=_re.S)       # answer lives AFTER the think block
 c = _re.sub(r"^.*?(?:Thinking Process|<think>).*$", " ", c, flags=_re.S) if "</think>" not in d.get("content","") and "<think>" in d.get("content","") else c
+tp, st = d.get("tokens_predicted", -1), d.get("stop_type", "?")
 out = ("<ERR:"+str(d["error"].get("message"))[:40]+">") if "error" in d else c.strip().replace(chr(10)," ")[:120]
-print(out if out.strip() else f"<EMPTY http={code}>")'; }
+# ⚠⚠ AN EMPTY ANSWER FROM A TRUNCATED GENERATION IS A HARNESS FAULT, NOT A WRONG ANSWER, AND
+# CALLING IT SUSPECT POINTS THE READER AT THE CODE INSTEAD OF THE GATE. Measured 2026-08-10 on the
+# 35B at a 40k prompt: eval time = 256 tokens against n_predict=256, raw content opening with
+# "<think>" and never closing -- the reasoning model spent its entire budget thinking and the
+# stripper correctly returned nothing. That is attempt-log failure #2 recurring at a larger prompt.
+# ⇒ Name it, so the verdict says WHICH thing broke. "refuted needs its condition."
+if not out.strip() and st == "limit":
+    out = f"<TRUNCATED n={tp} stop=limit -- raise MS_NPRED>"
+print(out if out.strip() else f"<EMPTY http={code} n={tp} stop={st}>")'; }
 
 probe() { # $1=tag $2=flags
     local tag="$1" flags="$2"
@@ -204,9 +233,9 @@ declare -a V=()
 for r in $(seq 1 "$REPS"); do
     if [ $((r % 2)) -eq 1 ]; then
         v=$(probe "static-r$r" "" | tail -1); V+=("static:$v")
-        v=$(probe "paged-r$r"  "--kv-paged --kv-block-size ${MS_BLK:-16} -ngpub 512 -ncpub 128" | tail -1); V+=("paged:$v")
+        v=$(probe "paged-r$r"  "--kv-paged --kv-block-size ${MS_BLK:-16} -ngpub $NGPUB -ncpub $NCPUB" | tail -1); V+=("paged:$v")
     else
-        v=$(probe "paged-r$r"  "--kv-paged --kv-block-size ${MS_BLK:-16} -ngpub 512 -ncpub 128" | tail -1); V+=("paged:$v")
+        v=$(probe "paged-r$r"  "--kv-paged --kv-block-size ${MS_BLK:-16} -ngpub $NGPUB -ncpub $NCPUB" | tail -1); V+=("paged:$v")
         v=$(probe "static-r$r" "" | tail -1); V+=("static:$v")
     fi
 done
