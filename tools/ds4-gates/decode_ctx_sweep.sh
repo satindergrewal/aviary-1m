@@ -68,7 +68,12 @@ for ctx in $RUNGS; do
         LEGS="$LEGS $ctx:VOID"
         continue
     fi
+    # ⚠ AN ABSENT WINDOW LINE MUST SAY SO, NOT PRINT A BLANK. Result files written before the
+    # `ignore_eos` fix have no "decode window actually generated" line at all, and their tg numbers
+    # were 14-token averages -- the defect that made a decode result INVERT once the window was real.
+    # A blank line there would silently present an unsampled rung beside properly sampled ones.
     win=$(grep -m1 'decode window actually generated' "$legout" | sed 's/^  //')
+    [ -n "$win" ] || win="⚠ no decode-window line -- this leg predates ignore_eos, so its tg is an unknown-length average and is NOT comparable to the others"
     ver=$(grep -m1 -A1 '^  DECODE' "$legout" | tail -1 | sed 's/^ *//')
     cold=$(grep -m1 -A1 'COLD-ARM CHECK' "$legout" | tail -1 | sed 's/^ *//')
     printf '  %s\n  %s\n  %s\n  cold-arm: %s\n\n' "$win" "$dec" "$ver" "$cold" | tee -a "$OUT"
