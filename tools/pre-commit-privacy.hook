@@ -1,10 +1,29 @@
 #!/usr/bin/env bash
 # PRE-COMMIT HOOK (NOT INSTALLED) — makes the privacy guard unconditional instead of remembered.
 #
-# INSTALL:    ln -sf ../../tools/pre-commit-privacy.hook .git/hooks/pre-commit
-# UNINSTALL:  rm .git/hooks/pre-commit
-# BYPASS ONCE (deliberate, e.g. you really do mean to commit that address):
-#             git commit --no-verify
+# ⇒ **PRE-PUSH IS THE BETTER HOOK, and the reason is in the incident history rather than in taste:
+#   all three of this project's history rewrites were triggered at the PUBLIC BOUNDARY, and push is
+#   where that boundary is.** A pre-commit hook polices a private act; a pre-push hook polices the
+#   act that actually caused the damage — and it leaves local commits completely unaffected.
+#   (raised by Grok)
+#
+# INSTALL (pre-push, recommended):
+#     ln -sf ../../tools/pre-commit-privacy.hook .git/hooks/pre-push
+# INSTALL (pre-commit, stricter and noisier):
+#     ln -sf ../../tools/pre-commit-privacy.hook .git/hooks/pre-commit
+# UNINSTALL:  rm .git/hooks/pre-push        (or .git/hooks/pre-commit)
+# BYPASS ONCE (deliberate, e.g. you really do mean to publish that address):
+#             git push --no-verify          (or git commit --no-verify)
+#
+# ⚠⚠ THE FORK IS THE BIGGER HOLE AND IT HAS NO GUARD AT ANY LAYER.
+# `privacy_guard.sh` never references `llama.cpp-ds4ports`; that repo's `tools/` is upstream stock,
+# and **its `origin` is a PUBLIC GitHub fork** (URL omitted on purpose -- it carries the owner's
+# handle, and this guard refuses that string, correctly). Its diffs are C++ comments quoting real
+# log lines, backtraces and absolute paths — higher-risk content than a result file, and **nothing
+# scrubs it at write time either.** For the fork, symlink this hook by ABSOLUTE path:
+#     ln -sf ~/Documents/GitHub/ornith-1m/tools/pre-commit-privacy.hook \
+#            ~/Documents/GitHub/llama.cpp-ds4ports/.git/hooks/pre-push
+# The guard takes the repo path as `$1` and the hook body passes it, so it works from either tree.
 #
 # ⚠⚠ WHY THIS EXISTS, AND WHY IT IS OFFERED RATHER THAN INSTALLED.
 #
