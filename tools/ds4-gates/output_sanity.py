@@ -153,6 +153,30 @@ INTRA_MAX    = 1      # >1 token with mixed scripts INSIDE it; fires at 7 tokens
 # and a low bar here would fire on structured output. The real 512-token loop measured on this box
 # scores near 1.0, so the separation is wide and the threshold does not need to be tight.
 NGRAM_MAX    = 0.60
+#
+# ⚠⚠ MEASURED FALSE-POSITIVE REGIME -- READ THIS BEFORE POINTING THIS FILE AT LONG OUTPUT.
+# My false-positive controls were all ONE-LINERS, so they could not test the regime the detector
+# actually runs in. Built long-form controls and measured:
+#
+#     text                       tokens  4-gram  TTR    verdict
+#     REAL LOOP (a paged arm)      129    0.97   0.047  DEGENERATE   correct
+#     long prose                   158    0.00   0.703  clean        correct
+#     structured table (40 rows)   560    0.71   0.086  DEGENERATE   **FALSE POSITIVE**
+#     the same code block x8       336    1.00   0.083  DEGENERATE   arguably correct
+#
+# A model asked to list forty layers and their status produces exactly the third row. **The detector
+# cannot tell "the model is looping" from "the model is producing a legitimately repetitive
+# structure."**
+#
+# ⇒ I tried the obvious co-condition -- require a low type-token ratio as well -- and **MEASURED that
+#   it does not separate them**: the real loop is 0.047 and the table is 0.086, a factor of 1.8, and
+#   a table with fewer distinct values lands below the loop. **Reporting the failed fix matters more
+#   than the successful one**: without this note the next reader will try the same thing.
+#
+# ⇒ THE RESOLUTION IS SCOPE, NOT THRESHOLD. Run this on an ANSWER, never on free-running `ignore_eos`
+#   filler -- `--prefix`, or a second short request with ignore_eos off. In answer-length text the
+#   one-liner controls above ARE representative and the detector is sound. Outside that scope its
+#   verdict is not trustworthy, and no threshold I can measure makes it so.
 
 def degeneracy(t):
     """Return (verdict, [reasons]). Only fires on shapes healthy output does not produce."""
