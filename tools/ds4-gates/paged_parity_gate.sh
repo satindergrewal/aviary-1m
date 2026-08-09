@@ -201,11 +201,30 @@ arm() { # $1 = static|paged
             [ "$NPRED" -lt 8 ] && echo "          NPRED=$NPRED is under 8, so the engine's check never armed -- raise it." | tee -a "$OUT"
             kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; return 1
         fi
-        # ⚠ REPORT THE REFUSALS EVEN WHEN THE ARM PASSES. Partial fallback is normal on a hybrid --
-        # minority-geometry layers SHOULD fall back -- but the count is the difference between "paged
-        # with two layers static" and "static with a pool", and those produce very different numbers.
-        printf '  paged arm consumed the pool (engine no-consumer alarm silent); %s layer-refusal warnings\n' \
-               "$refused" | tee -a "$OUT"
+        # ⚠⚠ THERE ARE **TWO** FALLBACK BRANCHES AND THIS LINE COUNTED ONLY ONE. Found by Grok,
+        # 2026-08-10, in a log this gate had already scored clean:
+        #
+        #     fails the paged capability contract   0      <- the only branch counted
+        #     **took the STATIC path -- no paged context   110**  <- never counted, and firing
+        #
+        # on exactly the ten full-attention layers (3,7,...,39). **The record said "0 layer-refusal
+        # warnings" for a run where every attention layer announced the static path.** The gate was
+        # blind to the branch that was actually firing -- the 14-token header defect at gate level:
+        # the field says the question was asked and passed; it was asked, it was not seen.
+        #
+        # ⚠ AND THE RESOLUTION IS *WHEN*, NOT *WHETHER*. A `-lv 5` decider split on the request
+        # marker showed 210 static-path warnings, **all of them before the request**, and after it
+        # **640 DS4P-CONSUME banded events across layers [3,7,...,39] with ZERO fallbacks**. So
+        # reserve-time static-path warnings are NORMAL -- the paged context does not exist yet when
+        # llama-server builds its ~21 reserve graphs. Counting them as failures would be as wrong as
+        # ignoring them.
+        # ⇒ Report both branches, and say plainly which one is expected. The engine's no-consumer
+        #   alarm remains the pass/fail; these counts are for reading, not for gating.
+        local staticpath; staticpath=$(grep -ac 'took the STATIC path' "$D/$1.log")
+        printf '  paged arm consumed the pool (engine no-consumer alarm silent)\n' | tee -a "$OUT"
+        printf '    capability-contract refusals: %s   static-path fallbacks: %s\n' \
+               "$refused" "$staticpath" | tee -a "$OUT"
+        printf '    ⚠ static-path fallbacks are EXPECTED at reserve time (the paged context is not set\n      yet during graph reserve). A -lv 5 run is what proves they stop once the request starts.\n' | tee -a "$OUT"
     fi
 
     kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; sleep 3
@@ -505,7 +524,14 @@ if cold < -0.01:
     print(f"    ⚠ pos1 ran SLOWER than pos4 by {abs(cold)*100:.1f}%: the first arm was still cold, and because")
     print("      it is always static, EFFECT above is biased TOWARD PAGED. Warm-vs-warm is the honest read:")
     print(f"      pos4 static wall {s2['wall']:.1f}s vs paged mean {wp:.1f}s = {wp/max(s2['wall'],1e-9):.4f}")
-    print("      Re-run with the warm-up prelude enabled (PP_WARM=1) before quoting a winner.")
+    # ⚠ THIS LINE USED TO SAY "re-run with the warm-up prelude enabled (PP_WARM=1)" -- and on
+    # 2026-08-10 it printed that while PP_WARM=1 WAS ON, with both warm-up arms in the log above it.
+    # A stale template line telling the reader to do the thing already done. **The prelude kills the
+    # cold-arm effect at 8k, where it was validated, and does NOT fully kill it at 256k** -- a fix
+    # validated in the regime where it works and shipped for the regime where it does not.
+    print("      ⚠ The warm-up prelude does NOT remove this at long context: it was validated at 8k")
+    print("        and still leaves a 4-6% first-arm penalty at 256k. Quote the warm-vs-warm figure")
+    print("        above, or add repeats -- re-running with the same prelude will not fix it.")
 elif cold > 0.01:
     print(f"    ⚠ pos1 ran FASTER than pos4 by {cold*100:.1f}%: NOT a cold first arm -- the box got slower")
     print("      across the run (load, thermals, or another job). This biases EFFECT toward STATIC, the")
