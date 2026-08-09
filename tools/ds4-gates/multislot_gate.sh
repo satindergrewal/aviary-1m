@@ -200,6 +200,25 @@ for r in $(seq 1 "$REPS"); do
     fi
 done
 
+# ⚠⚠ THE PAGED ARMS ABOVE MUST PROVE THEY PAGED, and nothing here did until 2026-08-09.
+# This gate's only paged evidence was that the server accepted `--kv-paged`. On that same day
+# paged_parity_gate reported 4.5 hours of "parity" from arms where every attention layer had been
+# refused and silently fell back to static -- correct output, static timings, clean verdict.
+# Allocation is not consumption; a flag being accepted is not even allocation.
+# ⇒ LAW 6, on the last paged log this loop wrote. It uses the engine's own WARN-level check rather
+#   than DS4P-CONSUME, because this gate runs `-lv 4` and that marker is DEBUG (verbosity >= 5) --
+#   the sibling arch_serve_gate.sh runs `-lv 5` precisely so it CAN read the marker directly, and
+#   the note in warm_multislot_gate.sh records an assertion already made wrongly from a -lv 4 log.
+if command -v gate_assert_paged_consumed >/dev/null 2>&1; then
+    _last_paged=$(ls -t "$LOGDIR"/paged*.log 2>/dev/null | head -1)
+    if [ -n "$_last_paged" ]; then
+        gate_assert_paged_consumed "$_last_paged" "paged arms" "$(gate_n_predict 2>/dev/null || echo 512)" | tee -a "$OUT"
+        [ "${PIPESTATUS[0]}" = "1" ] && echo "  ⇒ every paged verdict below is a STATIC verdict. Not a paging result." | tee -a "$OUT"
+    else
+        echo "  ⚠ no paged log found to check -- consumption UNVERIFIED, treat paged verdicts as unproven" | tee -a "$OUT"
+    fi
+fi
+
 echo "-----" | tee -a "$OUT"
 s_clean=0; s_bad=0; p_clean=0; p_bad=0
 for v in "${verdicts[@]}"; do
