@@ -146,6 +146,21 @@ sizes: **1.2767 · 1.3692 · 1.4090 · 1.3471.**
 Caveats attached rather than hidden: **n=2 per arm** (a drift bound, not a variance estimate), the
 **cold-arm signature is still present**, and **prefill is unmeasurable at this sample size**.
 
+### ⚠⚠ AND THE CAVEAT THAT WAS MISSING FROM THIS SECTION UNTIL THE COVERAGE SWEEP: `-np 1`
+
+**Every number above is a SINGLE-SLOT result.** `paged_parity_gate` runs `-np 1`, as do
+`arch_serve_gate` and `long_context_gate`. **"Paging is as fast as static" silently carries "with one
+slot."**
+
+⚠ That matters here specifically, not in general: this lane has an **open `-np > 1` defect** —
+absolute `batch_offsets`/`write_slots` against local ubatch indices — **which no `-np 1` gate can
+see, and which fires under ordinary continuous batching.** So the configuration a server actually
+runs in is the one no bar-feeding gate exercises.
+
+⇒ **The verdict stands as stated** — the bar was speed at 256k-1M and that is what was measured. But
+**the caveat belongs beside the number, not three sections away**, because the number is what gets
+quoted. It was missing from this section for two hours after I wrote it down elsewhere.
+
 ---
 
 | rung | verdict | evidence |
