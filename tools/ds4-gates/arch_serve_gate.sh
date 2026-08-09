@@ -385,6 +385,30 @@ S_CONS=$(( $(c_band "$LOGDIR/static.log") + $(c_auto "$LOGDIR/static.log") ))
 # does paged match static) are unaffected and remain valid. **What is scoped is the WINDOW claim
 # only** -- and saying so beats both silently over-claiming and failing a run that is fine.
 # ⇒ To actually test the band: `AG_PROMPT` longer than `n_swa`, or a needle beyond the window.
+# ⚠⚠⚠ AND THE SAME PROMPT LENGTH SCOPES SOMETHING LARGER THAN THE WINDOW: **BLOCK COVERAGE.**
+# Prompt ~6 tokens + `AG_NPRED` 8 = ~14 tokens, against the engine's default `block_size = 16`
+# (common.h:565). ⇒ **The whole run fits in ONE BLOCK.**
+#
+# So every "verified" architecture in the matrix was verified on a paged run that **allocated a
+# single block and never crossed a boundary.** Block-table traversal, multi-block indexing, the
+# write-slot mapping across blocks, block reuse and eviction — **none of it is exercised.** The
+# arch matrix's real claim is *"21 architectures produce correct output for a SINGLE-BLOCK prompt"*,
+# which is a much smaller sentence than the one it has been read as.
+#
+# ⚠ This is not speculative for this fork: the corruption hunt recorded in
+# `FINDINGS-paged-cross-request.md` turned on the size of the **final partial prefill chunk** — a
+# multi-block, boundary-shaped defect that a 14-token run cannot express at all.
+#
+# ⇒ Stated, not failed, for the same reason as the window claim: serve/consume/paged≡static are
+#   real results at any length. **Block coverage is the claim that is out of scope, and a reader
+#   deserves to be told which claims a green covers.**
+_blocks_spanned=$(( (6 + ${NPRED:-8} + 15) / 16 ))
+if [ "$_blocks_spanned" -le 1 ]; then
+    echo "  ⚠ BLOCK COVERAGE NOT TESTED: ~$((6 + ${NPRED:-8})) tokens at the default block_size 16 is" | tee -a "$OUT"
+    echo "    ONE block. Block-table traversal, cross-block indexing, write-slot mapping and reuse" | tee -a "$OUT"
+    echo "    are not exercised. Raise AG_PROMPT/AG_NPRED past a few blocks to cover them." | tee -a "$OUT"
+fi
+
 _nswa=$(grep -m1 -oE 'n_swa +=? *[0-9]+' "$LOGDIR/static.log" 2>/dev/null | grep -oE '[0-9]+$')
 _ptok=$(grep -m1 -oE 'prompt_n[^0-9]*([0-9]+)|n_tokens = *[0-9]+' "$LOGDIR/static.log" 2>/dev/null | grep -oE '[0-9]+' | head -1)
 if [ -n "${_nswa:-}" ] && [ "${_nswa:-0}" -gt 0 ] 2>/dev/null; then
