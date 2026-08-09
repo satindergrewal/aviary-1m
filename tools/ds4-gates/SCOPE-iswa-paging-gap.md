@@ -174,6 +174,20 @@ Three things worth carrying to the next arch:
 3. **`kq_scale` differs per arch.** gemma3 pre-scales Q by `f_attention_scale` and passes `1.0f`;
    gemma4 passes `f_attention_scale`. Copying the argument instead of reading it is a silent
    numerical error.
+4. **★ CHECK `swa_type` BEFORE COPYING THIS PATTERN. `visibility_window` is a ROLLING window and
+   nothing else.** There are three SWA types and two of them are a different shape:
+
+   | type | static mask (`llama-hparams.h`) | band can express it? |
+   |---|---|---|
+   | `STANDARD` | masked iff `p1 - p0 >= n_swa` | **yes** — `lo = q_pos - window + 1` is the same half-open interval, verified line by line, no off-by-one |
+   | `CHUNKED` | masked iff `p0 < (p1/n_swa)*n_swa` | **no** — block-aligned, jumps at chunk edges |
+   | `SYMMETRIC` | masked iff `\|p1-p0\| > n_swa/2` | **no** — includes future positions, not even causal |
+
+   **`llama4` in the list above is CHUNKED.** Wired gemma4-style it would have passed a
+   presence-only check (`is_swa && window > 0`) and then attended over a rolling band it never had.
+   `build_attn_paged_or_null` now rejects on the TYPE as well, so a copied pattern falls back loudly
+   instead of corrupting -- but the rejection means those archs are **not wired by this pattern at
+   all**, and making them paged is a kernel job, not a wiring job.
 
 **Status: compiles clean (`-fsyntax-only` on both changed files). NOT gate-verified.** No
 `DS4P-CONSUME > 0` measurement has been taken for gemma3, and per the rule above that means it is
