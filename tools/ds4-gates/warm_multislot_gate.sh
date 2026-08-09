@@ -28,6 +28,41 @@ OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-$(date +%Y
 PORT=${MS_PORT:-21500}
 echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  model=$(basename "$M")  reps=$REPS  regime=WARM" | tee "$OUT"
 
+# ★★ LONG-CONTEXT MODE (added 2026-08-10) -- THE EMPTY COMPOSITION CELL.
+#
+# The `-np>1` corruption is FIXED and closed by measurement (c2f28a79d; 00cb274, e404116). What is
+# NOT closed is the COMPOSITION: that closure ran at `-c 8192`, block 16, short prompts, while every
+# parity number runs `-np 1`, block 64, 400k fill. **Neither crosses the other's constant**, so
+# "multi-slot is clean" and "paging is 1.97x at 512k" have never been true of the same run.
+#
+# ⚠ The board said this was "warm_multislot_gate with MS_CTX raised". That understated it: `-c 8192`
+# and `--kv-block-size 16` were HARDCODED, and short prompts cannot cross a block table at all.
+# Three parameters, and a prompt builder.
+#
+# ⚠⚠ DEFAULTS ARE BYTE-IDENTICAL TO THE PREVIOUS BEHAVIOUR ON PURPOSE. MS_CTX=8192, MS_BLK=16,
+# MS_FILL=0 reproduce exactly what this gate did before, so the 2026-08-09 closure it produced is
+# not retroactively re-scoped by an edit made today. A gate whose meaning changes under you is how a
+# green from last week starts describing a different experiment.
+#
+#   MS_CTX   server context           (default 8192)
+#   MS_BLK   --kv-block-size          (default 16)
+#   MS_FILL  filler tokens per seq    (default 0 = OFF, the original short-prompt gate)
+#
+# The filler is UNIQUE PER SEQUENCE, not shared. A shared prefix would let the slots hold identical
+# KV, and a cross-slot read of identical bytes is INVISIBLE -- the gate would pass by construction.
+# That is the same shape as the arch matrix greens that could not see past one block.
+fill_prompt() { # $1 = 1-based sequence index, $2 = base prompt
+    if [ "${MS_FILL:-0}" -le 0 ] 2>/dev/null; then printf '%s' "$2"; return; fi
+    python3 - "$1" "$2" "${MS_FILL:-0}" <<'PY'
+import sys
+i, base, fill = sys.argv[1], sys.argv[2], int(sys.argv[3])
+# ~12 tokens per line; unique text per sequence so no two slots can hold matching KV
+n = max(1, fill // 12)
+body = "".join(f"Sequence {i} archival record line {k:06d}.\n" for k in range(n))
+sys.stdout.write(body + "\n" + base)
+PY
+}
+
 # ⚠ N distinct prompts with UNIQUE answers -- a swap between ANY two sequences must be detectable.
 PROMPTS=(
   'Count from one to five, in words, separated by commas. Answer only.'
@@ -66,7 +101,7 @@ print(out if out.strip() else f"<EMPTY http={code}>")'; }
 probe() { # $1=tag $2=flags
     local tag="$1" flags="$2"
     pkill -x llama-server >/dev/null 2>&1; sleep 2
-    env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 nohup "$SRV" -m "$M" -ngl 99 -c 8192 -np ${MS_NP:-2} -b 512 -ub 512 \
+    env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 nohup "$SRV" -m "$M" -ngl 99 -c ${MS_CTX:-8192} -np ${MS_NP:-2} -b 512 -ub 512 \
         --port $PORT --no-warmup -lv ${MS_LV:-4} ${MS_CHAT:+--jinja} $flags > "$LOGDIR/$tag.log" 2>&1 &
     local pid=$!
     for i in $(seq 1 300); do
@@ -95,7 +130,7 @@ probe() { # $1=tag $2=flags
     local ra rb
     local n=${MS_NP:-2} i pids=()
     for i in $(seq 1 "$n"); do
-        ask "${PROMPTS[$((i-1))]}" > "$LOGDIR/$tag-S$i.txt" & pids+=($!)
+        ask "$(fill_prompt "$i" "${PROMPTS[$((i-1))]}")" > "$LOGDIR/$tag-S$i.txt" & pids+=($!)
     done
     for i in "${pids[@]}"; do wait "$i"; done
     local -a R=()
@@ -144,7 +179,23 @@ probe() { # $1=tag $2=flags
     done
     [ "$v3" = OK ] || verdict=POST-PAIR-DIRTY   # the pair left something behind
     [ "$consumed" = "0" ] && verdict=VOID-NO-CONSUMER   # paged flags set, no layer consumed -> vacuous
-    printf "  %-14s np=%-2s prime=%-4s post=%-4s consume=%-6s -> %s\n" "$tag" "$n" "${p:0:4}" "${p3:0:4}" "$consumed" "$verdict" | tee -a "$OUT"
+    # ★ THE GATE MUST STATE THE SIZE OF THE QUESTION IT ANSWERED. A CLEAN here means nothing unless
+    # the prompts actually crossed a block table -- the arch matrix shipped 21 greens that could not
+    # see past a single block, and the convention adopted 2026-08-10 is that each green names its
+    # own coverage. MS_FILL is a TARGET in tokens computed from a ~12-tok/line ESTIMATE; this reads
+    # what the server actually tokenised, so the estimate is never the thing on the record.
+    local ptok blocks
+    ptok=$(grep -oE 'prompt eval time.*/ *[0-9]+ tokens' "$LOGDIR/$tag.log" 2>/dev/null \
+           | grep -oE '/ *[0-9]+ tokens' | grep -oE '[0-9]+' | sort -rn | head -1)
+    ptok=${ptok:-0}
+    blocks=$(( ptok / ${MS_BLK:-16} ))
+    printf "  %-14s np=%-2s prime=%-4s post=%-4s consume=%-6s ptok=%-7s blocks=%-6s -> %s\n" \
+        "$tag" "$n" "${p:0:4}" "${p3:0:4}" "$consumed" "$ptok" "$blocks" "$verdict" | tee -a "$OUT"
+    if [ "$blocks" -le 1 ]; then
+        echo "      ⚠ COVERAGE: the longest prompt spans $blocks block(s) at --kv-block-size ${MS_BLK:-16}." | tee -a "$OUT"
+        echo "        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is" | tee -a "$OUT"
+        echo "        scoped to one block per slot. Raise MS_FILL to cross it." | tee -a "$OUT"
+    fi
     for i in $(seq 1 "$n"); do printf "      S%-2s %s\n" "$i" "$(echo "${R[$((i-1))]}" | head -c 62)" | tee -a "$OUT"; done
     echo "$verdict"
 }
@@ -153,9 +204,9 @@ declare -a V=()
 for r in $(seq 1 "$REPS"); do
     if [ $((r % 2)) -eq 1 ]; then
         v=$(probe "static-r$r" "" | tail -1); V+=("static:$v")
-        v=$(probe "paged-r$r"  "--kv-paged --kv-block-size 16 -ngpub 512 -ncpub 128" | tail -1); V+=("paged:$v")
+        v=$(probe "paged-r$r"  "--kv-paged --kv-block-size ${MS_BLK:-16} -ngpub 512 -ncpub 128" | tail -1); V+=("paged:$v")
     else
-        v=$(probe "paged-r$r"  "--kv-paged --kv-block-size 16 -ngpub 512 -ncpub 128" | tail -1); V+=("paged:$v")
+        v=$(probe "paged-r$r"  "--kv-paged --kv-block-size ${MS_BLK:-16} -ngpub 512 -ncpub 128" | tail -1); V+=("paged:$v")
         v=$(probe "static-r$r" "" | tail -1); V+=("static:$v")
     fi
 done
