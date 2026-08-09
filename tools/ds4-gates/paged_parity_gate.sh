@@ -68,6 +68,11 @@ export LLAMA_PAGED_POOL_HEADROOM=${LLAMA_PAGED_POOL_HEADROOM:-1.05}
 
 [ -f "$M" ] || { echo "missing model: $M" >&2; exit 2; }
 D=${CLAUDE_JOB_DIR:-/tmp}/parity; mkdir -p "$D"
+# ⚠ CLEAR THE PREVIOUS RUN'S RESULT FILES. A `.res` that survives into the next run is
+# indistinguishable from one this run wrote -- same name, same schema, plausible numbers. The
+# same-prompt_n assertion below is the backstop; this is the fix. Two guards because the failure is
+# silent and the cost is a wrong verdict printed with confidence.
+rm -f "$D"/*.res 2>/dev/null
 OUT=${OUT:-$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/parity-$(date +%Y%m%d-%H%M).txt}
 mkdir -p "$(dirname "$OUT")"
 NEEDLE="MAGENTA-7742"
@@ -105,7 +110,14 @@ buf = [f"Note {i}: The secret passcode is {NEEDLE}. Remember it." if i == at
        for i in range(lines)]
 p = ("Below are many numbered notes. One of them contains a secret passcode.\n\n" + "\n".join(buf)
      + "\n\nQuestion: what is the secret passcode? Answer with the code only.\nAnswer:")
-json.dump({"prompt": p, "n_predict": NPRED, "temperature": 0, "seed": 1, "cache_prompt": False},
+# ⚠⚠ `ignore_eos` IS WHAT MAKES n_predict A FLOOR. Without it n_predict is a CEILING, and this prompt
+# is answered in FOURTEEN tokens: measured 2026-08-09, pred_n=14, pred_ms=670, stop_type=eos, against
+# a requested 512. **Every decode number this lane produced was sampled over 0.67 seconds** -- SHORTER
+# than the 48-token window the 512 was introduced to replace, and I spent a morning crediting the
+# change with a signal it never touched. A parameter that silently does not take effect is worse than
+# one that is absent, because it looks like the question was asked.
+json.dump({"prompt": p, "n_predict": NPRED, "temperature": 0, "seed": 1, "cache_prompt": False,
+           "ignore_eos": True},
           open(f"{D}/req.json", "w"))
 print(f"  prompt: {lines} lines, needle at 50% depth, target ~{FILL} tok")
 PY
@@ -202,11 +214,19 @@ if "error" in d: print(f"  {lab}: ERROR {str(d['error'].get('message'))[:70]}");
 c = d.get("content",""); tm = d.get("timings") or {}
 ok = NEEDLE in c
 # ⚠ NEEDLE IS A VALIDITY GUARD, NOT THE RESULT. A speed number from a wrong answer is not a number.
+# ⚠ PRINT THE ACHIEVED DECODE LENGTH, NOT THE REQUESTED ONE. The header says npred=512; the run may
+# have produced 14. Reporting only the request is how a dead parameter survives a whole day of
+# measurement -- and it is why an artifact-first reviewer COULD NOT catch it: the .res carried no
+# predicted_n, so the load-bearing field was simply absent from the record.
 print(f"  {lab:7s} needle={'PASS' if ok else 'FAIL'}  wall={t1-t0:8.1f}s  "
       f"prompt_n={tm.get('prompt_n')}  pp={tm.get('prompt_per_second',0):7.1f} tok/s  "
-      f"tg={tm.get('predicted_per_second',0):6.2f} tok/s")
+      f"tg={tm.get('predicted_per_second',0):6.2f} tok/s  "
+      f"pred_n={tm.get('predicted_n')} ({tm.get('predicted_ms',0)/1000:.1f}s)")
+# ⚠ AN ARTIFACT MUST CARRY EVERY FIELD ITS VERDICT DEPENDS ON, or it launders assumptions.
 json.dump({"lab":lab,"ok":ok,"wall":t1-t0,"pp":tm.get('prompt_per_second',0),
-           "tg":tm.get('predicted_per_second',0),"n":tm.get('prompt_n')}, open(f"{D}/{lab}.res","w"))
+           "tg":tm.get('predicted_per_second',0),"n":tm.get('prompt_n'),
+           "pred_n":tm.get('predicted_n'),"pred_ms":tm.get('predicted_ms'),
+           "out":os.environ.get("OUT","")}, open(f"{D}/{lab}.res","w"))
 PY
 }
 
@@ -370,6 +390,31 @@ arms=[("static",s1),("paged",p1),("paged",p2),("static",s2)]
 if not all(a[1]["ok"] for a in arms):
     print("  VOID: a needle failed. A speed number from a wrong answer is not a speed number.")
     raise SystemExit(2)
+
+# ⚠⚠ THE FOUR ARMS MUST HAVE MEASURED THE SAME THING, AND NOTHING CHECKED THAT UNTIL 2026-08-09.
+# If an arm dies, arm() returns early, `<lab>.res` is never written, the ABBA rename never happens --
+# and the PREVIOUS run's file survives and is loaded as that arm. Found by Grok, verified on disk:
+# `static2.res` held an 8k smoke fixture (n=3665, wall 6.5s, ok=True, needle PASS) for ninety minutes
+# while a 256k run was in progress. It parses, it passes the needle check, and it would have produced
+#     static mean 417.1s vs paged mean 848.9s  ->  "paged is 104% SLOWER"
+# printed with full confidence from a 6.5-second fixture written by the same session.
+# ⇒ prompt_n was already recorded in every .res and compared against NOTHING. One line closes it.
+ns = {a[1].get("n") for a in arms}
+if len(ns) != 1:
+    print(f"  VOID: the four arms do not share prompt_n {sorted(x for x in ns if x is not None)}.")
+    print("    At least one .res is STALE -- a dead arm leaves the previous run's file in place and")
+    print("    the rename silently reuses it. These are not four arms of one measurement.")
+    raise SystemExit(2)
+# ⚠ And say what the decode window ACTUALLY was, since the tg column is only as good as its sample.
+pn = [a[1].get("pred_n") for a in arms]
+if any(x is None for x in pn):
+    print("  ⚠ pred_n absent from at least one .res (written by an older gate) -- the decode window")
+    print("    behind these tg numbers is UNKNOWN. Treat the decode verdict as unverified.")
+else:
+    print(f"  decode window actually generated: {pn} tokens per arm")
+    if max(pn) < 64:
+        print(f"    ⚠ under 64 tokens -- tg is averaged over well under a second. n_predict is a")
+        print(f"      CEILING unless ignore_eos is set; check that it is.")
 print()
 print("  ABBA walls by position:")
 for i,(lab,a) in enumerate(arms,1):
