@@ -174,6 +174,13 @@ quoted. It was missing from this section for two hours after I wrote it down els
 
 ### ★ 1M PROJECTION, and it is the first number that makes the case on its own
 
+⚠⚠ **EVERY NUMBER IN THE BLOCK BELOW RESTS ON n=1 PER ARM AND A COLD pos1, AND IS NOT BANKED.**
+The caveat used to live only in the prose *after* the table — and a number in a table is quotable
+without the paragraph beside it. **That is the stale-header failure in miniature**, so the warning
+now sits where the numbers are. The 512k inputs (static tg 8.48, paged tg 16.88) get their drift
+bound from arms 3-4; **the cold penalty sits on STATIC, so the correction moves the ratio DOWN** —
+256k went 1.3471 → 1.307 under exactly that correction.
+
 Built from the two 512k arms banked so far, not from the old estimate:
 
 ```
