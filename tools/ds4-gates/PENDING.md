@@ -212,6 +212,14 @@ than a centre — and the 1M rung remains **the owner's spend to authorise**, at
 > to **0.9017×**, clearing its own drift. A short window can hold a **stable wrong sign** — the 35B's
 > 1.3692× reproduced across two arms to 0.6% and is still not safe.
 >
+> ⚠ **AND THAT 0.6% IS SPECIFIC TO THE 14-TOKEN RUN — DO NOT GENERALISE IT.** Its paged pair was
+> 29.45 / 29.28. The **good-window** 256k run's paged pair is **27.00 / 26.245 = 2.8%**. I quoted
+> "paged drift has been 0.6%" for hours from this line, in chat and in expectation-setting, without
+> re-deriving it at the rung I was actually comparing against. **A figure carried forward without its
+> derivation** — the same class as a rate without its sample size, and it would have made an ordinary
+> replicate look like either a triumph or an anomaly on a band four times too narrow.
+> (caught by Grok, from the `.res` artifacts)
+>
 > **Two readings, registered before the re-run:**
 > **(a) context-dependent** — block-table indirection is a fixed per-step cost, while static
 > attention cost grows with context; at 8k the overhead dominates, at 256k the benefit does. *Both
