@@ -169,7 +169,31 @@ quoted. It was missing from this section for two hours after I wrote it down els
 | 256k / 512k, **bs=64 champ off** | ⛔ **VOID** | the "paged" arm never paged: 3,610 refusals, `64 × 256 > 8192` |
 | 8k, 9B, **pred_n=128** | **prefill 1.0075 (clears)** · **decode 0.9017 (clears)** | clean box, cold-arm check +0.1%. The first decode number in this lane with a real window — **and it says paged is 9.8% SLOWER.** |
 | 8k, 35B, pred_n=14 | wall 1.0095 · prefill 0.999x · decode 0.878x | decode leg inherits the short-window status; prefill leg survives |
-| 1M | **not measured** | Fits in memory (f16 116.1 GiB / q8_0 76.1 GiB of 128). ~20-24 h, ~5.5 tok/s decode. Owner's call. |
+| 512k, **n=1 per arm** | **decode 1.991** · prefill 1.059 · wall 0.936 | paged faster on **all three**. Arms 3-4 pending for the drift bound. |
+| 1M | **not measured — projected below** | Fits in memory (f16 116.1 GiB / q8_0 76.1 GiB of 128). |
+
+### ★ 1M PROJECTION, and it is the first number that makes the case on its own
+
+Built from the two 512k arms banked so far, not from the old estimate:
+
+```
+                 256k      512k     decay/doubling    -> 1M projection
+static prefill   241.2     124.9        1.93              ~64.7 tok/s   -> 3.4 h/arm
+paged  prefill   237.1     132.3        1.79              ~73.9 tok/s   -> 3.0 h/arm
+static decode     19.76      8.48       2.33              **~3.6 tok/s**
+paged  decode     26.62     16.88       1.58              **~10.7 tok/s**
+```
+
+⇒ **A 4-arm ABBA at 1M is ~13.5 h**, not the 20-24 h in the old note.
+
+⇒ **And the decode line is the argument:** at 1M, static decode projects to **~3.6 tok/s — unusable
+for anything interactive — while paged projects to ~10.7.** A projected **~2.9×**. **That is the
+first number in this programme that makes the case for paging on its own, rather than as parity.**
+
+⚠ **PROJECTION, NOT MEASUREMENT, and my last two were BOTH LOW.** I predicted 1.65-1.70 for the 512k
+decode ratio and it came in at **1.991**; the foreman's independent ~1.77 was also low. **Every
+extrapolation on this curve so far has under-called the widening**, so read these as a floor rather
+than a centre — and the 1M rung remains **the owner's spend to authorise**, at 13.5 h.
 
 > ### ⚠⚠ THE DECODE SIGN IS NOT STABLE UNDER SAMPLE SIZE. Everything decode-related is provisional.
 >
