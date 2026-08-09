@@ -83,20 +83,23 @@ run() { # $1 label  $2 mode(static|on|off)
     [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" != "200" ] && { echo "NA|NEVER_READY|0|NA"; return; }
     python3 -c "
 import json
-print(json.dumps({'prompt': open('$LOGDIR/p.txt').read(), 'n_predict': 6, 'temperature': 0,
+print(json.dumps({'prompt': open('$LOGDIR/p.txt').read(), 'n_predict': ${CB_NPRED:-64}, 'ignore_eos': True, 'temperature': 0,
                   'seed': 1, 'cache_prompt': False}))" > "$LOGDIR/$1.req"
     curl -s --max-time 900 -X POST http://127.0.0.1:$P/completion -H 'Content-Type: application/json' \
         -d @"$LOGDIR/$1.req" > "$LOGDIR/$1.json" 2>/dev/null
     local pms dms txt mk
     pms=$(grep -a "prompt eval time" "$LOGDIR/$1.log" | tail -1 | grep -oE "= *[0-9.]+ ms" | grep -oE "[0-9.]+" | head -1)
     dms=$(grep -a "        eval time" "$LOGDIR/$1.log" | tail -1 | grep -oE "[0-9.]+ tokens per" | grep -oE "[0-9.]+" | head -1)
+    # ⚠ A RATE WITHOUT ITS SAMPLE SIZE CANNOT BE AUDITED. n_predict is a CEILING; the achieved
+    # count comes from the same log line the rate does. Five gates carried this hole tonight.
+    dn=$(grep -a "        eval time" "$LOGDIR/$1.log" | tail -1 | grep -oE "/ *[0-9]+ tokens" | grep -oE "[0-9]+" | head -1)
     txt=$(python3 -c "
 import json
 try: print(json.load(open('$LOGDIR/$1.json')).get('content','')[:56].replace(chr(10),' '))
 except Exception: print('MALFORMED')")
     mk=0
     [ "$2" != static ] && mk=$(grep -aci "CHAMP-PAGED ACTIVE" "$LOGDIR/$1.log")
-    echo "${pms:-NA}|${txt}|${mk}|${dms:-NA}"
+    echo "${pms:-NA}|${txt}|${mk}|${dms:-NA}|${dn:-NA}"
 }
 
 declare -a S C1 C0
@@ -108,9 +111,9 @@ for r in $(seq 1 "$REPS"); do
             CHAMP_ON)  res=$(run "$arm-r$r" on) ;;
             CHAMP_OFF) res=$(run "$arm-r$r" off) ;;
         esac
-        pms=${res%%|*}; rest=${res#*|}; txt=${rest%%|*}; rest=${rest#*|}; mk=${rest%%|*}; dtps=${rest##*|}
-        printf "  %-10s r%s  prefill=%-10s ms  decode=%-7s tok/s  marker=%s  out=[%s]\n" \
-               "$arm" "$r" "$pms" "$dtps" "$mk" "${txt:0:36}" | tee -a "$OUT"
+        pms=${res%%|*}; rest=${res#*|}; txt=${rest%%|*}; rest=${rest#*|}; mk=${rest%%|*}; rest=${rest#*|}; dtps=${rest%%|*}; dn=${rest##*|}
+        printf "  %-10s r%s  prefill=%-10s ms  decode=%-7s tok/s (n=%s)  marker=%s  out=[%s]\n" \
+               "$arm" "$r" "$pms" "$dtps" "${dn:-?}" "$mk" "${txt:0:36}" | tee -a "$OUT"
         case "$arm" in
             STATIC)    S+=("$pms|$dtps"); ST+=("$txt") ;;
             CHAMP_ON)  C1+=("$pms|$dtps|$mk"); CT1+=("$txt") ;;

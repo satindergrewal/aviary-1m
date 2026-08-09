@@ -93,7 +93,7 @@ open('$LOGDIR/toks-$NTOK.json','w').write(json.dumps(t));print('  filler tokens:
     fi
     python3 -c "
 import json;t=json.load(open('$LOGDIR/toks-$NTOK.json'))[:$NTOK]
-print(json.dumps({'prompt':t,'n_predict':${PT_NPRED:-24},'temperature':0,'seed':1,'cache_prompt':False}))" > "$LOGDIR/$1.req"
+print(json.dumps({'prompt':t,'n_predict':${PT_NPRED:-64},'ignore_eos':True,'temperature':0,'seed':1,'cache_prompt':False}))" > "$LOGDIR/$1.req"
     : > "$LOGDIR/$1.ms"; : > "$LOGDIR/$1.txt"; : > "$LOGDIR/$1.tps"
     for r in $(seq 1 "$REPS"); do
         curl -s --max-time 900 -X POST http://127.0.0.1:$P/completion -H 'Content-Type: application/json' \
@@ -101,6 +101,9 @@ print(json.dumps({'prompt':t,'n_predict':${PT_NPRED:-24},'temperature':0,'seed':
         local ms txt dtp
         ms=$(grep -a "prompt eval time" "$LOGDIR/$1.log" | tail -1 | grep -oE "= *[0-9.]+ ms" | grep -oE "[0-9.]+" | head -1)
         dtp=$(grep -a "        eval time" "$LOGDIR/$1.log" | tail -1 | grep -oE "[0-9.]+ tokens per" | grep -oE "[0-9.]+" | head -1)
+        # ⚠ the achieved token count, from the same line as the rate -- n_predict is a CEILING
+        dn=$(grep -a "        eval time" "$LOGDIR/$1.log" | tail -1 | grep -oE "/ *[0-9]+ tokens" | grep -oE "[0-9]+" | head -1)
+        [ "${dn:-0}" -lt 16 ] 2>/dev/null && echo "    ⚠ decode window only ${dn:-?} tokens -- this rate is a sub-second average" | tee -a "$OUT"
         echo "${dtp:-NA}" >> "$LOGDIR/$1.tps"
         txt=$(python3 -c "
 import json
