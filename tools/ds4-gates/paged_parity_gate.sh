@@ -88,7 +88,11 @@ pick_port() { local p; for p in $(seq 20100 20160); do
     lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 || { echo "$p"; return 0; }; done; return 1; }
 PORT=$(pick_port) || { echo "no free port" >&2; exit 2; }
 
-echo "paged parity gate: $(basename "$M")" | tee "$OUT"
+# ⚠ FULL PATH, NOT BASENAME. `ornith-1.0-35b-1M-Q4_K_M` vs `ornith-1.0-35b-1M-MTP-Q4_K_M` differ by
+# four characters and are different models -- and on 2026-08-09 the model tree was reorganised
+# mid-run, so successive runs read the same-named file off different storage. A header that records
+# only a basename cannot tell you which of those a number came from.
+echo "paged parity gate: $M" | tee "$OUT"
 # ⚠ npred AND warm ARE STAMPED because they change what the numbers MEAN. Result files written before
 # 2026-08-09 used npred=48 with no warm-up; without these two fields a 48-token cold run and a
 # 512-token warm run are indistinguishable in results/ and would be compared as if they were the same
@@ -205,9 +209,16 @@ arm() { # $1 = static|paged
     fi
 
     kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; sleep 3
-    python3 - "$D/$1.json" "$NEEDLE" "$1" "$t0" "$t1" "$D" <<'PY' | tee -a "$OUT"
+    # ⚠⚠ OUT AND THE MODEL PATH GO IN AS ARGV, NOT AS ENV. The first version wrote
+    # `os.environ.get("OUT","")` into the .res -- and the shell never exports OUT, so the field was
+    # ALWAYS the empty string. **A field added specifically to make artifacts self-identifying,
+    # which identified nothing**, written in the same edit that fixed `npred=512` recording a request
+    # that never took effect. Same class, one line apart. Everything else in this heredoc is passed
+    # as argv; the one value that was not is the one that silently died.
+    python3 - "$D/$1.json" "$NEEDLE" "$1" "$t0" "$t1" "$D" "$OUT" "$M" "$BLK" "${DS4P_METAL_CHAMP:-0}" <<'PY' | tee -a "$OUT"
 import json, sys, os
 f, NEEDLE, lab, t0, t1, D = sys.argv[1], sys.argv[2], sys.argv[3], float(sys.argv[4]), float(sys.argv[5]), sys.argv[6]
+OUTP, MODELP, BLKV, CHAMPV = sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10]
 try: d = json.load(open(f))
 except Exception as e: print(f"  {lab}: UNPARSEABLE {e}"); raise SystemExit
 if "error" in d: print(f"  {lab}: ERROR {str(d['error'].get('message'))[:70]}"); raise SystemExit
@@ -223,10 +234,17 @@ print(f"  {lab:7s} needle={'PASS' if ok else 'FAIL'}  wall={t1-t0:8.1f}s  "
       f"tg={tm.get('predicted_per_second',0):6.2f} tok/s  "
       f"pred_n={tm.get('predicted_n')} ({tm.get('predicted_ms',0)/1000:.1f}s)")
 # ⚠ AN ARTIFACT MUST CARRY EVERY FIELD ITS VERDICT DEPENDS ON, or it launders assumptions.
+# ⚠ THE MODEL'S FULL PATH, NOT ITS BASENAME. `ornith-1.0-35b-1M-Q4_K_M` and
+# `ornith-1.0-35b-1M-MTP-Q4_K_M` differ by FOUR CHARACTERS and are different models; the model tree
+# was also reorganised mid-run on 2026-08-09, moving the weights to different storage. Two result
+# files with identical headers could describe runs that shared neither the model nor the disk.
+# Recording the directory too is free -- `/Volumes/...` carries no username, so the scrubber leaves
+# it intact, while a home path is correctly rewritten to $HOME.
 json.dump({"lab":lab,"ok":ok,"wall":t1-t0,"pp":tm.get('prompt_per_second',0),
            "tg":tm.get('predicted_per_second',0),"n":tm.get('prompt_n'),
            "pred_n":tm.get('predicted_n'),"pred_ms":tm.get('predicted_ms'),
-           "out":os.environ.get("OUT","")}, open(f"{D}/{lab}.res","w"))
+           "out":OUTP,"model":MODELP,"block_size":BLKV,"champ":CHAMPV},
+          open(f"{D}/{lab}.res","w"))
 PY
 }
 
