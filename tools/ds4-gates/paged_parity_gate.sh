@@ -33,7 +33,26 @@ CTX=${PP_CTX:-262144}
 FILL=${PP_FILL:-225000}
 BLK=${PP_BLOCK:-64}
 ORDER=${PP_ORDER:-static-first}
-NPRED=${PP_NPRED:-48}
+# ⚠⚠ 48 MADE THE DECODE NUMBER UNREADABLE, AND DECODE IS THE THING PAGING CHANGES. At 512k the 35B
+# decodes at ~9.3 tok/s, so 48 tokens is **5 seconds** of measurement against 3130 s of prefill.
+# MEASURED 2026-08-09, same-arm tg across the four ABBA positions:
+#     256k:  static 21.88 / 20.98  (4.1% apart)   paged 21.87 / 20.91  (4.4% apart)
+#     512k:  static  9.33 /  9.09  (2.6% apart)   paged  9.28 /  9.31
+# **tg was the noisiest column in the file** -- noisier than the wall it is a component of -- purely
+# because it is averaged over a couple of seconds. Prefill is batch-dominated and the two arms differ
+# least there; the paged kernel's per-step cache reads are a DECODE cost, so the one metric that could
+# separate the arms was the one sampled worst.
+# ⇒ 512 tokens is 55 s at 512k (+1.7% wall) and 24 s at 256k, an ~10x longer decode window for ~2% of
+#   the run. Cheapest resolution available on this box, and it does not need a single extra arm.
+NPRED=${PP_NPRED:-512}
+# ⚠ THE ONE ASYMMETRY ABBA CANNOT BALANCE: the FIRST arm runs cold, and in S,P,P,S the first arm is
+# ALWAYS static. Measured on the 512k rung -- pos1 static 124.4 tok/s, then 127.0 / 127.4 / 127.7 for
+# everything after it. The cold arm is ~2.6% slow, the static mean is inflated by it, and EFFECT is
+# therefore biased TOWARD paged. My 256k "tie" and my 512k "paged leads by 1.0%" both carried that
+# bias in paged's favour, and dropping the cold arm flips the sign (static 3128.2 vs paged 3139.5).
+# ⇒ Warm BOTH arms before measuring: model file into page cache, Metal pipelines compiled, allocator
+#   first-touch paid. Two short server starts, symmetric, ~2 min against a 3.5 h run.
+WARM=${PP_WARM:-1}
 export LLAMA_PAGED_POOL_HEADROOM=${LLAMA_PAGED_POOL_HEADROOM:-1.05}
 
 [ -f "$M" ] || { echo "missing model: $M" >&2; exit 2; }
@@ -54,7 +73,11 @@ pick_port() { local p; for p in $(seq 20100 20160); do
 PORT=$(pick_port) || { echo "no free port" >&2; exit 2; }
 
 echo "paged parity gate: $(basename "$M")" | tee "$OUT"
-echo "tip: $(cd "$WT" && git rev-parse --short HEAD)  ctx=$CTX  fill~${FILL}tok  block=$BLK  order=$ORDER  headroom=$LLAMA_PAGED_POOL_HEADROOM" | tee -a "$OUT"
+# ⚠ npred AND warm ARE STAMPED because they change what the numbers MEAN. Result files written before
+# 2026-08-09 used npred=48 with no warm-up; without these two fields a 48-token cold run and a
+# 512-token warm run are indistinguishable in results/ and would be compared as if they were the same
+# measurement. A parameter that moves the answer belongs in the header, not only in the invocation.
+echo "tip: $(cd "$WT" && git rev-parse --short HEAD)  ctx=$CTX  fill~${FILL}tok  block=$BLK  order=$ORDER  headroom=$LLAMA_PAGED_POOL_HEADROOM  npred=$NPRED  warm=$WARM" | tee -a "$OUT"
 
 python3 - "$D" "$NEEDLE" "$FILL" "$NPRED" <<'PY' | tee -a "$OUT"
 import json, sys
@@ -118,6 +141,57 @@ json.dump({"lab":lab,"ok":ok,"wall":t1-t0,"pp":tm.get('prompt_per_second',0),
 PY
 }
 
+# WARM-UP PRELUDE -- pays the one-time costs so that NO measured arm pays them.
+#
+# ⚠ WHAT IS ACTUALLY COLD, and why a short request is enough. Three costs land on the first arm and
+# nowhere else: weights faulted in through the mmap, Metal compute pipelines compiled on the first
+# graph build, and the allocator's first touch of the context. A 2k-token generation walks every
+# layer and every kernel the big run will use, so it pays all three -- the SIZE of the prompt is not
+# what makes those costs, the FIRST EXECUTION is.
+#
+# ⚠ BOTH ARMS, NOT ONE. Warming only static would leave the paged kernels cold for pos2 and move the
+# asymmetry rather than remove it. Two starts, same order the measurement will use, discarded.
+#
+# ⚠ AND IT IS DISCARDED ON PURPOSE. Nothing here writes a .res file or touches $OUT beyond one line.
+# A warm-up whose numbers can be mistaken for a measurement is worse than no warm-up.
+warmup() {
+    [ "$WARM" = 1 ] || { echo "  warm-up: SKIPPED (PP_WARM=0) -- the first measured arm will run cold" | tee -a "$OUT"; return 0; }
+    python3 - "$D" <<'PYW'
+import json, sys
+D = sys.argv[1]
+p = "Warm-up. " + ("The quick brown fox jumps over the lazy dog near the old stone bridge. " * 220)
+json.dump({"prompt": p, "n_predict": 16, "temperature": 0, "seed": 1, "cache_prompt": False},
+          open(f"{D}/warm.json", "w"))
+PYW
+    local a t0 t1
+    for a in static paged; do
+        local flags=""; [ "$a" = paged ] && flags="--kv-paged --kv-block-size $BLK"
+        t0=$(python3 -c 'import time;print(time.time())')
+        # shellcheck disable=SC2086
+        env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 "$SRV" -m "$M" -ngl 99 -c "$CTX" \
+            -np 1 -b 512 -ub 512 --port $PORT --no-warmup -lv 4 $flags > "$D/warm-$a.log" 2>&1 &
+        PID=$!
+        local i ok=0
+        for i in $(seq 1 900); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORT/health 2>/dev/null)" = "200" ] && { ok=1; break; }
+            kill -0 $PID 2>/dev/null || break
+            sleep 1
+        done
+        # ⚠ A FAILED WARM-UP IS NOT A FAILED GATE. It leaves the run exactly as cold as it was before
+        # this function existed, which is the old behaviour, so it warns and continues rather than
+        # aborting a 3-hour measurement over an optional prelude.
+        if [ "$ok" != 1 ]; then
+            echo "  ⚠ warm-up ($a) never came up -- continuing COLD, treat the first arm accordingly" | tee -a "$OUT"
+            [ -n "$PID" ] && kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; continue
+        fi
+        curl -s --max-time 900 -X POST "http://127.0.0.1:$PORT/completion" \
+            -H 'Content-Type: application/json' --data-binary "@$D/warm.json" > /dev/null 2>&1
+        t1=$(python3 -c 'import time;print(time.time())')
+        kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; sleep 3
+        printf '  warm-up %-6s discarded  (%.0fs)\n' "$a" "$(python3 -c "print($t1-$t0)")" | tee -a "$OUT"
+    done
+}
+
 # ⚠⚠ ABBA IS THE ONLY DESIGN THAT ANSWERS THIS ON THIS BOX, AND TWO PASSES DEMONSTRABLY CANNOT.
 # MEASURED 2026-08-09, 35B @ 256k, four walls sorted by POSITION rather than by arm:
 #     ran FIRST :  static 815.9  ·  paged 788.9
@@ -129,6 +203,7 @@ PY
 # ⇒ ABBA runs static,paged,paged,static in ONE invocation and compares POSITION-MATCHED pairs:
 #   position 1 vs 4 (static twice) bounds the drift; 2 vs 3 (paged twice) bounds it again; and the
 #   arm comparison is made WITHIN a position, not across one.
+warmup
 case "$ORDER" in
   abba)        arm static; mv "$D/static.res" "$D/static1.res" 2>/dev/null
                arm paged;  mv "$D/paged.res"  "$D/paged1.res"  2>/dev/null
@@ -180,6 +255,65 @@ else:
     who = "FASTER" if mp < ms else "SLOWER"
     print(f"  ⇒ paged is {who} by {eff*100:.1f}%, and that exceeds the measured drift")
     print(f"    ({max(drift_s,drift_p)*100:.1f}%). ABBA cancels first-order position effects.")
+
+# ⚠⚠ THE WALL IS ~99% PREFILL, SO A WALL VERDICT IS A PREFILL VERDICT WEARING A HAT. At 512k the
+# prefill is 3130 s and the decode is seconds; any paged/static difference in the per-step cache reads
+# is diluted ~600:1 before it reaches the ratio above. Reporting only the wall answers a question
+# nobody asked -- "is the paged PREFILL as fast" -- and calls it parity.
+# ⇒ Grade prefill and decode SEPARATELY, each against its OWN same-arm drift. A metric is readable
+#   only when its arm effect exceeds its own drift, and on 2026-08-09 tg failed that test at both
+#   rungs while the wall passed it at neither.
+def grade(name, s1v, s2v, p1v, p2v, higher_is_better):
+    ds = abs(s1v-s2v)/max(s1v, s2v, 1e-9); dp = abs(p1v-p2v)/max(p1v, p2v, 1e-9)
+    ms = (s1v+s2v)/2; mp = (p1v+p2v)/2
+    e = abs(mp-ms)/max(ms, 1e-9)
+    print(f"  {name:8s} static {ms:8.2f}  paged {mp:8.2f}   ratio {mp/max(ms,1e-9):.4f}"
+          f"   drift s={ds*100:.1f}% p={dp*100:.1f}%  effect={e*100:.1f}%")
+    if e <= max(ds, dp):
+        print(f"    -> UNREADABLE: effect ({e*100:.1f}%) does not clear its own drift ({max(ds,dp)*100:.1f}%).")
+        return None
+    faster = (mp > ms) if higher_is_better else (mp < ms)
+    print(f"    -> paged is {'FASTER' if faster else 'SLOWER'} by {e*100:.1f}%, clearing drift {max(ds,dp)*100:.1f}%.")
+    return faster
+print()
+print("  PER-METRIC, each against its OWN drift:")
+grade("PREFILL", s1["pp"], s2["pp"], p1["pp"], p2["pp"], True)
+grade("DECODE",  s1["tg"], s2["tg"], p1["tg"], p2["tg"], True)
+
+# ⚠ THE COLD-ARM CHECK. ABBA balances POSITION, not TEMPERATURE: the first arm pays the mmap faults
+# and the Metal pipeline compiles, and in S,P,P,S that arm is always static, so the bias always runs
+# one way -- toward paged. The warm-up prelude is supposed to remove this; this line is how you find
+# out whether it did, instead of assuming it.
+#
+# ⚠⚠ THE FIRST VERSION OF THIS CHECK LIED, AND ITS OWN SMOKE TEST CAUGHT IT WITHIN THE HOUR.
+# 9B, ctx 8k, warm-up on, it printed:
+#     COLD-ARM CHECK  pos1 static pp=711.5 vs pos4 static pp=689.0  (+3.3%)
+#       OK: no cold-first-arm signature -- the two static positions agree within 1%.
+# **They are 3.3% apart.** The guard was `if cold < -0.01`, which only catches pos1 SLOWER; every
+# other outcome fell into an else that asserted agreement it had not tested. Prose contradicting the
+# figure printed beside it is the exact failure this whole directory exists to prevent, and a
+# reassuring else-branch is how it gets in.
+# ⇒ THREE outcomes, because the drift has a SIGN and the sign decides which arm it favours:
+#     pos1 slower -> first arm cold      -> bias toward PAGED  (static mean inflated)
+#     pos1 faster -> box degraded/loaded  -> bias toward STATIC (static mean deflated)
+#     within 1%   -> no positional signature, and only then may the word "agree" be printed.
+cold = (s1["pp"] - s2["pp"]) / max(s2["pp"], 1e-9)
+wp = (p1["wall"]+p2["wall"])/2
+print()
+print(f"  COLD-ARM CHECK  pos1 static pp={s1['pp']:.1f} vs pos4 static pp={s2['pp']:.1f}  ({cold*100:+.1f}%)")
+if cold < -0.01:
+    print(f"    ⚠ pos1 ran SLOWER than pos4 by {abs(cold)*100:.1f}%: the first arm was still cold, and because")
+    print("      it is always static, EFFECT above is biased TOWARD PAGED. Warm-vs-warm is the honest read:")
+    print(f"      pos4 static wall {s2['wall']:.1f}s vs paged mean {wp:.1f}s = {wp/max(s2['wall'],1e-9):.4f}")
+    print("      Re-run with the warm-up prelude enabled (PP_WARM=1) before quoting a winner.")
+elif cold > 0.01:
+    print(f"    ⚠ pos1 ran FASTER than pos4 by {cold*100:.1f}%: NOT a cold first arm -- the box got slower")
+    print("      across the run (load, thermals, or another job). This biases EFFECT toward STATIC, the")
+    print("      opposite direction, and a paged 'win' under this signature is the confound, not a result.")
+    print(f"      Warm-vs-warm using the SLOWER static position: {wp:.1f}s vs {s1['wall']:.1f}s = {wp/max(s1['wall'],1e-9):.4f}")
+    print("      A positional signature this size means the run is not quotable either way. Re-run on a quiet box.")
+else:
+    print(f"    OK: the two static positions agree to {abs(cold)*100:.1f}% -- no positional signature in either direction.")
 print()
 print("  ⚠ n=2 per arm. This bounds the drift; it does not estimate variance. A tie here means")
 print("  'not distinguishable at n=2', not 'proven equal'.")

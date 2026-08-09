@@ -82,5 +82,27 @@ if [ "${N:-0}" -ne 0 ]; then
     exit 1
 fi
 
-echo "privacy guard: PASS ($(printf '%s\n' "$ADDED" | grep -c . ) added lines scanned)"
+# ⚠⚠ A PASS FROM AN INSTRUMENT THAT EXAMINED NOTHING IS THE FAILURE THIS PROJECT KEEPS REPEATING.
+# On 2026-08-09 this guard printed **"privacy guard: PASS (0 added lines scanned)"** against a repo
+# with real uncommitted changes: it defaults to `--cached`, nothing was staged yet, so it read an
+# empty diff and passed. `exit 0` is what a caller's `&&` chain reads, so a guard that looked at zero
+# bytes would have waved through whatever came next -- on the ONE rule in this project with zero
+# tolerance and three history rewrites behind it.
+#
+# ⇒ Distinguish "nothing to check" from "checked and clean", and give them different exit codes:
+#     empty diff        -> VOID (2). Wrong mode, wrong repo, or you forgot to `git add`.
+#     diff, no + lines  -> PASS. A pure-deletion change genuinely cannot leak.
+NADD=$(printf '%s\n' "$ADDED" | grep -c . )
+NDIFF=$(printf '%s\n' "$DIFF" | grep -c . )
+if [ "${NDIFF:-0}" -eq 0 ]; then
+    echo "privacy guard: VOID -- the $MODE diff is EMPTY, so nothing was examined." >&2
+    echo "  This is NOT a pass. Stage the change first (git add), or pass --worktree to include" >&2
+    echo "  unstaged edits. Exiting 2 so an && chain stops here instead of reading it as clean." >&2
+    exit 2
+fi
+if [ "${NADD:-0}" -eq 0 ]; then
+    echo "privacy guard: PASS (deletion-only change: $NDIFF diff lines, 0 added -- nothing can leak)"
+    exit 0
+fi
+echo "privacy guard: PASS ($NADD added lines scanned, $MODE)"
 exit 0
