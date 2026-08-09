@@ -412,6 +412,56 @@ a named gap, not a known bug, and it is memory-bound: the realistic cell is `-c 
 **the caveat belongs beside the number, not three sections away**, because the number is what gets
 quoted. It was missing from this section for two hours after I wrote it down elsewhere.
 
+### ★★★ 2026-08-10 08:30 — THE CELL WAS ENTERED, AND `-np 1` IS NOT A GAP. IT IS A KERNEL CONTRACT.
+
+First clean run of the multi-slot × long-context cell (35B, block 64, `-np 2`, two concurrent
+40,016-token prompts, champion on). Static arm **CLEAN**, 625 blocks spanned. **The paged arm
+crashed the server:**
+
+```
+ggml_metal_op_paged_attn: CHAMP-PAGED REFUSED (n_seq!=1) D=256 bs=64 n_seq=2 n_tokens=2
+ggml_abort <- ggml_metal_op_paged_attn <- graph_compute <- llama_decode
+```
+
+⚠ **The gate's canned verdict said "1c REPRODUCES on this binary" and that was WRONG.** The evidence
+was `<UNPARSEABLE http=000>` — **no HTTP response at all**, i.e. a dead server, not a corrupted
+answer. The verdict string was written for the corruption case and fires on any paged-bad /
+static-clean split. **A verdict that names a mechanism it did not observe is worse than "FAIL".**
+
+⇒ **THE ABORT IS CORRECT.** `llm_graph_context` **relaxes** the staged-tile bound
+(`block_size × head_dim ≤ 8192`) when the champion will serve, so a layer admitted under that
+relaxation **cannot legally run on the scalar kernel** — falling back would dispatch out of budget
+and return **plausible numbers**, the silent-corruption incident that bound was calibrated against.
+
+⇒ **THE DEFECT IS THE ADMISSION TEST, WHICH WAS NARROWER THAN THE KERNEL'S PRECONDITION:**
+
+```
+champ_geometry = champ_on && block_size == 64 && head_dim in {64,96,128,192,256}
+                             ^^^^ n_seq appears nowhere
+```
+
+**The capability contract said YES to a configuration the kernel refuses.** Fixed in `a4e8aeb08` by
+adding `cparams.n_seq_max == 1` — **`n_seq_max`, not the ubatch's live `n_seq`**, because a server
+started `-np 2` may co-batch at any moment and admitting on a momentarily-single-sequence ubatch
+would re-arm the abort **later in a long run instead of at the first decode**.
+
+★★ **WHAT THIS DOES TO EVERY NUMBER ABOVE — it makes the caveat STRONGER, not weaker:**
+
+> **`-np 1` is not an unmeasured cell. The champion kernel cannot serve multi-slot at all.**
+> Before the fix a `-np > 1` server **aborted**; after it, the champion is refused and those layers
+> take the static path. **1.9662 at 512k is single-slot BY CONSTRUCTION.**
+
+⚠ **Consistent with the 2026-08-09 concurrency closure, not contradicting it:** that ran **block 16
+with the champion OFF** — the *scalar* kernel, which does handle multi-seq and was clean four-way on
+two models. **Scalar: multi-slot fine. Champion: single-slot only. Two kernels, two contracts, and
+nothing had crossed them until this cell.**
+
+⇒ **The cell therefore SPLITS, and only one half is still open:**
+```
+champion + multi-slot   IMPOSSIBLE by contract   -- closed, by fix a4e8aeb08
+scalar   + multi-slot + LONG CONTEXT   STILL OPEN -- block 16, champ off, -np 2, 40k/seq
+```
+
 ---
 
 | rung | verdict | evidence |
