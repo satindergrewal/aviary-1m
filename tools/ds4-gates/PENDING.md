@@ -168,9 +168,42 @@ all**, so the scheduler refuses before a single layer is built. The markers refl
 because nothing was ever asked.**
 
 ⇒ **NEW TIER 0, ahead of everything below:** `llama_kv_cache_dsv4` must own a paged pool and
-`llama_paged_scheduler_init` must accept a composite type. **`llama_kv_cache_iswa` already does
-exactly this** — it holds `mem_attn_paged` and exposes `get_attn_paged()`. Prior art exists; this is
-not greenfield.
+`llama_paged_scheduler_init` must accept it.
+
+**TIER 0 IS FULLY SCOPED, and it is the FOURTH instance of an established pattern — not greenfield.**
+`llama_paged_scheduler_init` accepts memory by a chain of `dynamic_cast`, and its own comment on the
+most recent addition reads *"Third wrapper, same resolution"*:
+
+```cpp
+llama_kv_cache_paged        -> direct
+llama_memory_hybrid_iswa    -> get_mem_attn_paged()
+llama_memory_hybrid         -> get_mem_attn_paged()
+llama_kv_cache_iswa         -> get_mem_attn_paged()     <- "third wrapper, same resolution"
+llama_kv_cache_dsv4         -> ** the fourth branch, to be written **
+```
+
+Four mechanical pieces, each with a line to copy from:
+
+| # | change | copy from |
+|---|---|---|
+| 1 | `unique_ptr<llama_kv_cache_paged> mem_attn_paged` + `set_attn_paged()` / `get_mem_attn_paged()` on `llama_kv_cache_dsv4` | `llama-kv-cache-iswa.h:99-109` |
+| 2 | construct the pool for DSV4 and attach it | `llama-model.cpp:2322` + `:2352` (`hybrid_iswa->set_attn_paged(paged_attn)`) |
+| 3 | `get_attn_paged()` / `set_attn_paged_ctx()` on `llama_kv_cache_dsv4_context` | `llama-kv-cache-iswa.h:155-156`, and `llama-kv-cache-iswa.cpp:238` for where the ctx is set |
+| 4 | fourth `dynamic_cast` branch in the scheduler | `llama-paged-scheduler.cpp:50-59` |
+
+### ⚠⚠ AND TIER 0 MUST NOT SHIP ALONE EITHER — IT WOULD BUILD THE SILENT-FALLBACK STATE ON PURPOSE
+
+Tier 0 makes the **scheduler** accept DSV4. It does **nothing** about the graph. So on its own it
+converts today's **loud abort** into a server that **starts cleanly, allocates a pool, and pages
+zero layers** — the exact state that produced 4.5 hours of static-vs-static "parity" on 2026-08-09,
+and the exact state LAW 6 exists to catch.
+
+⇒ **Today's failure mode is BETTER than what Tier 0 alone would produce.** An abort is honest. A
+green server with an unread pool is not.
+
+⇒ **DSV4 paging is all-or-nothing: Tier 0 + 1 + 2 land together, or nothing lands.** The
+`gate_assert_paged_consumed` law is the check that would catch a partial ship, and the acceptance
+bar stays what it was: **capability-contract refusals == 0 on every attention layer**, paged ≡ static.
 
 ### ⚠ SEPARATE CHEAP DEFECT: a user-passed flag CRASHES the server
 
