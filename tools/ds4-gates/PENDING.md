@@ -17,7 +17,8 @@ ranges, not 2k, 32k, 64k etc."*
 |---|---|---|
 | 256k | ⛔ **VOID** | the "paged" arm never paged — see below |
 | 512k | ⛔ **VOID** | same |
-| 8k | **paged is 30% SLOWER** | first honest paged run on this model: WALL 1.3035, prefill 0.765x, decode 0.767x. One ordering, below the bar range, not a verdict. |
+| 8k, **champion** | **wall 1.0095 · prefill 0.999x · decode 0.878x** | the kernel paging exists for. One ordering, below the bar range, not a verdict. |
+| 8k, scalar | wall 1.3035 · prefill 0.765x · decode 0.767x | the SLOW kernel, measured by mistake — see the champion note below |
 | 1M | **not measured** | Fits in memory (f16 116.1 GiB / q8_0 76.1 GiB of 128). Cost is ~20-24 h and ~5.5 tok/s decode. Owner's call. |
 
 > ### ⛔⛔ EVERY 35B PARITY NUMBER FROM 2026-08-09 IS VOID. THE PAGED ARM WAS NOT PAGING.
@@ -50,8 +51,40 @@ ranges, not 2k, 32k, 64k etc."*
 > changed is the one that broke**, and because a refused layer falls back to static, the output stayed
 > correct the whole time.
 >
-> **Fixed**: block size is now derived from `n_embd_head_v` by a 10 s geometry probe (clamping down
-> only), and the paged arm VOIDs on the engine's own WARN-level no-consumer alarm.
+> **Fixed**: block size is now derived from `n_embd_head_v` by a 10 s geometry probe, and the paged
+> arm VOIDs on the engine's own WARN-level no-consumer alarm.
+>
+> ### ⚠⚠ AND THE FIRST FIX TRADED A SILENT NO-OP FOR A SILENT DOWNGRADE.
+>
+> The 8192 bound is the **scalar** kernel's. `paged_layer_supported` already relaxes it for the
+> champion (`llama-graph.cpp:4548`):
+>
+> ```cpp
+> champ_geometry = champ_on && block_size == 64 &&
+>                  (head_dim == 64|96|128|192|256);
+> if (!champ_geometry && block_size*head_dim > 8192) reject(...)
+> ```
+>
+> The champion does not stage K/V tiles — flat in nsg — and **contractually requires
+> `block_size == 64`**. So at head_dim 256 there are **three** states, not two:
+>
+> | config | result |
+> |---|---|
+> | `champ=1, bs=64` | **champion serves it — the configuration paging exists for** |
+> | `champ=0, bs=32` | scalar serves it, slowly (wall 1.3035) |
+> | `champ=0, bs=64` | **every layer refused, silently static** — 4.5 h of "parity ties" |
+>
+> My geometry probe clamped 64 → 32 to satisfy a bound that does not apply, **silently selecting the
+> slow kernel**. Now champion-aware, and `DS4P_METAL_CHAMP` defaults ON with `champ=` stamped in the
+> header.
+>
+> ⚠⚠ **The code comment predicting the refusal case is dated 2026-08-06:** *"at bs=64/D=256 every
+> layer refused and silently took the static path, making a paged run indistinguishable from
+> static."* It was found, root-caused and written down three days earlier, **in the very function
+> this gate calls**, and the gate walked into it anyway. **The knowledge existed; the harness did not
+> carry it.** A finding that lives only in a comment protects the next reader of that function and
+> nobody else — which is the argument for encoding it in the instrument, as the geometry probe and
+> the no-consumer assertion now do.
 
 **"as correct as": MEASURED and PASSING.** 8/8 at 8k, 5/5 pre-existing grids, and 430 chunks at 225k
 with needle PASS — `FINDINGS-paged-cross-request.md`, final section.
