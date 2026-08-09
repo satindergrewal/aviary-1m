@@ -207,7 +207,48 @@ probe() { # $1=tag $2=flags
         done
     done
     [ "$v3" = OK ] || verdict=POST-PAIR-DIRTY   # the pair left something behind
-    [ "$consumed" = "0" ] && verdict=VOID-NO-CONSUMER   # paged flags set, no layer consumed -> vacuous
+    # ⚠⚠⚠ consume=0 HAS TWO CAUSES AND THE GATE HAD ONE WORD FOR THEM. (raised by Grok, #9405)
+    #
+    # Until 2026-08-10 `consume=0` meant "vacuous -- static path wearing paged flags", which is a BUG.
+    # After the n_seq_max fix (a4e8aeb08) it is ALSO what a CORRECTLY DEGRADED arm looks like: at
+    # `-np 2` with bs=64/D=256 the capability contract refuses every layer, on purpose, loudly, and
+    # the run produces correct output on the static path. **A perfect outcome scored as a
+    # reproduction of a KV-corruption bug.** Measured on this very run:
+    #
+    #     capability-contract refusals: 3210   DS4P-CONSUME: 0   aborts: 0
+    #     S1 "one, two, three, four, five"   S2 "A, B, C, D, E"   prime=4  post=4
+    #     ...and the gate printed: FAIL -- 1c REPRODUCES on this binary
+    #
+    # ⚠ Every OTHER instance of this class today was a check too narrow to see a FAILURE. This one is
+    # too narrow to see a SUCCESS. **Absence of consumption is not evidence of vacuity when a
+    # refusal explains it.**
+    #
+    # ⇒ The state is a PAIR, (refusals, consume), and both counters were already in the log -- the
+    #   gate was reading one and inferring the other. Four cells, four words:
+    #
+    #     refusals>0, consume=0  REFUSED-BY-CONTRACT  correct: the contract said no, and said why
+    #     refusals=0, consume=0  VOID-NO-CONSUMER     bug: pool built, silently never read
+    #     refusals=0, consume>0  (falls through)      paged, live -- the CLEAN path
+    #     refusals>0, consume>0  PARTIAL-PAGED        some layers paged, some refused. Named because
+    #                                                 an 11%-of-layers green is what made the DSV4
+    #                                                 tier-1 plan meaningless.
+    local refused; refused=$(grep -ac 'fails the paged capability contract' "$LOGDIR/$tag.log" 2>/dev/null)
+    refused=${refused:-0}
+    if [ "$consumed" = "0" ]; then
+        if [ "$refused" -gt 0 ]; then
+            verdict=REFUSED-BY-CONTRACT
+            echo "      ⇒ REFUSED BY CONTRACT ($refused refusals), and this is CORRECT BEHAVIOUR, not a failure:" | tee -a "$OUT"
+            grep -m1 -oE 'paged layer refused:.{0,160}' "$LOGDIR/$tag.log" 2>/dev/null | sed 's/^/         /' | tee -a "$OUT"
+            echo "         The arm ran on the STATIC path and its answers above are the check that it ran" | tee -a "$OUT"
+            echo "         correctly. It is NOT a paged measurement -- do not quote it as one." | tee -a "$OUT"
+        else
+            verdict=VOID-NO-CONSUMER   # pool built, nothing refused, nothing consumed -> genuinely vacuous
+        fi
+    elif [ "$refused" -gt 0 ] && [ "$consumed" != "-1" ]; then
+        verdict=PARTIAL-PAGED
+        echo "      ⚠ PARTIAL: $refused layer refusals AND $consumed consume events. Some layers paged and" | tee -a "$OUT"
+        echo "        some did not, so this is not a whole-model paged result." | tee -a "$OUT"
+    fi
     # ★ THE GATE MUST STATE THE SIZE OF THE QUESTION IT ANSWERED. A CLEAN here means nothing unless
     # the prompts actually crossed a block table -- the arch matrix shipped 21 greens that could not
     # see past a single block, and the convention adopted 2026-08-10 is that each green names its
@@ -241,12 +282,26 @@ for r in $(seq 1 "$REPS"); do
 done
 echo "-----" | tee -a "$OUT"
 sc=0; sb=0; pc=0; pb2=0
-for v in "${V[@]}"; do case "$v" in static:CLEAN) sc=$((sc+1));; static:*) sb=$((sb+1));; paged:CLEAN) pc=$((pc+1));; paged:*) pb2=$((pb2+1));; esac; done
-echo "static: $sc clean / $sb bad     paged: $pc clean / $pb2 bad" | tee -a "$OUT"
+# ⚠ REFUSED-BY-CONTRACT IS NOT "BAD". Counting it as bad is what made a correct run print
+# "1c REPRODUCES". It gets its own tally so the headline can never call it a corruption.
+pr=0
+for v in "${V[@]}"; do case "$v" in
+    static:CLEAN) sc=$((sc+1));;
+    static:*) sb=$((sb+1));;
+    paged:CLEAN) pc=$((pc+1));;
+    paged:REFUSED-BY-CONTRACT) pr=$((pr+1));;
+    paged:*) pb2=$((pb2+1));; esac; done
+echo "static: $sc clean / $sb bad     paged: $pc clean / $pb2 bad / $pr refused-by-contract" | tee -a "$OUT"
 echo "verdicts: ${V[*]}" | tee -a "$OUT"
 if [ "$sb" -ne 0 ]; then
     echo "WARM MULTI-SLOT GATE: **VOID** -- static (no paging) scored $sb bad. The gate is measuring itself, not the code." | tee -a "$OUT"
     echo "  (a dirty static arm can never indict paging; fix the harness before reading the paged column)" | tee -a "$OUT"
+elif [ "$pb2" -eq 0 ] && [ "$pr" -gt 0 ]; then
+    echo "WARM MULTI-SLOT GATE: NO PAGED MEASUREMENT -- $pr paged arm(s) were REFUSED BY CONTRACT." | tee -a "$OUT"
+    echo "  The contract refused this geometry at this n_seq_max and said so; the arms ran correctly on" | tee -a "$OUT"
+    echo "  the STATIC path. That is the fix working, NOT a corruption and NOT a pass for paging." | tee -a "$OUT"
+    echo "  ⇒ To measure paged multi-slot, use a configuration the contract admits: MS_BLK=16 with" | tee -a "$OUT"
+    echo "    DS4P_METAL_CHAMP unset (the scalar kernel handles n_seq>1; the champion does not)." | tee -a "$OUT"
 elif [ "$pb2" -eq 0 ]; then
     echo "WARM MULTI-SLOT GATE: PASS -- both paths clean across $REPS warm reps (1c did not reproduce)" | tee -a "$OUT"
 else
