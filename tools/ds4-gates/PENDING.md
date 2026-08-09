@@ -733,6 +733,7 @@ when those claims are the ones being made.
 | `gemma3` paged verification | ~10 min | wired but NOT proven: needs `DS4P-CONSUME > 0` and output matching static |
 | `gemma4` SWA-restored check | ~10 min | proves the guard fix re-enabled what it broke; needs CONSUME on a layer where `is_swa(il)` is true |
 | ~~paged-corruption rate at 225k~~ | — | **CLOSED**, see the retraction above; no runs needed |
+| ★ **MULTI-SLOT AT LONG CONTEXT — the empty cell, named 2026-08-10** | **~1.5 h** | The `-np>1` defect is **fixed and closed** (`c2f28a79d`, `00cb274`, `e404116`) — but the closure ran `-c 8192` / block 16 / short prompts, and every parity number runs `-np 1` / block 64 / 400k fill. **Neither crosses the other's constant, so the joint cell has never been entered.** It is not a suspected defect; it is the configuration a real server runs in, and nothing has measured it. Memory-bound, so the cell must be chosen not assumed: `-c 262144 -np 2` gives **~131k per slot**, both slots crossing block *and* window, at a fill the box holds. The check is the one that already exists — `warm_multislot_gate.sh` semantics (prime → concurrent → third sequential) with `MS_CTX` raised, plus `gate_assert_paged_consumed`. **Cheapest remaining item that retires a caveat riding on every number in this file.** |
 | 1M rung | ~20-24 h | owner's authorization |
 | NIAH sweeps | long | **marked Pending by the owner**, deliberately deferred until paging matches static |
 | inkling paged path | 975B | marker added, never gate-verified |
