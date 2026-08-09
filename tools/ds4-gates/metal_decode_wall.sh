@@ -23,6 +23,8 @@ P=${P:-9003}
 NPRED=${NPRED:-256}
 REPS=${REPS:-4}
 OUT=${OUT:-$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/metal-decode-wall-$(date +%Y%m%d-%H%M).txt}
+# ⚠ Per-job, not a fixed /tmp name: parallel background jobs share /tmp and clobber each other.
+RESPF=${CLAUDE_JOB_DIR:-/tmp}/dec-resp-$$.json
 mkdir -p "$(dirname "$OUT")"
 
 echo "binary: $B  mtime=$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$B")" | tee "$OUT"
@@ -47,10 +49,20 @@ arm() {  # $1 label  $2 server args
     if [ "$ready" != "1" ]; then echo "$1: SERVER NEVER READY" | tee -a "$OUT"; return 1; fi
     local best=0
     for r in $(seq 1 "$REPS"); do
-        tps=$(curl -s -X POST "http://127.0.0.1:$P/completion" -H 'Content-Type: application/json' \
-              -d @/tmp/dec-prompt.json \
-              | python3 -c 'import json,sys;print(round(json.load(sys.stdin).get("timings",{}).get("predicted_per_second",-1),2))' 2>/dev/null || echo 0)
-        printf '%-14s rep%-2s decode=%-8s tok/s\n' "$1" "$r" "$tps" | tee -a "$OUT"
+        # ⚠ CAPTURE THE RESPONSE, THEN EXTRACT -- the old one-liner piped straight into a rate and
+        # threw the rest away, so the SAMPLE SIZE behind the rate was unrecoverable. `n_predict` is a
+        # CEILING: if the model hits EOS first, tok/s is averaged over whatever it actually produced.
+        # The sibling parity gate reported a requested 512 while generating 14 (pred_n=14,
+        # pred_ms=670) for a full day, and when the window was made real the 9B's decode result
+        # INVERTED. **A rate without its sample size cannot be audited.** This prompt is open-ended
+        # and SHOULD run to the limit -- printing the count is how that stops being an assumption.
+        curl -s -X POST "http://127.0.0.1:$P/completion" -H 'Content-Type: application/json' \
+              -d @/tmp/dec-prompt.json > "$RESPF" 2>/dev/null
+        tps=$(python3 -c 'import json,sys;print(round(json.load(open(sys.argv[1])).get("timings",{}).get("predicted_per_second",-1),2))' "$RESPF" 2>/dev/null || echo 0)
+        pn=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("timings",{}).get("predicted_n",-1))' "$RESPF" 2>/dev/null || echo -1)
+        printf '%-14s rep%-2s decode=%-8s tok/s  pred_n=%s\n' "$1" "$r" "$tps" "$pn" | tee -a "$OUT"
+        [ "${pn:-0}" -ge 0 ] 2>/dev/null && [ "${pn:-0}" -lt 16 ] 2>/dev/null && \
+            echo "    ⚠ only $pn tokens generated -- this rate is a sub-second average, not a measurement" | tee -a "$OUT"
         awk -v a="$tps" -v b="$best" 'BEGIN{exit !(a>b)}' && best=$tps
     done
     # numbers from a crashed process are not measurements
