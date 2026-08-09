@@ -15,11 +15,27 @@ ranges, not 2k, 32k, 64k etc."*
 
 | rung | verdict | evidence |
 |---|---|---|
-| 256k | ⛔ **VOID** | the "paged" arm never paged — see below |
-| 512k | ⛔ **VOID** | same |
-| 8k, **champion** | **wall 1.0095 · prefill 0.999x · decode 0.878x** | the kernel paging exists for. One ordering, below the bar range, not a verdict. |
-| 8k, scalar | wall 1.3035 · prefill 0.765x · decode 0.767x | the SLOW kernel, measured by mistake — see the champion note below |
-| 1M | **not measured** | Fits in memory (f16 116.1 GiB / q8_0 76.1 GiB of 128). Cost is ~20-24 h and ~5.5 tok/s decode. Owner's call. |
+| 256k, champion, **pred_n=14** | prefill UNREADABLE · **decode 1.3692x** · wall UNRESOLVED | 4-arm ABBA. Decode cleared its drift 7.5×, but the window was **0.67 s** — see the inversion below. **Re-running.** |
+| 256k / 512k, **bs=64 champ off** | ⛔ **VOID** | the "paged" arm never paged: 3,610 refusals, `64 × 256 > 8192` |
+| 8k, 9B, **pred_n=128** | **prefill 1.0075 (clears)** · **decode 0.9017 (clears)** | clean box, cold-arm check +0.1%. The first decode number in this lane with a real window — **and it says paged is 9.8% SLOWER.** |
+| 8k, 35B, pred_n=14 | wall 1.0095 · prefill 0.999x · decode 0.878x | decode leg inherits the short-window status; prefill leg survives |
+| 1M | **not measured** | Fits in memory (f16 116.1 GiB / q8_0 76.1 GiB of 128). ~20-24 h, ~5.5 tok/s decode. Owner's call. |
+
+> ### ⚠⚠ THE DECODE SIGN IS NOT STABLE UNDER SAMPLE SIZE. Everything decode-related is provisional.
+>
+> `n_predict` is a **ceiling**, not a floor. The needle prompt is answered in **14 tokens** and the
+> model emits EOS (`pred_n=14, pred_ms=670, stop_type=eos`, against a requested 512). **Every decode
+> number this lane produced before 19:25 was averaged over 0.67 seconds.**
+>
+> With `ignore_eos` and a real 128-token window, the 9B smoke **inverted**: decode went from ~0.98×
+> to **0.9017×**, clearing its own drift. A short window can hold a **stable wrong sign** — the 35B's
+> 1.3692× reproduced across two arms to 0.6% and is still not safe.
+>
+> **Two readings, registered before the re-run:**
+> **(a) context-dependent** — block-table indirection is a fixed per-step cost, while static
+> attention cost grows with context; at 8k the overhead dominates, at 256k the benefit does. *Both
+> numbers true.* **(b)** the 1.37× is an artefact and collapses. **(a) predicts the re-run reproduces
+> it.**
 
 > ### ⛔⛔ EVERY 35B PARITY NUMBER FROM 2026-08-09 IS VOID. THE PAGED ARM WAS NOT PAGING.
 >
@@ -143,7 +159,9 @@ detecting a broken band. It would return a clean green that means nothing.
 | ⚠ **the `.res` omits the field a verdict depended on** | The artifact carries wall/pp/tg/n and **no `predicted_n`**, which is why artifact-first verification could not catch the `n_predict` defect — the load-bearing field simply was not there. Add `predicted_n`, `predicted_ms` and the run's own `OUT` path. **An artifact must carry every field its verdict depends on, or it launders assumptions.** |
 | ⚠ **`ignore_eos` and `output_sanity.py` COLLIDE — sequence them** | With `ignore_eos: true` the model runs past its answer for the full 512 tokens, and what follows a completed answer is very often repetition. **`output_sanity.py` would grade that DEGENERATE on a perfectly healthy run** — its repetition detector fires at 0.35 and post-answer filler blows through that. Fix them together, not separately: grade only the text **up to the first EOS position**, or send a second short correctness request with `ignore_eos` off. Two fixes that are each right and jointly wrong is how the last three defects in this file were built. |
 | wire `output_sanity.py` into `paged_parity_gate.sh` | **next up.** Save the arm's text into its `.res`, grade paged against static in the ABBA summariser. Zero extra GPU cost, turns every future parity run into a corruption sampler. |
-| ⛔ **`ignore_eos` — `PP_NPRED` has never taken effect** | **highest-value queued fix.** The request sets `n_predict: 512`, which is a **ceiling, not a floor**, and the model answers the needle in **14 tokens** then emits EOS: `pred_n=14, pred_ms=670, stop_type=eos`. **Every decode number in this lane is sampled over ~0.6 seconds**, which is *shorter* than the 48-token case the change replaced. Fix is one field, `"ignore_eos": true`. Also print the ACHIEVED `predicted_n` on the arm line — the header's `npred=512` records what was *requested*, and **a parameter that silently does not take effect is worse than one that is absent, because it looks like the question was asked.** |
+| ✅ ~~`ignore_eos`~~ · ~~achieved `pred_n` in the artifact~~ · ~~stale `.res` guard~~ | **all shipped and smoke-verified 2026-08-09** (`3f02818`): `pred_n` 14 → 128 on every arm, the achieved length printed beside the requested one, `decode window actually generated: [...]` in the summary, `*.res` cleared at start **and** a VOID unless all four arms share `prompt_n`. |
+| ✅ ~~LAW 6 unproven~~ | **VALIDATED by direct control** (`alarm_control.sh`): arm B proved the marker prints (240 banded, **0 auto**), arm A fired the alarm on 20 refusals. ⚠ Arm B's `auto=0` also **refuted my own published explanation** for the alarm's historic silence — eliminating three alternatives was not evidence for the fourth. That silence is now an **open loose end**, deliberately left unexplained. |
+| ⛔ ~~**`ignore_eos` — `PP_NPRED` has never taken effect**~~ (fixed, kept for the record) | **highest-value queued fix.** The request sets `n_predict: 512`, which is a **ceiling, not a floor**, and the model answers the needle in **14 tokens** then emits EOS: `pred_n=14, pred_ms=670, stop_type=eos`. **Every decode number in this lane is sampled over ~0.6 seconds**, which is *shorter* than the 48-token case the change replaced. Fix is one field, `"ignore_eos": true`. Also print the ACHIEVED `predicted_n` on the arm line — the header's `npred=512` records what was *requested*, and **a parameter that silently does not take effect is worse than one that is absent, because it looks like the question was asked.** |
 | decide `-lv 4` vs `-lv 5` in `paged_parity_gate.sh` | **queued, cannot edit a running script.** The gate runs `-lv 4` and proves consumption via LAW 6 (absence of the engine's WARN alarm). The sibling `arch_serve_gate.sh` runs `-lv 5` **specifically so it can read `DS4P-CONSUME` directly** — its own comment says *"At -lv 4 the marker count read ZERO on an arch that was demonstrably paging."* A direct positive count beats an inferred one; the cost is DEBUG-volume I/O during a timed run, which is itself a confound. Record whichever is chosen **as a choice**, so nobody "fixes" it back. |
 | warm-up response is never checked | **known hole.** `warmup()` sends its curl to `/dev/null`, so a 500 or an empty completion still prints "discarded (5s)". Log-line-is-not-work-done, in code I wrote today. |
 | the remaining ISWA archs | `gemma2` `gemma3n` `cohere2` `cohere2moe` `phi3` `olmo2` `exaone4` `exaone-moe` `openai-moe` `plamo3` `mellum` `mimo2` `smallthinker` `afmoe` — minus anything CHUNKED or SYMMETRIC, which the band cannot express at all |
