@@ -44,3 +44,27 @@ tip: 074672e33  ctx=524288  fill~400000tok  block_req=64  order=abba  headroom=1
   ⚠ n=2 per arm. This bounds the drift; it does not estimate variance. A tie here means
   'not distinguishable at n=2', not 'proven equal'.
 log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/parity-20260810-0402.txt
+
+--- PROVENANCE CORRECTION, appended 2026-08-10 07:55 ---------------------------
+  ⚠ THE `tip:` LINE AT THE TOP OF THIS FILE NAMES A COMMIT THIS RUN DID NOT EXECUTE.
+
+      header stamped   tip: 074672e33            <- what the SOURCE TREE said
+      binary reported  build 10667 (35be827f3)   <- what actually RAN, one commit behind
+
+  The gate stamped `git rev-parse HEAD`, which describes the source tree, not the
+  binary. Verified from this run's own server logs, which print the build commit on
+  their first line.
+
+  ⇒ THE NUMBERS IN THIS FILE STAND. The single missing commit (074672e33,
+    "--kv-paged on a model that cannot page must REFUSE, not abort") changes behaviour
+    only on models whose memory type cannot page. This model pages: pool built,
+    DS4P-CONSUME non-zero, needle PASS on all four arms.
+
+  ⇒ Corrected HERE rather than only in PENDING.md, because the header is what a reader
+    quotes and a correction living in another file is how a stale value survives.
+
+  ⇒ FIXED FOR FUTURE RUNS: arm() now reads the binary's own build commit and VOIDs on
+    mismatch with the source tip (override PP_ALLOW_STALE_BIN=1). gate_tip_stamp does
+    NOT close this hole -- it appends +dirty(N) for uncommitted edits, so a STALE
+    BINARY built from a CLEAN tree still produces a clean stamp and a wrong claim.
+--------------------------------------------------------------------------------

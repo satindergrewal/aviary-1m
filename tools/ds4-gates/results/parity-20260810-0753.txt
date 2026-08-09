@@ -1,0 +1,53 @@
+paged parity gate: $HOME/Documents/GitHub/ornith-models/Ornith-1.0-9B-1M-GGUF/ornith-1.0-9b-1M-Q4_K_M.gguf
+tip: 9eb5b1241  ctx=8192  fill~6250tok  block_req=64  order=abba  headroom=1.05  npred=256  warm=1  champ=1
+  prompt: 267 lines, needle at 50% depth, target ~6250 tok
+  geometry: head_dim=256 with the CHAMPION kernel -- block_size 64 is its contract,
+            not the scalar staged-tile bound. Keeping 64 (clamping to 32 would
+            silently select the slow scalar path).
+  warm-up static discarded  (6s)
+  warm-up paged  discarded  (6s)
+  static  needle=PASS  wall=    13.4s  prompt_n=5799  pp=  704.3 tok/s  tg= 50.27 tok/s  pred_n=256 (5.1s)
+  paged arm consumed the pool (engine no-consumer alarm silent)
+    capability-contract refusals: 0   static-path fallbacks: 88
+    ⚠ static-path fallbacks are EXPECTED at reserve time (the paged context is not set
+      yet during graph reserve). A -lv 5 run is what proves they stop once the request starts.
+  paged   needle=PASS  wall=    14.2s  prompt_n=5799  pp=  680.9 tok/s  tg= 45.73 tok/s  pred_n=256 (5.6s)
+  paged arm consumed the pool (engine no-consumer alarm silent)
+    capability-contract refusals: 0   static-path fallbacks: 88
+    ⚠ static-path fallbacks are EXPECTED at reserve time (the paged context is not set
+      yet during graph reserve). A -lv 5 run is what proves they stop once the request starts.
+  paged   needle=PASS  wall=    14.5s  prompt_n=5799  pp=  633.1 tok/s  tg= 48.09 tok/s  pred_n=256 (5.3s)
+  static  needle=PASS  wall=    14.5s  prompt_n=5799  pp=  618.2 tok/s  tg= 50.43 tok/s  pred_n=256 (5.1s)
+  per-position logs kept: static1/paged1/paged2/static2.log
+    ⇒ cold-vs-drift split:  prefill_curve.py $D/static1.log $D/static2.log
+  decode window actually generated: [256, 256, 256, 256] tokens per arm
+
+  ABBA walls by position:
+    pos 1  static  wall=    13.4s  pp=  704.3  tg= 50.27
+    pos 2  paged   wall=    14.2s  pp=  680.9  tg= 45.73
+    pos 3  paged   wall=    14.5s  pp=  633.1  tg= 48.09
+    pos 4  static  wall=    14.5s  pp=  618.2  tg= 50.43
+
+  DRIFT  static 7.7%   paged 2.5%   (same arm, positions 1&4 / 2&3)
+  EFFECT paged/static on position-balanced means = 1.0274  (2.7%)
+
+  ⇒ **UNRESOLVED**: the arm effect (2.7%) is NOT larger than the drift
+    (7.7%). The arms are indistinguishable at this sample size.
+    Report as a TIE with a bound, never as a winner. More repeats, not a bigger claim.
+
+  PER-METRIC, each against its OWN drift:
+  PREFILL  static   661.27  paged   656.98   ratio 0.9935   drift s=12.2% p=7.0%  effect=0.6%
+    -> UNREADABLE: effect (0.6%) does not clear its own drift (12.2%).
+  DECODE   static    50.35  paged    46.91   ratio 0.9317   drift s=0.3% p=4.9%  effect=6.8%
+    -> paged is SLOWER by 6.8%, clearing drift 4.9%.
+
+  COLD-ARM CHECK  pos1 static pp=704.3 vs pos4 static pp=618.2  (+13.9%)
+    ⚠ pos1 ran FASTER than pos4 by 13.9%: NOT a cold first arm -- the box got slower
+      across the run (load, thermals, or another job). This biases EFFECT toward STATIC, the
+      opposite direction, and a paged 'win' under this signature is the confound, not a result.
+      Warm-vs-warm using the SLOWER static position: 14.3s vs 13.4s = 1.0701
+      A positional signature this size means the run is not quotable either way. Re-run on a quiet box.
+
+  ⚠ n=2 per arm. This bounds the drift; it does not estimate variance. A tie here means
+  'not distinguishable at n=2', not 'proven equal'.
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/parity-20260810-0753.txt

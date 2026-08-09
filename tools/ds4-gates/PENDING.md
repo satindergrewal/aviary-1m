@@ -426,27 +426,31 @@ quoted. It was missing from this section for two hours after I wrote it down els
 
 ### ★ 1M PROJECTION, and it is the first number that makes the case on its own
 
-⚠⚠ **EVERY NUMBER IN THE BLOCK BELOW RESTS ON n=1 PER ARM AND A COLD pos1, AND IS NOT BANKED.**
-The caveat used to live only in the prose *after* the table — and a number in a table is quotable
-without the paragraph beside it. **That is the stale-header failure in miniature**, so the warning
-now sits where the numbers are. The 512k inputs (static tg 8.48, paged tg 16.88) get their drift
-bound from arms 3-4; **the cold penalty sits on STATIC, so the correction moves the ratio DOWN** —
-256k went 1.3471 → 1.307 under exactly that correction.
-
-Built from the two 512k arms banked so far, not from the old estimate:
+✅ **RE-DERIVED 2026-08-10 07:55 FROM THE COMPLETE 4-ARM ABBA.** The block below previously used
+the **n=1** 512k singles (static tg 8.48, paged tg 16.88 — pos1 and pos2), with a caveat that they
+were unbanked and that a cold pos1 would move the ratio down. **Arms 3-4 landed; the inputs are now
+n=2 position-balanced means, and the cold penalty they were hedging against measured +1.06%.**
+⚠ **This is the number the owner quotes when deciding the 1M spend, so it was re-derived rather than
+left with a "superseded" tag** — a stale input inside a live projection is the exact shape named
+twice already in this file.
 
 ```
-                 256k      512k     decay/doubling    -> 1M projection
-static prefill   241.2     124.9        1.93              ~64.7 tok/s   -> 3.4 h/arm
-paged  prefill   237.1     132.3        1.79              ~73.9 tok/s   -> 3.0 h/arm
-static decode     19.76      8.48       2.33              **~3.6 tok/s**
-paged  decode     26.62     16.88       1.58              **~10.7 tok/s**
+                 256k(n=2)  512k(n=2)   decay/doubling    -> 1M projection
+static prefill   241.20      124.58        1.936             64.35 tok/s  -> 3.45 h/arm
+paged  prefill   237.10      132.345       1.792             73.87 tok/s  -> 3.01 h/arm
+static decode     19.76        8.525       2.318            **3.68 tok/s**
+paged  decode     26.62       16.762       1.588            **10.55 tok/s**
 ```
 
-⇒ **A 4-arm ABBA at 1M is ~13.5 h**, not the 20-24 h in the old note.
+⇒ **A 4-arm ABBA at 1M is ~12.9 h** (prefill-dominated, 800,063-token fill at the 0.763 occupancy
+ratio the sweep holds constant), not the 20-24 h in the old note and slightly under the 13.5 h the
+n=1 inputs implied.
 
-⇒ **And the decode line is the argument:** at 1M, static decode projects to **~3.6 tok/s — unusable
-for anything interactive — while paged projects to ~10.7.** A projected **~2.9×**. **That is the
+⇒ **1M decode ratio projects to 2.87×** — down a hair from the 2.9× the singles gave, because the
+n=2 paged mean (16.762) is lower than pos2 alone (16.882).
+
+⇒ **And the decode line is the argument:** at 1M, static decode projects to **3.68 tok/s — unusable
+for anything interactive — while paged projects to 10.55.** A projected **2.87×**. **That is the
 first number in this programme that makes the case for paging on its own, rather than as parity.**
 
 ⚠ **PROJECTION, NOT MEASUREMENT, and my last two were BOTH LOW.** I predicted 1.65-1.70 for the 512k
@@ -847,8 +851,8 @@ when those claims are the ones being made.
 | item | cost | why it needs the GPU |
 |---|---|---|
 | ★ **DECODE CONTEXT SWEEP — the decisive experiment** | **<1 h total** | The 9B at 8k says paged decode is **0.9017×** (slower); the 35B at 256k says **1.3692×** (faster). **Same kernel, same block size, verified** — `head_dim=256 · CHAMPION · bs=64` on both — so it is not a kernel confound. If the fixed-per-step-indirection-vs-growing-attention-cost story is right there is a **crossover length**, and it is findable cheaply: **one model, ABBA, `ignore_eos`, at 8k · 32k · 64k · 128k.** Prefill at those lengths is minutes. A monotone curve crossing zero supports the story; a flat 0.90 everywhere with a jump at 256k refutes it and points somewhere else. **This answers "why" and gets "is it real" for free at the low end; a second 256k point estimate answers neither.** |
-| clean 256k ABBA (warm-up ON, npred=512) | ~1 h | retires the "candidate" stamp on the 256k tie |
-| clean 512k ABBA (warm-up ON, npred=512) | ~3.5 h | tightens the bound + first properly-sampled decode number |
+| ✅ ~~clean 256k ABBA~~ | — | **DONE 2026-08-10 03:20.** decode 1.3471 clears · prefill UNREADABLE · wall UNRESOLVED |
+| ✅ ~~clean 512k ABBA~~ | — | **DONE 2026-08-10 07:35.** decode **1.9662** · prefill **1.0623** · wall **1.0714** — **all three clear**, cold-arm +1.06%. Bar MET at 512k. |
 | `gemma3` paged verification | ~10 min | wired but NOT proven: needs `DS4P-CONSUME > 0` and output matching static |
 | `gemma4` SWA-restored check | ~10 min | proves the guard fix re-enabled what it broke; needs CONSUME on a layer where `is_swa(il)` is true |
 | ~~paged-corruption rate at 225k~~ | — | **CLOSED**, see the retraction above; no runs needed |
