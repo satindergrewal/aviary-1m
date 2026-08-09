@@ -130,6 +130,71 @@ with needle PASS — `FINDINGS-paged-cross-request.md`, final section.
 
 ---
 
+## ★ TASK: MAKE DEEPSEEK-V4-FLASH WORK (added 2026-08-09 on the owner's order)
+
+Model on disk: `DeepSeek-V4-Flash-0731/UD-Q2_K_XL`, **3 shards, ~96.8 GB**
+(5.3 MB + 49.4 GB + 47.4 GB).
+
+### Step 0 — RUN IT BEFORE WRITING ANY CODE
+
+The two upstream Metal fixes DSV4 needs are **already in the 42-commit merge**:
+
+| commit | what it fixes |
+|---|---|
+| `e40bf8864` | `threadgroup half4x4[]` is a **COMPILE ERROR** in MSL (matrix types have no zero-arg constructor) — inside `kernel_lightning_indexer`, the DSV4 indexer kernel |
+| `a194a75b7` | NORM/RMS_NORM drop partial-simdgroup sums → **wrong mean and variance for the whole row** |
+
+⇒ **So "static DSV4 works" may already be true.** The first action is a serve + one-shot
+completion, not a code change. **Writing code before running the binary is how a day gets spent on a
+problem that was fixed upstream two days ago.**
+
+### Step 1 — STATIC path, if step 0 fails
+
+Diagnose against the actual error. Known-adjacent risk, rescued from a deleted clone
+(`historical/antirez-dsv4-metal/`): **the graph NODE budget.** `GGML_ASSERT(obj_new)` fired during
+context reserve at `-ub 1024` on the other DSV4 implementation because its floor only covered ≤512.
+Ours is `max(n_tokens*40, 32u*n_tensors())` — **different shape, no floor** — and
+`LLM_ARCH_DEEPSEEK4` is in that arch list. **Unmeasured on our code, not excluded.**
+
+### Step 2 — PAGED path, and it splits three ways
+
+`deepseek4.cpp` never calls `build_attn`; it calls **`build_attn_mha` directly, three times**:
+
+| site | shape | pageable? |
+|---|---|---|
+| `:877` PLAIN | `k = mctx->get_k(ctx0, il)`, implicit causal mask | **YES — this is the shape our funnel already serves** |
+| `:786` CSA | `k_all = concat(raw_k, csa_k)`, `kq_mask = concat(raw_mask, **top_k_mask**)` | no — see the blocker |
+| `:841` HCA | `k_all = concat(raw_k, hca_k)`, `kq_mask = concat(raw_mask, hca_mask)` | no — same |
+
+⇒ **THE BLOCKER, verified at the signature and not asserted:** `ggml_paged_attn_banded` takes
+**no mask tensor**. Visibility is analytic — `causal` + `visibility_window` + `context_lens` — and
+`rel_logits` is a distance-indexed bias bounded by `rel_extent`. **A top-k selection is arbitrary
+per (q,k) pair; an analytic band cannot express it.** Missing kernel capability, not a wiring gap.
+
+⚠ The earlier framing "dual cache, different pool geometry" was **directionally right and
+mechanically wrong**: the two-cache concat is a graph-level `ggml_concat` that paging could feed
+from two pools. **The MASK is the homeless piece.**
+
+| tier | scope | cost |
+|---|---|---|
+| **1** | plain layers only | **small** — the gemma3 pattern. ⚠ **PRECONDITION: read DSV4's actual `swa_type`.** `get_raw()` returns `llama_kv_cache_iswa*`, and today's guard only covers `LLAMA_SWA_TYPE_STANDARD`. **Inferring the type from the cache class is exactly the move that silently disabled gemma4's paging this morning.** |
+| **2** | CSA + HCA | **the real work** — optional explicit mask input on `ggml_paged_attn_banded`, the Metal kernel, a CPU reference, `test-paged-vs-cpu` coverage |
+| **3** | LID indexer | **skip** — `get_lid()->get_k()` feeds `ggml_mul_mat` + relu + `top_k`. A **scorer**, not attention. |
+
+### ⚠⚠ THE RECOMMENDATION AGAINST, RECORDED INSIDE THE TASK RATHER THAN BESIDE IT
+
+**96.8 GB of weights on a 128 GB box leaves ~31 GB.** Paging buys KV-memory efficiency; at that
+headroom the KV pool is small whether it is paged or static. **Paging is not the lever for this
+model on this machine.** Tier 2 is worth building **for the kernel** — an optional mask unlocks
+every sparse-attention architecture — and **not** for DSV4's sake here.
+
+⚠ Also live upstream and unfixed: **issue #26694, "DeepSeek-V4-Flash degenerates into repetition and
+leaks special tokens in long agentic chats (Metal)"** — Mac Studio, `-ngl 99 -fa on`, 262k ctx.
+Follow-ups narrow the trigger to **prompt content, not the client**. Budget for it before promising
+agentic use.
+
+---
+
 ## GPU-BOUND (queues behind the running measurement)
 
 | item | cost | why it needs the GPU |
