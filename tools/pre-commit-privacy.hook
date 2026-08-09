@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# PRE-COMMIT HOOK (NOT INSTALLED) — makes the privacy guard unconditional instead of remembered.
+#
+# INSTALL:    ln -sf ../../tools/pre-commit-privacy.hook .git/hooks/pre-commit
+# UNINSTALL:  rm .git/hooks/pre-commit
+# BYPASS ONCE (deliberate, e.g. you really do mean to commit that address):
+#             git commit --no-verify
+#
+# ⚠⚠ WHY THIS EXISTS, AND WHY IT IS OFFERED RATHER THAN INSTALLED.
+#
+# `tools/privacy_guard.sh` is the only COMPLETE private-data check in this repo — the gates' EXIT-trap
+# scrubber deliberately rewrites the home path only, and nothing else. Verified 2026-08-10 with a
+# probe file: `~<name>/`, a bare username, private IPv4, public IPv4 and IPv6 all pass the scrubber
+# untouched. That is by design; completeness is the guard's job, at commit time.
+#
+# **But the guard is not wired to anything.** `.git/hooks/` holds only `.sample` files, so the guard
+# runs solely because a human types it into a commit chain. **One forgotten invocation, or a commit
+# from any other tool, and the only complete check does not run** — on the rule in this project with
+# **three history rewrites** behind it.
+#
+# ⇒ That is *correct producer, no consumer* applied to the guard's own invocation: it CAN stop the
+#   thing it guards, and only when remembered. This file closes it — **one symlink, fully reversible,
+#   never pushed** (`.git/hooks` is not tracked).
+#
+# ⚠ NOT INSTALLED BY THE ASSISTANT, DELIBERATELY. This is a shared repo and the owner commits here
+# too. A hook that blocks HIS commit because he deliberately wrote an address into a document is a
+# workflow change he did not ask for, and surprising someone's git is not a silent decision — even
+# when the change is one file and trivially undone. Offered, with the install line above.
+#
+# ⚠ Note the guard's own semantics, which this inherits:
+#     exit 1 = REFUSING, a real hit          -> commit blocked, and it prints the offending lines
+#     exit 2 = VOID, nothing was examined    -> also blocked, because "PASS (0 lines scanned)" is
+#              exactly the vacuous-pass failure this project has already shipped once
+set -uo pipefail
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+GUARD="$ROOT/tools/privacy_guard.sh"
+[ -x "$GUARD" ] || { echo "pre-commit: $GUARD missing or not executable -- NOT silently allowing." >&2; exit 1; }
+"$GUARD" "$ROOT"
+rc=$?
+if [ "$rc" -ne 0 ]; then
+    echo "" >&2
+    echo "pre-commit: privacy guard returned $rc -- commit BLOCKED." >&2
+    echo "  Fix the flagged lines, or bypass deliberately with: git commit --no-verify" >&2
+    exit "$rc"
+fi
+exit 0
