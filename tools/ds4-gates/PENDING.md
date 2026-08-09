@@ -135,6 +135,50 @@ with needle PASS — `FINDINGS-paged-cross-request.md`, final section.
 Model on disk: `DeepSeek-V4-Flash-0731/UD-Q2_K_XL`, **3 shards, ~96.8 GB**
 (5.3 MB + 49.4 GB + 47.4 GB).
 
+### ✅ STEP 0 RESULT (2026-08-10): STATIC WORKS. PAGED ABORTS, ONE LAYER EARLIER THAN PREDICTED.
+
+**STATIC — the owner's goal is MET, with no code written:**
+
+```
+loads in 42 s (96.8 GB, 3 shards) -> "model loaded", listening
+/v1/chat/completions:
+  content   'Paris'
+  reasoning '1. The user asks for the capital of France in one word. 2. The capital of
+             France is Paris. 3. "Paris" is one word.'
+  finish    stop (clean EOS, not a limit)   ·   38 completion tokens
+raw /completion: 31.6 tok/s prefill, 22.65 tok/s decode
+```
+
+The two upstream Metal fixes in the 42-commit merge were all it needed. **Running it before writing
+anything was the right call and it cost ten minutes.**
+
+**PAGED — `--kv-paged` hard-aborts at startup:**
+
+```
+E llama_paged_scheduler_init: context does not have a paged KV cache: found a
+  non-paged memory type.
+server-context.cpp:1575: GGML_ASSERT(paged_sched && "failed to init the paged scheduler") failed
+```
+
+⚠⚠ **It never reaches a graph.** The tier analysis below priced the blocker at the *kernel* level —
+the missing mask for top-k. **That is still true and it is not the FIRST blocker.**
+`llama_kv_cache_dsv4` is a composite memory with four sub-caches and **is not a paged memory type at
+all**, so the scheduler refuses before a single layer is built. The markers reflect that:
+`capability contract refusals = 0`, `took the STATIC path = 0` — **not because everything paged, but
+because nothing was ever asked.**
+
+⇒ **NEW TIER 0, ahead of everything below:** `llama_kv_cache_dsv4` must own a paged pool and
+`llama_paged_scheduler_init` must accept a composite type. **`llama_kv_cache_iswa` already does
+exactly this** — it holds `mem_attn_paged` and exposes `get_attn_paged()`. Prior art exists; this is
+not greenfield.
+
+### ⚠ SEPARATE CHEAP DEFECT: a user-passed flag CRASHES the server
+
+`--kv-paged` on any arch whose memory is not paged-capable hits `GGML_ASSERT` and aborts. **A
+designed refusal — "this model's memory type does not support paging; remove `--kv-paged`" — is
+strictly better than an assert**, and this lane already refuses by design in three other places.
+Small, and squarely inside "make the model work in expected ways".
+
 ### Step 0 — RUN IT BEFORE WRITING ANY CODE
 
 The two upstream Metal fixes DSV4 needs are **already in the 42-commit merge**:
