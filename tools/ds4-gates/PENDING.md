@@ -495,6 +495,24 @@ any `-np 1` gate at all.** `arch_serve_gate`, `long_context_gate` and `paged_par
 purpose, and making it long would trade coverage for a matrix nobody re-runs. **The fix is that each
 green names its size** — now printed by `arch_serve_gate`, and recorded here for the rest.
 
+### ⚠ THIS TABLE IS DATED, AND THAT IS THE WHOLE MAINTENANCE PLAN
+
+**Read on 2026-08-10 against five gates.** A hand table has **no positive control and no reach**: it
+goes stale silently the day someone adds a sixth gate or changes a default, and nothing in the tree
+will notice — the exact property that makes a stale header dangerous. (raised by Grok)
+
+⇒ **The durable form is a CONVENTION, not a parser**, because the parser I tried misread four of
+five and **an instrument that misreads is worse than none — a reader trusts it**:
+
+> **Re-ask the coverage question whenever a gate is added or a default input changes.**
+> For the new or changed gate: name the structural constants its claims scale with — `n_swa`,
+> `block_size`, `ubatch`, `-np` — and state, in its own output, whether the default input crosses
+> each. **Then update the date on this table.**
+
+⚠ This directory holds **four** records of a prose convention failing to bind the next script, which
+is why the rule sits **next to the table it governs** rather than in a style note — and why
+`arch_serve_gate` prints its own two limits at runtime instead of relying on anyone reading this.
+
 ---
 
 ## ⚠⚠⚠ WHAT THE ARCH MATRIX'S 21 GREENS ACTUALLY CLAIM (2026-08-10)
