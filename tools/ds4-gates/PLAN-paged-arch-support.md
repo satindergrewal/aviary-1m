@@ -9,6 +9,28 @@ not verifiably closed*. A row without that is not allowed to claim either.
 
 ## Verified against the source tree — not assumed
 
+> ## ⚠⚠ THE `paged wired` COLUMN BELOW IS A 2026-08-07 SNAPSHOT AND IS NOW FALSE FOR MOST ROWS.
+>
+> It says **no** for `grok`, `nemotron`, `ernie4-5`, `qwen3moe`, `starcoder`, `laguna`, `step35`,
+> `dflash`, `gemma4-assistant` and more — and the *"Current state"* section a few lines down says
+> **22 archs carry the paged consumer**, listing those same files. **One document, two answers.**
+>
+> The live query, which takes a second and cannot go stale:
+>
+> ```
+> grep -rln 'build_attn_paged_or_null\|get_attn_paged' src/models/
+> ```
+>
+> ⚠ **THIS COST SOMETHING REAL ON 2026-08-09.** `SCOPE-iswa-paging-gap.md` was written against a
+> stale reading of which archs were wired and concluded "21 architectures excluded by construction".
+> Six of them were already wired. Acting on that conclusion, commit `cbb4c8d93` added a blanket
+> sliding-window rejection that **silently switched gemma4's SWA layers back to the static path** —
+> a working feature disabled by a guard built on an out-of-date table, invisible because the
+> fallback output is correct.
+>
+> ⇒ Two lists of the same fact drift the instant one moves. Kept below as the historical record of
+> what was true on 2026-08-07; **read it as history, never as state.**
+
 `paged_wired` = the file references `get_attn_paged`. `attn sites` = count of
 `build_attn_inp_kv*` / `build_attn_inp_k_iswa` constructions.
 
