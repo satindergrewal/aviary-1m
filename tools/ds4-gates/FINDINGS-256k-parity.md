@@ -1,5 +1,28 @@
 # 256k parity: the first long-context measurement, and why run 1 does not answer the question
 
+> ## ⚠ 2026-08-10 — THIS DOC'S DECODE NUMBERS HAVE NO RECORDED SAMPLE SIZE
+>
+> `grep -nE 'n_predict|predicted_n|decode window'` returns **nothing**. Every `tok/s` here was taken
+> before the lane learned that **`n_predict` is a CEILING, not a floor**: the needle prompt is
+> answered in ~14 tokens and the model emits EOS, so a decode figure could be a **0.67-second
+> average** while the invocation looked like it asked for hundreds. When that window was later made
+> real with `ignore_eos`, a 9B decode result **INVERTED** (~0.98× → 0.9017×).
+>
+> ⇒ **The numbers below are not withdrawn — they are UNBOUNDED.** They may be fine; nothing on record
+> can say. **A rate without its sample size cannot be audited**, and this file is the reason that
+> sentence is now a law.
+>
+> ### ★ AND THE DIRECTION CORROBORATES TONIGHT'S CROSSOVER, FROM A SECOND MODEL
+>
+> This doc: **9B IQ2_M at 225k, paged decode 1.55-1.70× static.**
+> 2026-08-10: **35B Q4_K_M at 256k, paged decode 1.347×**, drift-bounded, `pred_n=512`, consumption
+> proven by direct `DS4P-CONSUME` counts.
+>
+> And the same night's sweep on the 35B: **8k 0.845 · 32k 0.906 · 64k 0.913 · 256k 1.347** — paged
+> *loses* below ~64k and *wins* at 256k. **Two models, two quants, same direction at depth.** The
+> "bar is met" conclusion at the bottom of this file survives, for a better reason than it was
+> originally given.
+
 **2026-08-08.** Ornith-1.0-9B-1M IQ2_M, `-c 262144`, 225k-token needle prompt, `-b 512 -ub 512`,
 M3 Max 128 GB. First measurement this lane has made above 40960.
 
