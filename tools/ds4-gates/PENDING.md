@@ -462,6 +462,36 @@ champion + multi-slot   IMPOSSIBLE by contract   -- closed, by fix a4e8aeb08
 scalar   + multi-slot + LONG CONTEXT   STILL OPEN -- block 16, champ off, -np 2, 40k/seq
 ```
 
+### ⚠⚠ RETRACTION 2026-08-10 08:40 — "scalar paged is 6.6x slower" IS NOT ESTABLISHED
+
+I published **6.6×** (scalar paged ~99.6 tok/s vs static ~660 tok/s at `-np 2`, 40k/seq) to the room
+and into commit `5b0d3c4`. **It came from ONE partial run that was killed at 75% by a 300 s timeout.**
+The very next run of the **same configuration, same binary `a4e8aeb08`, same model** reached the
+**same progress point 2.8× faster**:
+
+```
+run 08:23   30,069 / 40,016  at t = 302.04 s  ->  99.6 tok/s
+run 08:33   30,150 / 40,016  at t = 106.01 s  -> 284.4 tok/s
+```
+
+⇒ **The quantity does not replicate, so the ratio is not a measurement.** n=1, and this lane already
+has a scar for boarding a conclusion from a single unpaired run.
+
+⚠ **And there is a live confound I identified but did not resolve: SLOT SCHEDULING.** The 08:33 log
+shows one slot at 36,282 tokens while the other sits at **65** — the slots are **not** progressing
+together, so a per-sequence `tok/s` figure depends entirely on whether the other slot was being
+served at that moment. **A per-sequence rate is the wrong metric for a multi-slot arm.** The robust
+one is **wall-clock for both sequences to complete**, which neither run produced: the first timed
+out, the second was stopped for a machine restart.
+
+⇒ **What SURVIVES the retraction, because it rests on different evidence:**
+- `champion + multi-slot` is **impossible by contract** — from an abort message and a source read,
+  not from timing. **Unaffected.**
+- The scalar path at `-np 2` and long context **runs, pages, and does not corrupt**: `consume=4310`,
+  `refusals=0`, no abort, both prior arms' static controls CLEAN. **Unaffected.**
+- **"Scalar multi-slot is too slow to use" is RETRACTED and must be re-measured on wall-clock with
+  `MS_TIMEOUT` high enough to finish, n≥2.**
+
 ---
 
 | rung | verdict | evidence |
