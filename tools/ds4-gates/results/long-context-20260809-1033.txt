@@ -1,0 +1,10 @@
+tip: ecfa4f368 dirty=0  ctx=262144  fill~200000tok
+model: ornith-1.0-35b-1M-Q4_K_M.gguf  (LC_MODEL to override)
+--- STATIC (control) ---
+  static depth 50%  prompt_tokens=195506 found=1    <think>  </think>  MAGENTA-7742
+--- PAGED ---
+paged pool: -ngpub 9894 x block_size 32 = 316608 tokens for ctx=262144
+  paged  depth 50%  prompt_tokens=195506 found=1    <think>  </think>  MAGENTA-7742
+-----
+retrieved: static 1/3   paged 1/3
+LONG-CONTEXT GATE: PASS paged matches static (1/3 vs 1/3) at 262144 ctx

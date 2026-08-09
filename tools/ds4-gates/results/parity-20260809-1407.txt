@@ -1,0 +1,3 @@
+paged parity gate: ornith-1.0-35b-1M-Q4_K_M.gguf
+tip: cbb4c8d93  ctx=524288  fill~400000tok  block=64  order=abba  headroom=1.05
+  prompt: 17094 lines, needle at 50% depth, target ~400000 tok

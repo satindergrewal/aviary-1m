@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+# ⚠ A TRAP, NOT A TRAILING CALL. A trailing scrub is jumped over by the gate's own `exit`, while
+# `grep -l scrub_abs_paths` still lists the file as a caller -- grep counts TEXT, not control flow.
+# On EXIT it runs whatever path the gate takes.
+# ⚠ ADDED 2026-08-09 after a full-history rewrite + force-push removed /Users/<username> from 11
+# PUBLISHED commits. That cleaned the backlog; this closes the PRODUCERS. A history scrub with live
+# emitters still in the tree is a fix with a regression path.
+trap 'scrub_abs_paths "${OUT:-}"' EXIT
 # abort_paths_gate.sh — P0-3 STEP 0: measure the CURRENT tree's dead-client abort behavior.
 # Reports, per death mode (fin / rst / kill9):
 #   t_detect  = client-death -> "cancel task" in the server log (should be <= poll tick + 1s)

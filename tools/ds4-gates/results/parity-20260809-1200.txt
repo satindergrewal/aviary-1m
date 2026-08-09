@@ -1,0 +1,14 @@
+paged parity gate: ornith-1.0-35b-1M-Q4_K_M.gguf
+tip: ecfa4f368  ctx=262144  fill~200000tok  block=64  order=static-first  headroom=1.05
+  prompt: 8547 lines, needle at 50% depth, target ~200000 tok
+  static  needle=PASS  wall=   815.9s  prompt_n=195506  pp=  239.8 tok/s  tg= 21.85 tok/s
+  paged   needle=PASS  wall=   783.2s  prompt_n=195506  pp=  249.9 tok/s  tg= 21.70 tok/s
+
+  WALL RATIO paged/static = 0.9598   ->  paged is FASTER by 4.0%
+  PREFILL  static 239.8 vs paged 249.9 tok/s   (1.042x)
+  DECODE   static 21.85 vs paged 21.70 tok/s   (0.993x)
+
+  ⚠ ONE ORDERING. Arm order is a measured confound on this box (29% positional drift once gave
+  1.41x in both directions when the truth was 1.317x). Re-run with PP_ORDER=paged-first;
+  AGREEMENT ACROSS BOTH ORDERS is the claim. A single order is a data point.
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/parity-20260809-1200.txt

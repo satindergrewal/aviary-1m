@@ -11,6 +11,14 @@
 # Sync first (the runner does it): git -C <wt> fetch fork ds4-ports && git checkout fork/ds4-ports
 #   && cmake --build build-cuda --target llama-server -j 24
 set -euo pipefail
+. "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+# ⚠ A TRAP, NOT A TRAILING CALL. A trailing scrub is jumped over by the gate's own `exit`, while
+# `grep -l scrub_abs_paths` still lists the file as a caller -- grep counts TEXT, not control flow.
+# On EXIT it runs whatever path the gate takes.
+# ⚠ ADDED 2026-08-09 after a full-history rewrite + force-push removed /Users/<username> from 11
+# PUBLISHED commits. That cleaned the backlog; this closes the PRODUCERS. A history scrub with live
+# emitters still in the tree is a fix with a regression path.
+trap 'scrub_abs_paths "${OUT:-}"' EXIT
 WT="${1:-<BOX>/wt-ds4-ports}"
 MODEL="${2:-<BOX>/ktdev/qwen3-4b-dev-IQ4_KT.gguf}"
 PORT="${3:-8953}"

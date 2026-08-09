@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+# ⚠ A TRAP, NOT A TRAILING CALL. A trailing scrub is jumped over by the gate's own `exit`, while
+# `grep -l scrub_abs_paths` still lists the file as a caller -- grep counts TEXT, not control flow.
+# On EXIT it runs whatever path the gate takes.
+# ⚠ ADDED 2026-08-09 after a full-history rewrite + force-push removed /Users/<username> from 11
+# PUBLISHED commits. That cleaned the backlog; this closes the PRODUCERS. A history scrub with live
+# emitters still in the tree is a fix with a regression path.
+trap 'scrub_abs_paths "${OUT:-}"' EXIT
 # CLAIMED-vs-ENTERED LINT -- does a gate actually enter the regime its flags claim?
 #
 # WHY THIS EXISTS. On 2026-08-06 a -np 2 correctness gate (hybrid_paged_gate) passed 4/4 while the

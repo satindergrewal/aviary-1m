@@ -26,6 +26,11 @@
 # usage: margin_distribution.sh <model.gguf> [n_generate] [prompt_depth] [--kv-paged]
 set -uo pipefail
 . "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+# ⚠ A TRAP, NOT A TRAILING CALL -- and I shipped the trailing form in THIS FILE this morning.
+# A trailing `scrub_abs_paths "$OUT"` is jumped over by every early `exit` in the script (missing
+# model, no free port, VOID on a degenerate result), while `grep -l scrub_abs_paths` still lists the
+# file as a caller. grep counts TEXT, not control flow. lint_scrub_coverage.sh caught it.
+trap 'scrub_abs_paths "${OUT:-}"' EXIT
 
 M="${1:-}"; N="${2:-200}"; DEPTH="${3:-6000}"; shift 3 2>/dev/null || true
 [ -f "$M" ] || { echo "usage: $0 <model.gguf> [n_generate] [prompt_depth] [extra server args]" >&2; exit 2; }
@@ -142,8 +147,3 @@ print("  the first. Combining them predicts a rate -- it does not measure one.")
 PY
 echo "log: $OUT" | tee -a "$OUT"
 
-# ⚠ SCRUB ON EXIT. Both these scripts print `log: $OUT` -- an ABSOLUTE path containing the home
-# directory -- into the result file they then commit. They SOURCED _no_abs_paths.sh and never CALLED
-# it, so the include looked like protection and did nothing. Caught by privacy_guard.sh refusing the
-# commit; the arch gate has always called it from its cleanup trap. Sourcing is not calling.
-scrub_abs_paths "$OUT" 2>/dev/null || true
