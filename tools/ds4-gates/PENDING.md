@@ -183,6 +183,18 @@ DECODE   1.3471   effect 34.7% vs drift  5.9%  ->  paged FASTER, CLEARS
 Needle PASS on every arm, and the read was **pre-registered before the data** and matched branch for
 branch.
 
+⚠ **`PREFILL 0.9830 → UNREADABLE` IS NOW KNOWN TO BE A LIMIT OF THE READING, NOT OF THE DATA.** The
+512k run shows the prefill column has a within-run structure that endpoint averages destroy: the
+matched-depth ratio plateaus at **0.944**, and **that plateau reproduces the endpoint average of the
+same run to three decimals**. So 0.983 here is very likely a real depth-weighted mean too, sitting
+between the shallow region (static faster) and the deep plateau — 256k has proportionally more
+shallow prefill than 400k does, which is the right direction for 0.983 vs 0.944.
+
+⛔ **It cannot be checked, because this run's logs no longer exist** — `$D` was a fixed path and
+four later invocations overwrote them (edit D in the staged applier). **The instrument that would
+read it now exists and the data it needed is gone.** Recorded as a hole rather than back-filled by
+inference: the next 256k ABBA gets this for free and this one does not.
+
 ### ⚠⚠ "ALL FOUR ARMS PROVED CONSUMPTION" WAS AN INFERENCE FROM SILENCE. IT IS NOW A MEASUREMENT.
 
 The first version of this section said consumption was proven. It was **inferred from the engine's
