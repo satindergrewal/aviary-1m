@@ -67,7 +67,31 @@ export DS4P_METAL_CHAMP=${DS4P_METAL_CHAMP:-1}
 export LLAMA_PAGED_POOL_HEADROOM=${LLAMA_PAGED_POOL_HEADROOM:-1.05}
 
 [ -f "$M" ] || { echo "missing model: $M" >&2; exit 2; }
-D=${CLAUDE_JOB_DIR:-/tmp}/parity; mkdir -p "$D"
+# ⚠⚠ $D WAS A FIXED PATH, SO EVERY INVOCATION DESTROYED THE PREVIOUS ONE'S EVIDENCE -- and the
+# sweep that drives this gate invokes it FOUR TIMES IN A ROW. `decode_ctx_sweep.sh` runs rungs
+# 8k/32k/64k/128k through here back to back; each rung overwrote the last rung's logs, and the 512k
+# run overwrote all of them. The per-rung `.txt` verdicts survived because they carry the ctx in
+# their filename; **the logs, which hold the only within-run data this lane has, did not.**
+#
+# Found on 2026-08-10 when the prefill-curve analysis wanted to test its plateau at a second rung
+# and there was nothing left to test it against. Same class as pos4 overwriting pos1, one level up:
+# **the artifacts that get a unique name survive and the ones that do not are silently destroyed.**
+#
+# ⇒ Per-run directory keyed by ctx and time, plus a `latest` symlink so anything reaching for the
+#   old fixed path still finds the most recent run.
+#
+# ⚠⚠⚠ AND THIS EDIT NEARLY DISABLED THE ONE-SERVER-AT-A-TIME LOCK. The lock path is built from $D
+# at :82, THIRTEEN LINES BELOW THIS ONE. Making $D unique per invocation would give two concurrent runs
+# their OWN lock directory each, so both would acquire it and both would start a server on the same
+# GPU -- mutual exclusion gone, silently, and the symptom would be two slow arms nobody could
+# attribute. **Guard-for-A-disables-B: an edit for evidence preservation switching off contention
+# control, in the same file, in the same change.** That is a ★★★ class in this lane with three
+# prior instances, and it was caught by reading the neighbourhood of the anchor rather than the
+# anchor. ⇒ DPARENT is the FIXED path and the lock stays on it (edit E); only the run dir moves.
+DPARENT=${CLAUDE_JOB_DIR:-/tmp}/parity; mkdir -p "$DPARENT"
+D=$DPARENT/c${CTX}-$(date +%Y%m%d-%H%M%S); mkdir -p "$D"
+ln -sfn "$D" "$DPARENT/latest" 2>/dev/null
+echo "  run dir: .../parity/$(basename "$D")   (previous runs are no longer overwritten)"
 # ⚠ CLEAR THE PREVIOUS RUN'S RESULT FILES. A `.res` that survives into the next run is
 # indistinguishable from one this run wrote -- same name, same schema, plausible numbers. The
 # same-prompt_n assertion below is the backstop; this is the fix. Two guards because the failure is
@@ -79,7 +103,10 @@ NEEDLE="MAGENTA-7742"
 
 # ⚠ ONE SERVER AT A TIME, and a lock rather than a race. Detached probes sharing a pattern-kill
 # destroyed each other's servers on 2026-08-07; one survivor held a port for 16 minutes on 2026-08-09.
-LOCK=$D/gpu.lock
+# ⚠⚠ THE LOCK MUST NOT LIVE UNDER THE PER-RUN $D. It is what makes concurrent invocations
+# exclude each other, so it has to be at a path they SHARE. When $D became per-run (edit D) this
+# line would have handed every invocation its own lock and let them all run at once.
+LOCK=$DPARENT/gpu.lock
 until mkdir "$LOCK" 2>/dev/null; do sleep 15; done
 PID=""
 trap 'rmdir "$LOCK" 2>/dev/null; [ -n "$PID" ] && kill $PID 2>/dev/null; scrub_abs_paths "${OUT:-}" 2>/dev/null' EXIT
@@ -100,7 +127,10 @@ echo "paged parity gate: $M" | tee "$OUT"
 # ⚠ `block_req`, NOT `block`. probe_geometry may clamp it, and a header naming a value the run did not
 # use is the stale-header defect this directory has now recorded three times in one day.
 # The value ACTUALLY used is printed by the geometry line below and is the one to quote.
-echo "tip: $(cd "$WT" && git rev-parse --short HEAD)  ctx=$CTX  fill~${FILL}tok  block_req=$BLK  order=$ORDER  headroom=$LLAMA_PAGED_POOL_HEADROOM  npred=$NPRED  warm=$WARM  champ=$DS4P_METAL_CHAMP" | tee -a "$OUT"
+# ⚠ `git rev-parse --short HEAD` prints a CLEAN sha even when the worktree that built the binary
+# has uncommitted edits, so an artifact can name a commit the measured binary is not. LAW 7's
+# gate_tip_stamp appends +dirty(N) -- the COUNT, because one edit and thirty are different situations.
+echo "tip: $(gate_tip_stamp "$WT")  ctx=$CTX  fill~${FILL}tok  block_req=$BLK  order=$ORDER  headroom=$LLAMA_PAGED_POOL_HEADROOM  npred=$NPRED  warm=$WARM  champ=$DS4P_METAL_CHAMP" | tee -a "$OUT"
 
 python3 - "$D" "$NEEDLE" "$FILL" "$NPRED" <<'PY' | tee -a "$OUT"
 import json, sys
@@ -381,6 +411,22 @@ PYW
             -H 'Content-Type: application/json' --data-binary "@$D/warm.json" > /dev/null 2>&1
         t1=$(python3 -c 'import time;print(time.time())')
         kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; sleep 3
+        # ⚠⚠ A WARM-UP THAT FAILED STILL PRINTED A DURATION AND THE RUN CONTINUED. The only check
+        # here was "did the server come up"; everything after that was timed and discarded without
+        # ever being READ. So a prelude that loaded the model, refused every paged layer and
+        # returned an error produced `warm-up paged discarded (6s)` -- indistinguishable from a
+        # healthy one, on the arm whose whole purpose is to remove the cold-arm confound from the
+        # NEXT measurement. Exit-0-did-nothing, in the prelude.
+        # ⇒ Read the prelude's own log for the failure vocabulary the measured arms already VOID on.
+        local wfail; wfail=$(grep -acE 'failed to load model|error loading model|fails the paged capability contract|ZERO layers have consumed|failed to init the paged scheduler' "$D/warm-$a.log")
+        if [ "${wfail:-0}" -gt 0 ]; then
+            echo "  ⚠⚠ VOID: warm-up ($a) logged $wfail failure line(s) -- the prelude did NOT warm anything." | tee -a "$OUT"
+            grep -m2 -oE 'failed to load model.*|error loading model.*|fails the paged capability contract.*|ZERO layers have consumed.*|failed to init the paged scheduler.*' "$D/warm-$a.log" | sed 's/^/      /' | tee -a "$OUT"
+            echo "     Refusing to continue: the measured arms would inherit a cold-arm confound this" | tee -a "$OUT"
+            echo "     gate would then report as an EFFECT. Fix the prelude or run with PP_WARM=0 and" | tee -a "$OUT"
+            echo "     accept the cold first arm EXPLICITLY." | tee -a "$OUT"
+            return 1
+        fi
         printf '  warm-up %-6s discarded  (%.0fs)\n' "$a" "$(python3 -c "print($t1-$t0)")" | tee -a "$OUT"
     done
 }
@@ -399,10 +445,24 @@ PYW
 probe_geometry
 warmup
 case "$ORDER" in
+  # ⚠⚠ THE .res FILES WERE PER-POSITION AND THE .log FILES WERE NOT, SO pos4 DESTROYED pos1's LOG.
+  # Found on 2026-08-10 by trying to use them: `prefill_curve.py` differences the per-`-b` progress
+  # lines into a within-run prefill rate curve, and the one comparison that separates a COLD-ARM
+  # penalty from genuine DRIFT is pos1's curve against pos4's -- same arm type, different position.
+  # That comparison was impossible, because `arm()` truncates "$D/$1.log" on entry and both static
+  # arms write the same path. **Every within-arm diagnostic this lane has ever run therefore covered
+  # only the LAST arm of each type, and nothing said so.**
+  # ⇒ cp, not mv: "$D/static.log" keeps working for everything that already reads it.
   abba)        arm static; mv "$D/static.res" "$D/static1.res" 2>/dev/null
+               cp "$D/static.log" "$D/static1.log" 2>/dev/null
                arm paged;  mv "$D/paged.res"  "$D/paged1.res"  2>/dev/null
+               cp "$D/paged.log"  "$D/paged1.log"  2>/dev/null
                arm paged;  mv "$D/paged.res"  "$D/paged2.res"  2>/dev/null
-               arm static; mv "$D/static.res" "$D/static2.res" 2>/dev/null ;;
+               cp "$D/paged.log"  "$D/paged2.log"  2>/dev/null
+               arm static; mv "$D/static.res" "$D/static2.res" 2>/dev/null
+               cp "$D/static.log" "$D/static2.log" 2>/dev/null
+               echo "  per-position logs kept: static1/paged1/paged2/static2.log" | tee -a "$OUT"
+               echo "    ⇒ cold-vs-drift split:  prefill_curve.py \$D/static1.log \$D/static2.log" | tee -a "$OUT" ;;
   paged-first) arm paged; arm static ;;
   *)           arm static; arm paged ;;
 esac

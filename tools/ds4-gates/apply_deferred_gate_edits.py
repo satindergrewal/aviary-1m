@@ -89,8 +89,8 @@ echo "tip: $(gate_tip_stamp "$WT")  ctx=$CTX'''),
 # ⇒ Per-run directory keyed by ctx and time, plus a `latest` symlink so anything reaching for the
 #   old fixed path still finds the most recent run.
 #
-# ⚠⚠⚠ AND THIS EDIT NEARLY DISABLED THE ONE-SERVER-AT-A-TIME LOCK. `LOCK=$D/gpu.lock` sits at :82,
-# THIRTEEN LINES BELOW THIS ONE. Making $D unique per invocation would give two concurrent gate runs
+# ⚠⚠⚠ AND THIS EDIT NEARLY DISABLED THE ONE-SERVER-AT-A-TIME LOCK. The lock path is built from $D
+# at :82, THIRTEEN LINES BELOW THIS ONE. Making $D unique per invocation would give two concurrent runs
 # their OWN lock directory each, so both would acquire it and both would start a server on the same
 # GPU -- mutual exclusion gone, silently, and the symptom would be two slow arms nobody could
 # attribute. **Guard-for-A-disables-B: an edit for evidence preservation switching off contention
@@ -147,9 +147,46 @@ def main():
         print("  The gate has been edited since these were staged -- re-read it and re-stage.")
         return 2
     if dry:
-        print("\ndry-run: all anchors resolve. Nothing written.")
+        # ⚠⚠ A DRY-RUN THAT CHECKS THE PRISTINE FILE CANNOT SEE A COLLISION THE EDITS CREATE. Replay
+        # the edits against a COPY so the same per-step assertion that guards the real apply also
+        # guards the preview. The first version checked all five anchors against the original, said
+        # "all anchors resolve", and then produced a broken file -- a green from a check that
+        # examined a state the run never reaches.
+        probe = src
+        for i, (old, new) in enumerate(plan):
+            if probe.count(old) != 1:
+                print(f"\nDRY-RUN FAILS at step {i+1}: anchor occurs {probe.count(old)}x after the "
+                      f"preceding edits (it was unique in the original).")
+                return 2
+            probe = probe.replace(old, new, 1)
+        print("\ndry-run: all anchors resolve, INCLUDING against the evolving file. Nothing written.")
         return 0
-    for old, new in plan:
+    for i, (old, new) in enumerate(plan):
+        # ⚠⚠⚠ UNIQUENESS MUST HOLD AGAINST THE EVOLVING TEXT, NOT THE ORIGINAL -- AND THAT COST A
+        # BROKEN GATE SCRIPT ON 2026-08-10.
+        #
+        # Edit D's COMMENT documents the lock line, so its replacement text contains the literal
+        # string that is edit E's ANCHOR. Measured:
+        #     occurrences of edit E's anchor in the original file: 1
+        #     after edit D is applied:                             2
+        # so `replace(anchor, new, 1)` for edit E hit **edit D's comment**, not the real line at :82.
+        # That spliced a replacement into the middle of a backtick pair, bash stopped treating the
+        # following `#` lines as comments, and `bash -n` failed 136 lines later on a COMMENT
+        # containing `ds4p_paged_consumer_count() == 0`.
+        #
+        # ⇒ **And the damage was exactly what edit E exists to prevent: the real lock line stayed
+        #   `$D`-relative, so mutual exclusion would still have been silently disabled.** The fix
+        #   for a coupling introduced a fresh instance of that coupling, THROUGH ITS OWN
+        #   DOCUMENTATION OF THE COUPLING -- the same shape as `privacy_guard.sh` refusing its own
+        #   source for spelling out the patterns it forbids.
+        #
+        # ⇒ Two fixes, because either alone is fragile: this per-step assertion (the general one),
+        #   and edit D's comment no longer spelling the anchor literally (the specific one).
+        if src.count(old) != 1:
+            print(f"REFUSING mid-apply at step {i+1}: anchor now occurs {src.count(old)}x. "
+                  f"An earlier edit's replacement text contains it. Nothing further written; "
+                  f"`git checkout paged_parity_gate.sh` to restore.")
+            return 3
         src = src.replace(old, new, 1)
     open(GATE, "w").write(src)
     rc = subprocess.run(["bash", "-n", GATE]).returncode
