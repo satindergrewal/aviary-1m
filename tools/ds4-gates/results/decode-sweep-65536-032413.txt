@@ -1,0 +1,11 @@
+paged parity gate: $HOME/Documents/GitHub/ornith-models/Ornith-1.0-35B-1M-GGUF/ornith-1.0-35b-1M-Q4_K_M.gguf
+tip: 074672e33  ctx=65536  fill~50003tok  block_req=64  order=abba  headroom=1.05  npred=512  warm=1  champ=1
+  prompt: 2136 lines, needle at 50% depth, target ~50003 tok
+  geometry: head_dim=256 with the CHAMPION kernel -- block_size 64 is its contract,
+            not the scalar staged-tile bound. Keeping 64 (clamping to 32 would
+            silently select the slow scalar path).
+  warm-up static discarded  (5s)
+  warm-up paged  discarded  (5s)
+  static  needle=PASS  wall=    80.5s  prompt_n=48053  pp=  674.7 tok/s  tg= 55.66 tok/s  pred_n=512 (9.2s)
+  paged arm consumed the pool (engine no-consumer alarm silent); 0 layer-refusal warnings
+  paged   needle=PASS  wall=    80.1s  prompt_n=48053  pp=  700.1 tok/s  tg= 45.02 tok/s  pred_n=512 (11.4s)

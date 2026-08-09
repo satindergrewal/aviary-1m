@@ -1,0 +1,8 @@
+paged parity gate: ornith-1.0-35b-1M-Q4_K_M.gguf
+tip: ec937be36  ctx=262144  fill~200000tok  block_req=64  order=abba  headroom=1.05  npred=512  warm=1  champ=1
+  prompt: 8547 lines, needle at 50% depth, target ~200000 tok
+  geometry: head_dim=256 with the CHAMPION kernel -- block_size 64 is its contract,
+            not the scalar staged-tile bound. Keeping 64 (clamping to 32 would
+            silently select the slow scalar path).
+  warm-up static discarded  (5s)
+  warm-up paged  discarded  (6s)

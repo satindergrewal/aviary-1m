@@ -1,0 +1,6 @@
+paged parity gate: ornith-1.0-35b-1M-Q4_K_M.gguf
+tip: 3ed498760  ctx=262144  fill~200000tok  block=64  order=abba  headroom=1.05  npred=512  warm=1
+  prompt: 8547 lines, needle at 50% depth, target ~200000 tok
+  warm-up static discarded  (5s)
+  warm-up paged  discarded  (6s)
+  static  needle=PASS  wall=   843.0s  prompt_n=195506  pp=  232.1 tok/s  tg= 21.21 tok/s

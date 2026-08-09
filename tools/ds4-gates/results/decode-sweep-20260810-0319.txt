@@ -1,0 +1,16 @@
+decode context sweep: ornith-1.0-35b-1M-Q4_K_M.gguf
+rungs: 8192 32768 65536 131072   npred=512 (with ignore_eos -- a FLOOR, verified per rung)
+
+=== rung ctx=8192  fill~6250 ===
+  decode window actually generated: [512, 512, 512, 512] tokens per arm
+  DECODE   static    71.88  paged    62.97   ratio 0.8760   drift s=0.2% p=0.9%  effect=12.4%
+  -> paged is SLOWER by 12.4%, clearing drift 0.9%.
+  cold-arm: OK: the two static positions agree to 0.0% -- no positional signature in either direction.
+
+=== rung ctx=32768  fill~25001 ===
+  decode window actually generated: [512, 512, 512, 512] tokens per arm
+  DECODE   static    60.38  paged    54.28   ratio 0.8991   drift s=7.1% p=6.4%  effect=10.1%
+  -> paged is SLOWER by 10.1%, clearing drift 7.1%.
+  cold-arm: ⚠ pos1 ran SLOWER than pos4 by 2.4%: the first arm was still cold, and because
+
+=== rung ctx=65536  fill~50003 ===

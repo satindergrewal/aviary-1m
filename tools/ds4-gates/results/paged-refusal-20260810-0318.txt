@@ -1,0 +1,5 @@
+paged refusal gate: $HOME/Documents/GitHub/ornith-models/DeepSeek-V4-Flash-0731/UD-Q2_K_XL/DeepSeek-V4-Flash-0731-UD-Q2_K_XL-00001-of-00003.gguf
+tip: 35be827f3  ctx=4096
+  served=0  died=1  exit=1  abort_markers=0  refusal_markers=2
+  ⇒ **PASS: refused by design.** Named error, non-zero exit, no backtrace.
+      does not have a paged KV cache: found a non-paged memory type. Pass --kv-paged (-kvp); if you did, this model's memory was built without a paged attention pool 

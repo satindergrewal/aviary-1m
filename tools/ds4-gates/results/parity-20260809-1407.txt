@@ -1,3 +1,24 @@
 paged parity gate: ornith-1.0-35b-1M-Q4_K_M.gguf
 tip: cbb4c8d93  ctx=524288  fill~400000tok  block=64  order=abba  headroom=1.05
   prompt: 17094 lines, needle at 50% depth, target ~400000 tok
+  static  needle=PASS  wall=  3211.2s  prompt_n=399181  pp=  124.4 tok/s  tg=  9.33 tok/s
+  paged   needle=PASS  wall=  3144.6s  prompt_n=399181  pp=  127.0 tok/s  tg=  9.28 tok/s
+  paged   needle=PASS  wall=  3134.3s  prompt_n=399181  pp=  127.4 tok/s  tg=  9.31 tok/s
+  static  needle=PASS  wall=  3128.2s  prompt_n=399181  pp=  127.7 tok/s  tg=  9.09 tok/s
+
+  ABBA walls by position:
+    pos 1  static  wall=  3211.2s  pp=  124.4  tg=  9.33
+    pos 2  paged   wall=  3144.6s  pp=  127.0  tg=  9.28
+    pos 3  paged   wall=  3134.3s  pp=  127.4  tg=  9.31
+    pos 4  static  wall=  3128.2s  pp=  127.7  tg=  9.09
+
+  DRIFT  static 2.6%   paged 0.3%   (same arm, positions 1&4 / 2&3)
+  EFFECT paged/static on position-balanced means = 0.9905  (1.0%)
+
+  ⇒ **UNRESOLVED**: the arm effect (1.0%) is NOT larger than the drift
+    (2.6%). The arms are indistinguishable at this sample size.
+    Report as a TIE with a bound, never as a winner. More repeats, not a bigger claim.
+
+  ⚠ n=2 per arm. This bounds the drift; it does not estimate variance. A tie here means
+  'not distinguishable at n=2', not 'proven equal'.
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/parity-20260809-1407.txt

@@ -1,0 +1,41 @@
+decode context sweep: ornith-1.0-35b-1M-Q4_K_M.gguf
+rungs: 8192 32768 65536 131072   npred=512 (with ignore_eos -- a FLOOR, verified per rung)
+
+=== rung ctx=8192  fill~6250 ===
+  decode window actually generated: [512, 512, 512, 512] tokens per arm
+  DECODE   static    68.82  paged    58.16   ratio 0.8451   drift s=5.1% p=0.6%  effect=15.5%
+  -> paged is SLOWER by 15.5%, clearing drift 5.1%.
+  cold-arm: ⚠ pos1 ran FASTER than pos4 by 3.4%: NOT a cold first arm -- the box got slower
+
+=== rung ctx=32768  fill~25001 ===
+  decode window actually generated: [512, 512, 512, 512] tokens per arm
+  DECODE   static    62.41  paged    56.55   ratio 0.9061   drift s=1.7% p=0.2%  effect=9.4%
+  -> paged is SLOWER by 9.4%, clearing drift 1.7%.
+  cold-arm: ⚠ pos1 ran SLOWER than pos4 by 13.5%: the first arm was still cold, and because
+
+=== rung ctx=65536  fill~50003 ===
+  decode window actually generated: [512, 512, 512, 512] tokens per arm
+  DECODE   static    53.65  paged    48.99   ratio 0.9131   drift s=7.2% p=0.3%  effect=8.7%
+  -> paged is SLOWER by 8.7%, clearing drift 7.2%.
+  cold-arm: OK: the two static positions agree to 1.0% -- no positional signature in either direction.
+
+=== rung ctx=131072  fill~100007 ===
+  decode window actually generated: [512, 512, 512, 512] tokens per arm
+  DECODE   static    37.76  paged    38.68   ratio 1.0242   drift s=10.3% p=0.3%  effect=2.4%
+  -> UNREADABLE: effect (2.4%) does not clear its own drift (10.3%).
+  cold-arm: OK: the two static positions agree to 0.6% -- no positional signature in either direction.
+
+-----
+  decode ratio (paged/static) by context:
+    ctx=8192     0.8451
+    ctx=32768    0.9061
+    ctx=65536    0.9131
+    ctx=131072   1.0242
+
+  ⚠ Read the per-rung CLEARS/UNREADABLE verdicts above before reading these numbers. A rung
+    whose effect did not clear its own drift contributes nothing to a crossover argument,
+    wherever its point happens to sit. No fit is drawn here on purpose.
+
+  Against the existing points, same kernel (head_dim 256, CHAMPION, bs=64):
+    9B  @   8k  0.9017  (pred_n=128)   ·   35B @ 256k  1.3692  (pred_n=14, being re-measured)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/decode-sweep-20260810-0332.txt

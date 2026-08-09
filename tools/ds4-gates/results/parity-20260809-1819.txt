@@ -1,0 +1,7 @@
+paged parity gate: ornith-1.0-35b-1M-Q4_K_M.gguf
+tip: ec937be36  ctx=262144  fill~200000tok  block_req=64  order=abba  headroom=1.05  npred=512  warm=1
+  prompt: 8547 lines, needle at 50% depth, target ~200000 tok
+  geometry: head_dim=256 -> block_size must be <= 32 (block_size*head_dim <= 8192).
+            requested 64 would REFUSE every attention layer; using 32.
+  warm-up static discarded  (5s)
+  warm-up paged  discarded  (7s)

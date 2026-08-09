@@ -1,0 +1,13 @@
+LAW 6 control pair: ornith-1.0-35b-1M-Q4_K_M.gguf  ctx=8192  npred=24
+tip: ec937be36
+
+ARM B -- champion, -lv 5: can DS4P-CONSUME print at all in this binary?
+  DS4P-CONSUME total=240  banded=240  auto=0  |  refusals=0  alarm=0
+  ⇒ marker CONFIRMED printable. Arm A's result is now readable.
+
+ARM A -- champion OFF, bs=64: every attention layer should refuse (64 x head_dim > 8192).
+  refusals=20  |  DS4P-CONSUME total=0 banded=0 auto=0  |  alarm=1
+
+  ✅ **LAW 6 VALIDATED.** Every layer refused AND the engine alarm fired. Its silence
+    elsewhere is therefore meaningful, and the five gates that rely on it stand.
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/alarmctl-20260809-1922.txt

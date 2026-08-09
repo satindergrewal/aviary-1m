@@ -172,6 +172,79 @@ wins, and wins harder the deeper it goes.**
 
 ---
 
+## ★★★★ 512k VERDICT (2026-08-10 07:35) — MET ON ALL THREE METRICS, and the confound was ~1%
+
+```
+pos1 static  wall=3255.6  pp=124.94  tg= 8.480   n=399181  pred_n=512
+pos2 paged   wall=3047.7  pp=132.30  tg=16.882   n=399181  pred_n=512
+pos3 paged   wall=3046.1  pp=132.39  tg=16.642   n=399181  pred_n=512
+pos4 static  wall=3273.4  pp=124.22  tg= 8.570   n=399181  pred_n=512
+
+DECODE   1.9662   effect 96.6%  vs drift 1.4%   CLEARS x67
+PREFILL  1.0623   effect  6.2%  vs drift 0.6%   CLEARS x11
+WALL     1.0714   effect  7.1%  vs drift 0.6%   CLEARS x13
+```
+
+**★ COLD-ARM LINE FIRST, per the locked procedure: static pos1 vs pos4 agree to +1.06% on decode
+and +0.6% on prefill. NO positional signature in either direction.** `prompt_n` is 399,181 on all
+four arms and `pred_n` is the achieved 512 on all four, not the requested value.
+
+⇒ **Q1 — does the ABBA-mean decode ratio clear 1.8? YES, 1.9662, and not marginally.** The
+pre-registered threshold was "clears 1.8 unless pos4 exceeds **+19.6%**". It came in at **+1.06%**.
+
+⇒ **Q2 — how far does the prelude correction push it down? IT DOESN'T. The correction is ~1%.**
+Q2 was declared **UNBOUNDED** before the run, because the warm-up prelude's validated envelope is
+32-64k and 512k is far outside it. **That was the honest label given what was known, and the data
+answered it instead of an argument.** The prelude works at 512k.
+
+### ★★ PREFILL AND WALL RESOLVE FOR THE FIRST TIME AT ANY RUNG — AND THE EFFECT NEVER CHANGED
+
+At 256k prefill was **"1.7% inside a 14.8% band"**. Here the same column reads **6.2% against a
+0.58%/0.07% band**. The warm-up prelude, `ignore_eos`, and the champion geometry together collapsed
+the drift by roughly **25x**, turning an invisible effect into an 11x clearance.
+**Nothing about the machine changed. The instrument did.** That is the single most useful sentence
+in this file for anyone about to call a result "unreadable".
+
+### ⚠ THREE THINGS TO MARK AGAINST MYSELF, NOT ONE
+
+**1 · Both branch tables priced a scenario that did not occur.** Mine and the foreman's spanned
++6.5% to +25% cold penalty; reality was +1.06%. **Pre-registering was still right — it is what made
+"clears 1.8" a decision rather than a reaction — but neither of us registered the branch that
+actually happened, which is that the confound would be ABSENT.** A branch table that spans only the
+"it's bad" range is a one-sided prior wearing a table's clothes.
+
+**2 · "Plateau at 0.944" was two buckets. With five it is 0.940 ± 1.12%.**
+
+```
+150k 0.943 · 200k 0.944 · 250k 0.950 · 300k 0.929 · 350k 0.936
+mean 0.9404, spread ±1.12%   vs endpoint prefill 0.9412  ->  agree to 0.08%
+```
+
+**The plateau claim survives; the precision I implied did not.** 0.944 was one sample of a band,
+quoted as a constant — the same shape as the 0.6% drift figure, on the same day, by the same hand.
+
+**3 · The pre-registered 350-400k bucket came in at 68.6 tok/s.** The trend band was 62-69 and
+**contains it**; the plateau point estimate was 69.2 and **missed by 0.9%**. ⚠ **A 7-wide band
+containing the answer is WEAKER evidence than a point estimate within 1%**, so the honest scoring is
+that **the plateau model won and the trend band passed by being vague.** Recorded that way rather
+than claiming both were right.
+
+### THE BAR, ACROSS HIS RANGE
+
+```
+256k  decode 1.347      512k  decode 1.966
+```
+
+**Inside the owner's stated range paging is not a tie. It is roughly double at 512k, and every
+metric moves the same direction.**
+
+⚠ **Scope, unchanged and still binding: `-np 1`.** Every number above is single-slot. The reason is
+**not** a live defect — see the corrected block above — it is that **multi-slot at long context is an
+empty composition cell** (`warm_multislot` closed it at 8k/block 16/short prompts; this runs
+`-np 1`/block 64/400k fill). Costed at ~1.5 h and boarded.
+
+---
+
 ## ★★★ 256k VERDICT (2026-08-10 03:20) — the bar is MET, and this is the first defensible number
 
 The first ABBA with every instrument correct at once: champion kernel, real 512-token decode window,
@@ -322,7 +395,8 @@ quoted. It was missing from this section for two hours after I wrote it down els
 | 256k / 512k, **bs=64 champ off** | ⛔ **VOID** | the "paged" arm never paged: 3,610 refusals, `64 × 256 > 8192` |
 | 8k, 9B, **pred_n=128** | **prefill 1.0075 (clears)** · **decode 0.9017 (clears)** | clean box, cold-arm check +0.1%. The first decode number in this lane with a real window — **and it says paged is 9.8% SLOWER.** |
 | 8k, 35B, pred_n=14 | wall 1.0095 · prefill 0.999x · decode 0.878x | decode leg inherits the short-window status; prefill leg survives |
-| 512k, **n=1 per arm** | **decode 1.991** · prefill 1.059 · wall 0.936 — **likely an UPPER BOUND (cold static pos1)** | paged faster on **all three**. Arms 3-4 pending for the drift bound; the cold penalty sits on STATIC so the corrected ratio moves **DOWN** — 256k went 1.3471 → 1.307 under exactly that correction. |
+| ~~512k, **n=1 per arm**~~ | ~~decode 1.991 · prefill 1.059 · wall 0.936 — likely an UPPER BOUND (cold static pos1)~~ | **SUPERSEDED by the complete 4-arm ABBA below.** Kept because its prediction was testable and half of it was wrong: the corrected ratio moved **DOWN only 1.2%** (1.991 → 1.966), not the ~3% the 256k precedent implied, **because the cold penalty it was correcting for turned out to be +1.06%.** |
+| **512k, 4-arm ABBA, n=2 per arm** | ★★★ **decode 1.9662 · prefill 1.0623 · wall 1.0714 — ALL THREE CLEAR** | **The bar is MET at 512k on every metric.** See the verdict block below. |
 | 1M | **not measured — projected below** | Fits in memory (f16 116.1 GiB / q8_0 76.1 GiB of 128). |
 
 ### ★ 1M PROJECTION, and it is the first number that makes the case on its own
