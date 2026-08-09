@@ -187,3 +187,29 @@ gate_cause_from_log() { # $1 = server log  $2 = label
         tail -4 "$log" | cut -c1-170 | sed 's/^/  | /'
     fi
 }
+
+# ---- THIS BOX IS BSD USERLAND. GNU-ISMS SILENTLY NO-OP HERE ---------------------------------------
+# ⚠⚠ THREE separate GNU assumptions failed on 2026-08-09, and NONE of them errored loudly:
+#
+#   sed -i '' '0,/re/s//.../'   `0,/re/` is a GNU address. BSD sed ACCEPTED the command, changed ZERO
+#                               bytes, exited 0. Three files "patched", clean status, nothing done.
+#   timeout 25 ./gate.sh        GNU coreutils only. Produced `command not found` as the OUTPUT of five
+#                               different gates -- a uniform table that looked like five results and
+#                               was five shell failures before any gate started.
+#   grep -P                     not available; falls back or errors depending on the caller.
+#
+# ⇒ The pattern is always the same: **the command runs, returns success or plausible text, and does
+#   not do the thing.** See the exit-zero-did-nothing class. The habit that catches it is printing the
+#   POST-CONDITION -- count what should have changed -- never the exit code.
+#
+# ⚠ AND THE `timeout` CASE HAD A SECOND TELL WORTH KEEPING: five different scripts returned
+#   BYTE-IDENTICAL output. That is not a finding, it is a fault. Real results from five gates differ.
+#   Uniformity across independent arms means the harness failed, not the subjects.
+#
+# Portable cap for "run this, but not forever", no coreutils needed:
+gate_run_capped() { # $1 = command, $2 = seconds (default 30)
+    local cmd="$1" secs="${2:-30}"
+    ( eval "$cmd" & local p=$!
+      ( sleep "$secs"; kill "$p" 2>/dev/null ) & local w=$!
+      wait "$p" 2>/dev/null; kill "$w" 2>/dev/null )
+}
