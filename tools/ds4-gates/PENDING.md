@@ -775,7 +775,8 @@ honest table.**
 | `arch_serve_gate` | ctx 4096, prompt ~6 + npred **8** | 16 (engine default) | **NO — one block** | **NO** | 1 |
 | `long_context_gate` | ctx 32768, **fill 14000** | 32 | yes (~440 blocks) | yes | 1 |
 | `multislot_gate` | ctx 8192, short prompts | 16 | short — **unverified** | **NO** | **2** ✓ |
-| `warm_multislot_gate` | ctx 8192, short prompts | 16 | short — **unverified** | **NO** | 2 ✓ |
+| `warm_multislot_gate` **(defaults)** | ctx 8192, short prompts | 16 | short — **unverified** | **NO** | 2 ✓ |
+| `warm_multislot_gate` **(long-context mode, added 2026-08-10)** | `MS_CTX=131072 MS_FILL=32000` | **64** | **YES — 625 blocks, MEASURED not estimated** (`ptok=40006` against a 32000 target: the ~12-tok/line estimate was **25% low**) | **YES** | 2 ✓ |
 | `paged_parity_gate` | ctx 262144, **fill 225000**, npred **512** | 64 | yes (~3500 blocks) | yes | 1 |
 
 ⇒ **The two long-context gates cross everything. The three short gates cross almost nothing** — and
@@ -798,7 +799,7 @@ green names its size** — now printed by `arch_serve_gate`, and recorded here f
 
 ### ⚠ THIS TABLE IS DATED, AND THAT IS THE WHOLE MAINTENANCE PLAN
 
-**Read on 2026-08-10 against five gates.** A hand table has **no positive control and no reach**: it
+**Re-read 2026-08-10 08:10 after `warm_multislot_gate` gained `MS_CTX`/`MS_BLK`/`MS_FILL`/`MS_NPRED`/`MS_NGPUB` — the convention below applied to my own change on the same day I wrote it.** Originally read against five gates. A hand table has **no positive control and no reach**: it
 goes stale silently the day someone adds a sixth gate or changes a default, and nothing in the tree
 will notice — the exact property that makes a stale header dangerous. (raised by Grok)
 
