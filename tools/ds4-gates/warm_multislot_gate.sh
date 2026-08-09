@@ -107,6 +107,27 @@ probe() { # $1=tag $2=flags
     # correct answer is already known and a change is unambiguous.
     local p3; p3=$(ask "$PRIME")
     [ "$consumed" = "0" ] && consumed=$(grep -ac 'DS4P-CONSUME' "$LOGDIR/$tag.log" 2>/dev/null)
+    # ⚠⚠ AT THE DEFAULT MS_LV=4 THE LINE ABOVE NEVER RUNS, so `consumed` stays -1 and every paged
+    # verdict in this gate has been UNVERIFIED rather than verified. Recording -1 instead of 0 was
+    # right -- absence is only evidence when the marker can fire -- but "not checked" is where it
+    # stopped, and on 2026-08-09 an unchecked paged arm produced 4.5 hours of static timings reported
+    # as parity.
+    # ⇒ There IS a check that works at -lv 4: the engine's own. llama-context.cpp evaluates
+    #   ds4p_paged_consumer_count() == 0 after 8 decodes and warns at WARN level. Use it when the
+    #   DEBUG marker is unavailable, so the default configuration is verified rather than silent.
+    if [ "$consumed" = "-1" ]; then
+        case "$flags" in *--kv-paged*)
+            if command -v gate_assert_paged_consumed >/dev/null 2>&1; then
+                if gate_assert_paged_consumed "$LOGDIR/$tag.log" "$tag" 512 >/dev/null 2>&1; then
+                    consumed=1
+                else
+                    consumed=0
+                    echo "$tag: ⚠ paged pool allocated but NO LAYER CONSUMED IT (engine alarm fired)" | tee -a "$OUT"
+                    echo "      -> this arm is STATIC wearing paged flags; its verdict is vacuous." | tee -a "$OUT"
+                fi
+            fi ;;
+        esac
+    fi
     local v3=OK; echo "$p3" | grep -qE '\b4\b|four' || v3=BAD
     kill $pid 2>/dev/null; sleep 1
 
