@@ -1,6 +1,60 @@
-# SCOPE (read-only, nothing changed): 21 architectures excluded from paging by construction
+# SCOPE: interleaved-SWA architectures and paging
 
-**2026-08-09 · investigation only · no code touched · binary `592ac88c2`.**
+**2026-08-09 · investigation · binary `592ac88c2`.**
+
+---
+
+## ⚠⚠ CORRECTION, SAME DAY — TWO CLAIMS BELOW ARE WRONG. READ THIS FIRST.
+
+### 1. "21 architectures excluded **by construction**" is FALSE. At least six were already wired.
+
+`grep -rln build_attn_paged_or_null src/models/` lists **gemma4 · gemma4-assistant · laguna · step35 ·
+dflash** among others — every one of them on the ISWA branch this document calls excluded.
+
+`src/models/gemma4.cpp:266`:
+
+```cpp
+const auto * pg_ctx = mctx ? mctx->get_attn_paged() : nullptr;
+ggml_tensor * cur_pg = build_attn_paged_or_null(pg_ctx, Qcur, Kcur, Vcur,
+        hparams.f_attention_scale, il,
+        hparams.is_swa(il) ? (int64_t) hparams.n_swa : 0);   // <- a REAL WINDOW, per layer
+```
+
+⇒ The evidence below — *"`build_attn_inp_kv_iswa()` contains **zero** references to `paged`"* — is
+true and **does not support the conclusion drawn from it.** An arch does not need the funnel to know
+about paging: the input object already carries `mctx`, and `mctx->get_attn_paged()` reaches the pool
+directly. I read one function body, found nothing, and wrote "by construction".
+**Absence-is-not-evidence, in the file where that class is already recorded.**
+
+### 2. "Whether the paged kernel is correct for a windowed mask has not been established" — the kernel HAS a window.
+
+```
+ggml/include/ggml.h:2459     visibility_window > 0 selects the analytic band: a cell is visible
+                             iff 0 <= rel_dist < visibility_window
+ggml-metal.metal:3317        const int lo = args.visibility_window > 0 ? ...
+```
+
+It is a shipped, implemented parameter, and gemma4 has been passing it per layer.
+
+### 3. What that mistake then cost: a guard that disabled a working path.
+
+Acting on claim 2, commit `cbb4c8d93` added a **blanket `hparams.is_swa(il)` rejection** to
+`paged_layer_supported()`, justified in its own comment by "the paged kernel has no window
+parameter". That rejection sits inside `build_attn_paged_or_null`, **upstream of the point where
+gemma4's window argument reaches the op** — so gemma4's SWA layers stopped paging the moment it
+landed. Output stayed correct, because it falls back to static.
+
+⚠ **That is why nothing caught it. A correctness gate cannot see a working feature being silently
+switched off** — the same indistinguishability as audit finding 5, and the *guard-for-A-disables-B*
+class.
+
+**Fixed**: the blanket reject is gone; the narrow, real hazard — a windowed layer paged with
+`visibility_window == 0` — is checked at the call site where that argument is in scope, and warns
+loudly instead of corrupting.
+
+---
+
+## What follows is the original text, kept for the record. Sections 3 and 4 stand; the headline and the "what the change probably is" section are corrected above.
 
 ## The gap, in one line of source
 
@@ -42,7 +96,10 @@ llama4 · exaone4 · exaone-moe · openai-moe · plamo3 · laguna · mellum · m
 smallthinker · afmoe · dflash
 ```
 
-**21 architectures.** The largest unwired group in the fork.
+**21 architectures.** ⚠ **NOT all unwired — see the correction at the top.** gemma4,
+gemma4-assistant, laguna, step35 and dflash in this list already reach the pool through
+`mctx->get_attn_paged()`. The genuinely unwired remainder is the list minus those, and
+**gemma3 is now wired too** (see below).
 
 ## ★ THE GOOD NEWS, AND IT IS THE REASON TO SCOPE BEFORE ESTIMATING
 
@@ -86,3 +143,39 @@ into the per-layer call, then `build_attn_paged_or_null(paged_ctx, ...)` with a 
 
 ⚠ **DO NOT** wire all 21 and gate one. That is the shape that produced today's `qwen35moe` finding: a
 family assumed identical to its sibling, silently disagreeing for as long as both existed.
+
+---
+
+## STATE after the correction (2026-08-09, later)
+
+**`gemma3` is wired**, copying gemma4's proven shape rather than inventing one:
+
+```cpp
+if constexpr (iswa) {
+    auto * inp_iswa = build_attn_inp_kv_iswa();
+    pg_ctx   = inp_iswa->mctx ? inp_iswa->mctx->get_attn_paged() : nullptr;
+    inp_attn = inp_iswa;
+}
+...
+cur_pg = build_attn_paged_or_null(pg_ctx, Qcur, Kcur, Vcur, 1.0f, il,
+        hparams.is_swa(il) ? (int64_t) hparams.n_swa : 0);
+if (cur_pg) { cur = build_lora_mm(model.layers[il].wo, cur_pg, model.layers[il].wo_s); }
+else        { cur = build_attn(inp_attn, ...); }
+```
+
+Three things worth carrying to the next arch:
+
+1. **The banded funnel returns the attention core WITHOUT the output projection.** `build_attn()`
+   applies `wo`/`wo_s` itself; the paged branch must apply it explicitly or the residual receives an
+   unprojected tensor. This is not visible in the type system and is the easiest way to wire an arch
+   wrongly while it still compiles and still produces text.
+2. **The non-ISWA branch must NOT also take the banded path.** `build_attn_inp_kv_auto()` already
+   returns a paged input; adding the banded call there gives one layer two paged consumers.
+3. **`kq_scale` differs per arch.** gemma3 pre-scales Q by `f_attention_scale` and passes `1.0f`;
+   gemma4 passes `f_attention_scale`. Copying the argument instead of reading it is a silent
+   numerical error.
+
+**Status: compiles clean (`-fsyntax-only` on both changed files). NOT gate-verified.** No
+`DS4P-CONSUME > 0` measurement has been taken for gemma3, and per the rule above that means it is
+wired, not proven. Point 2 of the recommended order — fallback count must be **> 0** on this arch —
+is still the check that has to run before anyone calls it done.
