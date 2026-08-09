@@ -402,15 +402,25 @@ S_CONS=$(( $(c_band "$LOGDIR/static.log") + $(c_auto "$LOGDIR/static.log") ))
 # ⇒ Stated, not failed, for the same reason as the window claim: serve/consume/paged≡static are
 #   real results at any length. **Block coverage is the claim that is out of scope, and a reader
 #   deserves to be told which claims a green covers.**
-_blocks_spanned=$(( (6 + ${NPRED:-8} + 15) / 16 ))
+# ⚠⚠ MEASURE THE PROMPT, DO NOT HARDCODE IT. The first version of this branch wrote
+# `(6 + NPRED + 15) / 16`, with 6 baked in for the default prompt -- **while the window branch below
+# it reads the real token count from the log.** So the override this very warning RECOMMENDS
+# (`AG_PROMPT` longer) would leave the block check computing 1 and warning FALSELY: a 200-token
+# prompt spans 13 blocks and the guard would still say "one block". **A fix whose recommended remedy
+# reproduces the warning is the fix-vs-incident mismatch one level down** -- the third time tonight I
+# attached a fix to the wrong shape of the problem. (caught by Grok)
+_ptok=$(grep -m1 -oE 'prompt_n[^0-9]*([0-9]+)|n_tokens = *[0-9]+' "$LOGDIR/static.log" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+_ptok=${_ptok:-6}          # fallback only when the log yields nothing; the default prompt is ~6
+_blocks_spanned=$(( (_ptok + ${NPRED:-8} + 15) / 16 ))
 if [ "$_blocks_spanned" -le 1 ]; then
-    echo "  ⚠ BLOCK COVERAGE NOT TESTED: ~$((6 + ${NPRED:-8})) tokens at the default block_size 16 is" | tee -a "$OUT"
+    echo "  ⚠ BLOCK COVERAGE NOT TESTED: ~$((_ptok + ${NPRED:-8})) tokens at the default block_size 16 is" | tee -a "$OUT"
     echo "    ONE block. Block-table traversal, cross-block indexing, write-slot mapping and reuse" | tee -a "$OUT"
     echo "    are not exercised. Raise AG_PROMPT/AG_NPRED past a few blocks to cover them." | tee -a "$OUT"
 fi
 
 _nswa=$(grep -m1 -oE 'n_swa +=? *[0-9]+' "$LOGDIR/static.log" 2>/dev/null | grep -oE '[0-9]+$')
-_ptok=$(grep -m1 -oE 'prompt_n[^0-9]*([0-9]+)|n_tokens = *[0-9]+' "$LOGDIR/static.log" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+# ⚠ _ptok is already measured above the block branch -- one grep, one value, no second
+# opinion about the same number.
 if [ -n "${_nswa:-}" ] && [ "${_nswa:-0}" -gt 0 ] 2>/dev/null; then
     if [ -z "${_ptok:-}" ] || [ "${_ptok:-0}" -le "${_nswa}" ] 2>/dev/null; then
         echo "  ⚠ WINDOW CLAIM NOT TESTED: this arch is windowed (n_swa=${_nswa}) and the prompt is" | tee -a "$OUT"
