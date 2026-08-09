@@ -813,7 +813,11 @@ EOS-mid-run truncates the accepted count at the stop.
 ### Scope discipline
 
 **`np=1` greedy first.** The `-np>1` absolute-offset corruption is a separate open defect; coupling
-them makes both undebuggable. `n_batch == n_ubatch` (`llama-model.cpp:2624`) bounds verify width.
+them makes both undebuggable.
+⚠ *Written 2026-08-07 20:24, when it was true: the fix `c2f28a79d` was in (2026-08-06) but the
+residual **1c** was still open. **1c was closed by measurement 2026-08-09** (`00cb274`, `e404116`).
+The scope-discipline reasoning stands on its own — decoupling two unknowns is right regardless —
+but "a separate open defect" now reads as a live blocker and is not one.* `n_batch == n_ubatch` (`llama-model.cpp:2624`) bounds verify width.
 
 ### Pre-registered acceptance criterion, with baselines already measured
 

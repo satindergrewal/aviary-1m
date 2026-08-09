@@ -85,7 +85,14 @@ one, and it was written the day the bug was found:
 | `hybrid_paged_gate` | `-np 2` | no | sequential |
 | `p28_cuda_regate` | `-np 3` | no | sequential (also box-only) |
 | `p28_finale_gate` | `-np 3` | no | sequential (also box-only) |
-| `multislot_gate` | `-np 2` | **yes** | genuinely concurrent — and it FAILS |
+| `multislot_gate` | `-np 2` | **yes** | genuinely concurrent — and it FAILS *(true when written 2026-08-06 01:43; see the note below)* |
+
+⚠ **"and it FAILS" was TRUE WHEN WRITTEN and is NOT true now — annotated rather than deleted,
+because it records a real observation.** At 01:43 on 2026-08-06 the `-np > 1` absolute-offset
+corruption was live; the fix landed **ten hours later** the same day (`c2f28a79d`, 11:23) and the
+defect was closed by measurement on 2026-08-09 (`00cb274`, `e404116` — four-way warm clean on two
+model families). Deleting the row would destroy the evidence that the gate **detected** a real
+defect, which is the strongest thing anyone can say about a gate.
 
 `./lint_claimed_vs_entered.sh` checks this statically and exits non-zero on a mismatch. It carries a
 positive control (it must find `hybrid_paged_gate`) because two of the audit tools written the same

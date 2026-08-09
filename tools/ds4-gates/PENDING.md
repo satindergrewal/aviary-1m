@@ -57,6 +57,69 @@ story. **The shape prediction held and the mechanism was wrong: right verdict, w
 ⚠ **NOT SHOWN:** five rungs, **n=2 per arm**, one model, one quant, one kernel, one box. **Prefill
 was UNREADABLE at every rung** — that column is not read and is not data.
 
+### ★★★ 2026-08-10 — PREFILL WAS NOT UNREADABLE. I WAS READING IT AS AN ENDPOINT AVERAGE.
+
+**The whole prefill curve has been in every log this lane has ever produced.** `slot print_timing`
+emits a cumulative pair every `-b` tokens; differencing consecutive lines converts the printed
+running average (which lags, and therefore understates decay) into a true **interval rate**:
+
+```
+rate_i = (n_i - n_{i-1}) / (t_i - t_{i-1})
+```
+
+⇒ **One 400k prefill contains ~400 samples of a 5-7× decay curve, and I was collapsing it to a
+single number and then comparing two such numbers against a 14.8% drift band.** That is why the
+column read as noise. `prefill_curve.py` extracts it. **Nothing was measured to get this — it is a
+re-read of artifacts already on disk.**
+
+**512k ABBA, pos3 (paged, complete) vs pos4 (static), matched depth inside ONE prompt:**
+
+```
+depth        paged tok/s   static tok/s   static/paged
+  50-100k       296.5         305.6          1.031
+ 100-150k       197.7         191.3          0.967
+ 150-200k       147.8         139.5          0.943
+ within-arm decay, full buckets:  paged 4.04x   static 4.67x
+```
+
+⇒ **The ratio TRENDS monotonically downward. This is "static decays harder" MEASURED, not inferred
+from endpoint averages across six separate server launches.** Endpoint averages structurally cannot
+separate *uniformly slower* from *decays faster*; a matched-depth ratio can, and that is the entire
+reason the number moves.
+
+★ **AND THE TREND SURVIVES THE COLD-ARM CONFOUND WHERE A LEVEL WOULD NOT.** A cold penalty scales
+an arm **uniformly**, so it cannot manufacture a depth-**dependent** ratio. **The LEVEL of this
+comparison is confounded (pos3 vs pos4); the SLOPE is not.** That makes the slope the strongest
+claim in this document — the only one that does not depend on the prelude, the arm order, or the
+cold-arm correction.
+
+⇒ **Independent agreement with the rung table:** the rung crossover sits at **~128k** across six
+server launches; the within-run ratio crosses **1.0 between 100k and 150k** inside a single prompt.
+**Two measurements with almost nothing in common landing on the same crossover.**
+
+⚠ **TWO BUCKETS ARE EXCLUDED AND ONE NEARLY BECAME A HEADLINE.** The first run reported **1.263**
+at 0-50k. Artifact, not measurement: static's first progress line lands at **4096**, paged's at
+**19968**, and the rate falls 650→300 tok/s across exactly that region — **static's bucket contained
+the fastest 16k of the prompt and paged's did not.** The comparison was crediting static with a head
+start it was never measured over. Every bucket now carries its covered fraction and anything under
+80% is refused **by name**; the same guard drops static's still-filling 200-250k.
+**Arms must differ in ONE thing — applied to the x-axis.**
+
+⚠ **THE TWO ARMS PRINT PROGRESS IN DIFFERENT FORMATS** (`n_tokens = X,` vs `n_tokens = X / total`),
+so the first regex matched 409 static lines and **zero** paged lines. Caught only because the
+parser VOIDs below 3 samples instead of returning a one-armed "comparison". *Instrument both arms* —
+in the one file whose entire purpose is to compare two arms.
+
+⚠ **HARNESS DEFECT FOUND BY TRYING TO USE IT:** `static.log` / `paged.log` are reused **per arm
+TYPE** while `.res` files are per **POSITION**. **pos4 overwrites pos1.** So the comparison that
+would separate cold-penalty from drift — pos1's curve against pos4's — is destroyed by the harness,
+and **every within-arm diagnostic in this lane has only ever covered the LAST arm of each type.**
+Per-position log files: staged patch.
+
+⇒ **PRE-REGISTERED before arm 4 reaches that depth:** static's **350-400k** interval rate lands in
+**62-69 tok/s** (ratio 0.85-0.94) against paged's measured **73.3**. **If static comes back above
+73.3 there, "static decays harder" is refuted at the depth that actually matters.**
+
 ⇒ **THE BAR, complete:** paged decode costs **9-15% below 64k**, is **parity at ~128k**, and is
 **+35% at 256k with the gap widening**. **The owner's range starts at 256k. Inside his range, paging
 wins, and wins harder the deeper it goes.**
@@ -152,10 +215,42 @@ Caveats attached rather than hidden: **n=2 per arm** (a drift bound, not a varia
 `arch_serve_gate` and `long_context_gate`. **"Paging is as fast as static" silently carries "with one
 slot."**
 
-⚠ That matters here specifically, not in general: this lane has an **open `-np > 1` defect** —
-absolute `batch_offsets`/`write_slots` against local ubatch indices — **which no `-np 1` gate can
-see, and which fires under ordinary continuous batching.** So the configuration a server actually
-runs in is the one no bar-feeding gate exercises.
+⚠⚠ **CORRECTED 2026-08-10 07:0x — THE SENTENCE THAT USED TO SIT HERE WAS FALSE WHEN I WROTE IT.**
+It read: *"this lane has an **open `-np > 1` defect** — absolute `batch_offsets`/`write_slots`
+against local ubatch indices — which no `-np 1` gate can see, and **which fires under ordinary
+continuous batching.**"* **That defect was fixed four days earlier and closed by measurement 27
+hours earlier.** Dates, because the gap is the whole point:
+
+```
+fix    c2f28a79d  "derive paged batch offsets/lens/slots from the UBATCH"   2026-08-06 11:23
+close  00cb274    "finding 1c CLOSED BY MEASUREMENT"                        2026-08-09 02:23
+close  e404116    "concurrency CLOSED -- four-way warm clean, both models"   2026-08-09 03:19
+I WROTE THE CLAIM ABOVE                                                     2026-08-10 05:28
+```
+
+Content-level proof it is in the shipped tip, not merely ancestry:
+`git show 074672e33:src/llama-graph.cpp | grep -c "DERIVE EVERYTHING FROM THE UBATCH"` → **1**.
+
+⇒ **Mechanism, and it is the INVERSE of the shape `lint_stale_status.sh` catches.** I copied the
+defect description out of `FINDINGS-2026-08-06.md` §1's **body** and never re-read the **status
+table at the top of the same file**, whose line 11 says `1c … CLOSED BY MEASUREMENT 2026-08-09`.
+The lint looks for an open word in a file's HEAD and a resolution word in its TAIL. This was the
+resolution in the head, the open claim in a **different file's** body — it scores 0 of 14 and is
+structurally right to. Recorded as **shape 5** in that lint's own can't-see list.
+
+⇒ **THE CAVEAT SURVIVES; ONLY ITS REASON CHANGES — AND THE REPLACEMENT IS SHARPER.**
+Every number above is still **single-slot**, because `paged_parity_gate` runs `-np 1`. But the
+reason is no longer "a live defect fires under ordinary load" (which would make every parity result
+describe a configuration nobody runs). The real residual is an **empty composition cell**:
+
+```
+concurrency closure ran   -c 8192    block 16   short prompts   -np 2/4   3-4 reps
+paged_parity_gate  runs   -c 524288  block 64   fill 400k       -np 1
+```
+
+**Neither crosses the other's constant. Nothing has measured multi-slot AT long context.** That is
+a named gap, not a known bug, and it is memory-bound: the realistic cell is `-c 262144 -np 2`
+(~131k per slot). Boarded below, not queue-jumped.
 
 ⇒ **The verdict stands as stated** — the bar was speed at 256k-1M and that is what was measured. But
 **the caveat belongs beside the number, not three sections away**, because the number is what gets
@@ -525,10 +620,16 @@ honest table.**
 ⇒ **The two long-context gates cross everything. The three short gates cross almost nothing** — and
 those three are the ones that carry the **arch matrix** and the **multi-slot** claims.
 
-⚠ **`-np` is the constant only the multislot gates cross**, and it matters: this lane's open
-`-np > 1` defect (absolute `batch_offsets`/`write_slots` vs local ubatch indices) **cannot be seen by
-any `-np 1` gate at all.** `arch_serve_gate`, `long_context_gate` and `paged_parity_gate` are all
-`-np 1`, so **every parity number and every arch green is single-slot only.**
+⚠ **`-np` is the constant only the multislot gates cross.** `arch_serve_gate`, `long_context_gate`
+and `paged_parity_gate` are all `-np 1`, so **every parity number and every arch green is
+single-slot only.**
+
+⚠⚠ **CORRECTED 2026-08-10 — this row used to justify that with "this lane's open `-np > 1` defect".
+It is not open.** Fixed `c2f28a79d` (2026-08-06), closed by measurement `00cb274` + `e404116`
+(2026-08-09), 27 hours before I wrote the claim. Full dates and mechanism at the corrected block
+above. **The correct statement of the gap is the composition, not a defect:** the closure ran
+`-c 8192` / block 16 / short prompts, this gate runs `-np 1` / block 64 / 400k fill, and
+**nothing has measured multi-slot at long context.**
 
 ⇒ **Not a call to change the defaults.** A 14-token arch gate over 21 architectures is cheap on
 purpose, and making it long would trade coverage for a matrix nobody re-runs. **The fix is that each
