@@ -171,6 +171,43 @@ arm() { # $1 = static|paged
             PID=""; return 1; }
         sleep 1
     done
+    # ⚠⚠⚠ THE BINARY'S COMMIT, NOT THE SOURCE TREE'S -- AND THESE DISAGREED ON THE 512k RUN.
+    #
+    # The header stamps `git rev-parse HEAD`, which describes the SOURCE. The binary reports its own
+    # build commit on its first log line. Measured on the 2026-08-10 512k ABBA, after the run:
+    #
+    #     header stamped   tip: 074672e33          <- what the SOURCE TREE said
+    #     binary reported  build 10667 (35be827f3) <- what actually RAN, one commit behind
+    #
+    # The result was still valid (the missing commit only changes behaviour on models that CANNOT
+    # page, and this one pages), **but nothing in the artifact could have told anyone that.** A
+    # reader would have attributed 1.9662 to code the measurement never executed.
+    #
+    # ⚠ `gate_tip_stamp` DOES NOT CLOSE THIS. It adds +dirty(N) for uncommitted edits, which is a
+    # different hole: it still reads the tree. **A stale BINARY built from a clean tree produces a
+    # clean stamp and a wrong claim.** Provenance has to come from the artifact that did the work.
+    #
+    # ⇒ Fail FAST: this runs seconds after startup, so VOIDing here costs nothing, while discovering
+    #   it after a 3.5-hour ABBA costs the ABBA. Override deliberately with PP_ALLOW_STALE_BIN=1.
+    local binsha; binsha=$(grep -m1 -oE 'build [0-9]+ \([0-9a-f]+\)' "$D/$1.log" | grep -oE '\([0-9a-f]+\)' | tr -d '()')
+    local srcsha; srcsha=$(cd "$WT" && git rev-parse --short HEAD 2>/dev/null)
+    if [ -n "$binsha" ] && [ -n "$srcsha" ]; then
+        # compare on the shorter of the two lengths -- the binary prints its own abbreviation
+        local n=${#binsha}; [ ${#srcsha} -lt "$n" ] && n=${#srcsha}
+        if [ "${binsha:0:$n}" != "${srcsha:0:$n}" ]; then
+            echo "  ⚠⚠ BINARY/SOURCE MISMATCH: the server was built at $binsha, the tree is at $srcsha." | tee -a "$OUT"
+            (cd "$WT" && git log --oneline "$binsha..$srcsha" 2>/dev/null | head -8 | sed 's/^/      missing from the binary: /') | tee -a "$OUT"
+            if [ "${PP_ALLOW_STALE_BIN:-0}" != "1" ]; then
+                echo "  VOID: refusing to attribute a measurement to source the binary does not contain." | tee -a "$OUT"
+                echo "        Rebuild, or set PP_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE." | tee -a "$OUT"
+                kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; return 1
+            fi
+            echo "    PP_ALLOW_STALE_BIN=1 -- proceeding, and the mismatch is recorded above." | tee -a "$OUT"
+        fi
+    else
+        echo "  ⚠ could not read the binary's build commit -- provenance is UNVERIFIED for this arm." | tee -a "$OUT"
+    fi
+
     # ⚠ PRESENCE ASSERTED IN BOTH DIRECTIONS. static must show NO pool, paged must show one. Without
     # this, "static" can silently build a pool and the comparison is paged-vs-paged.
     local pool; pool=$(grep -ac 'n_gpu_blocks' "$D/$1.log")

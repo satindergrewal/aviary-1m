@@ -189,6 +189,31 @@ WALL     1.0714   effect  7.1%  vs drift 0.6%   CLEARS x13
 and +0.6% on prefill. NO positional signature in either direction.** `prompt_n` is 399,181 on all
 four arms and `pred_n` is the achieved 512 on all four, not the requested value.
 
+### ⚠⚠ PROVENANCE CORRECTION, FOUND AFTER THE RUN: THE HEADER NAMES THE WRONG COMMIT
+
+```
+header stamped   tip: 074672e33            <- what the SOURCE TREE said
+binary reported  build 10667 (35be827f3)   <- what actually RAN, one commit behind
+```
+
+The gate stamps `git rev-parse HEAD`, which describes the **source**. The binary reports its own
+build commit on its first log line, and they disagreed. **The verdict stands** — the single missing
+commit (`074672e33`, "`--kv-paged` on a model that cannot page must REFUSE, not abort") changes
+behaviour only on models that *cannot* page, and this one pages: 128 consume events, pool built,
+needle PASS on all four arms. **But nothing in the artifact could have told anyone that**, and a
+reader would have attributed 1.9662 to code the measurement never executed.
+
+⚠ **`gate_tip_stamp` DOES NOT CLOSE THIS, and I had it queued believing it did.** It appends
+`+dirty(N)` for uncommitted edits — a different hole. **A stale BINARY built from a CLEAN tree
+produces a clean stamp and a wrong claim.** Provenance has to come from the artifact that did the
+work, not from the tree beside it.
+
+⇒ **FIXED in `arm()`: read the binary's own build commit, compare to the source tip, VOID on
+mismatch** (override `PP_ALLOW_STALE_BIN=1`). It runs seconds after startup, so refusing costs
+nothing while discovering it after a 3.5 h ABBA costs the ABBA. **Controlled both directions on
+real logs:** the 512k log extracts `35be827f3` and would VOID; a fresh log extracts `9eb5b1241`,
+equal to the tip, and proceeds; differing abbreviation lengths compare on the shorter.
+
 ⇒ **Q1 — does the ABBA-mean decode ratio clear 1.8? YES, 1.9662, and not marginally.** The
 pre-registered threshold was "clears 1.8 unless pos4 exceeds **+19.6%**". It came in at **+1.06%**.
 
