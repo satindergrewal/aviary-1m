@@ -319,12 +319,18 @@ llama_kv_cache_dsv4         -> ** the fourth branch, to be written **
 
 Four mechanical pieces, each with a line to copy from:
 
-| # | change | copy from |
-|---|---|---|
-| 1 | `unique_ptr<llama_kv_cache_paged> mem_attn_paged` + `set_attn_paged()` / `get_mem_attn_paged()` on `llama_kv_cache_dsv4` | `llama-kv-cache-iswa.h:99-109` |
-| 2 | construct the pool for DSV4 and attach it | `llama-model.cpp:2322` + `:2352` (`hybrid_iswa->set_attn_paged(paged_attn)`) |
-| 3 | `get_attn_paged()` / `set_attn_paged_ctx()` on `llama_kv_cache_dsv4_context` | `llama-kv-cache-iswa.h:155-156`, and `llama-kv-cache-iswa.cpp:238` for where the ctx is set |
-| 4 | fourth `dynamic_cast` branch in the scheduler | `llama-paged-scheduler.cpp:50-59` |
+| # | change | copy from | **insert at** |
+|---|---|---|---|
+| 1 | `unique_ptr<llama_kv_cache_paged> mem_attn_paged` + `set_attn_paged()` / `get_mem_attn_paged()` on `llama_kv_cache_dsv4` | `llama-kv-cache-iswa.h:99-109` | **decl after `dsv4.h:146`** (`get_lid() const;`), **member after `:169`** (`kv_lid`), `private:` is at `:155` |
+| 2 | construct the pool for DSV4 and attach it | `llama-model.cpp:2318-2352` (`pg_head_dim/pg_n_head/pg_block_size` → `new llama_kv_cache_paged(...)` → `init(...)` → `hybrid_iswa->set_attn_paged(paged_attn)`) | **after `llama-model.cpp:2183`**, the `res = new llama_kv_cache_dsv4(...)` construction, closing at `:2197` |
+| 3 | `get_attn_paged()` / `set_attn_paged_ctx()` on `llama_kv_cache_dsv4_context` | `llama-kv-cache-iswa.h:155-156`, ctx set at `llama-kv-cache-iswa.cpp:238` | **before the `private:` at `dsv4.h:155`**, beside `get_n_rs_seq()` / `get_rs_idx()` |
+| 4 | fourth `dynamic_cast` branch in the scheduler | `llama-paged-scheduler.cpp:50-59` (the `llama_kv_cache_iswa` branch, comment *"Third wrapper, same resolution"*) | **immediately after that branch** |
+
+⚠ **Insertion points located by reading, not by planning — but NOT written.** Writing four pieces of
+C++ across four files during a two-hour timed measurement, unable to compile (a `-fsyntax-only` is
+still a compile, and the reads-only rule exists because an arm came back 5.2% slow while I built),
+is how unverified code accumulates. **The implementation is mechanical once the GPU frees; the
+locating was the part worth doing in dead time.**
 
 ### ⚠⚠ AND TIER 0 MUST NOT SHIP ALONE EITHER — IT WOULD BUILD THE SILENT-FALLBACK STATE ON PURPOSE
 
