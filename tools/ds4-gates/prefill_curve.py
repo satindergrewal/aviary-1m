@@ -144,8 +144,71 @@ def report(path, bucket):
     return out
 
 
+def selftest():
+    """⚠⚠ THIS INSTRUMENT PRODUCED A PUBLISHED NUMBER BEFORE ANYTHING CONTROLLED IT.
+
+    The matched-depth ratio (0.944, and a 'trend' I had to retract) came out of code whose
+    differencing, bucketing and coverage logic had been checked by reading it. **Negative control or
+    no verdict** is a standing rule in this lane and I applied it to gates, not to the parser that
+    reads them.
+
+    The control that would normally serve -- two logs from the SAME arm, expecting 1.000 -- is
+    UNAVAILABLE, because pos4 overwrites pos1 (the harness defect this same analysis found). So the
+    controls are synthetic, and they run in both directions:
+
+      IDENTITY  the same curve twice          -> must be 1.000 at EVERY depth (no false effect)
+      INJECTED  a known 1.25x rate difference -> must be RECOVERED as 1.250 (can see a real one)
+
+    A positive-only test proves the instrument can agree with me and nothing else.
+    """
+    import tempfile
+
+    def synth(path, rate_at):
+        # cumulative (n, t) pairs from a chosen depth->rate function, exactly as llama-server prints
+        with open(path, 'w') as fh:
+            n, t = 0, 0.0
+            while n < 400000:
+                step = 512
+                t += step / rate_at(n)
+                n += step
+                fh.write(f"x I slot print_timing: id 0 | task 0 | prompt processing, "
+                         f"n_tokens = {n}, progress = {n/400000:.2f}, t = {t:.2f} s / 0 tokens per second\n")
+
+    base = lambda d: 600.0 / (1.0 + d / 60000.0)     # a decaying curve shaped like the real one
+    ok = True
+    with tempfile.TemporaryDirectory() as td:
+        a, b, c = f"{td}/a.log", f"{td}/b.log", f"{td}/c.log"
+        synth(a, base)
+        synth(b, base)                                # identical
+        synth(c, lambda d: base(d) * 1.25)            # uniformly 25% faster
+
+        print("=== CONTROL 1: IDENTITY (same curve twice) -- every ratio must be 1.000 ===")
+        ca, cb = report(a, 50000), report(b, 50000)
+        da = {d: r for d, r, cv in ca if cv >= MIN_COVER}
+        db = {d: r for d, r, cv in cb if cv >= MIN_COVER}
+        for d in sorted(set(da) & set(db)):
+            r = db[d] / da[d]
+            good = abs(r - 1.0) < 1e-9
+            ok &= good
+            print(f"    depth {d:>7d}   ratio {r:.6f}   {'ok' if good else '** FAIL **'}")
+
+        print("\n=== CONTROL 2: INJECTED 1.25x -- the instrument must RECOVER it ===")
+        cc = report(c, 50000)
+        dc = {d: r for d, r, cv in cc if cv >= MIN_COVER}
+        for d in sorted(set(da) & set(dc)):
+            r = dc[d] / da[d]
+            good = abs(r - 1.25) < 0.02
+            ok &= good
+            print(f"    depth {d:>7d}   ratio {r:.4f}   {'ok' if good else '** FAIL **'}")
+
+    print(f"\nSELFTEST: {'PASS -- reports no effect where there is none, and recovers one where there is' if ok else '** FAIL **'}")
+    return 0 if ok else 1
+
+
 def main():
     args = [a for a in sys.argv[1:]]
+    if '--selftest' in args:
+        return selftest()
     bucket = 50000
     if '--bucket' in args:
         i = args.index('--bucket')
