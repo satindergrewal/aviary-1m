@@ -451,6 +451,36 @@ agentic use.
 
 ---
 
+## ⚠⚠⚠ WHAT THE ARCH MATRIX'S 21 GREENS ACTUALLY CLAIM (2026-08-10)
+
+`arch_serve_gate.sh` defaults: prompt `"The capital of France is"` (~6 tokens) + `AG_NPRED 8`
+= **~14 tokens**, against the engine's default **`block_size 16`**.
+
+⇒ **The entire paged run allocates ONE BLOCK and never crosses a boundary**, and the prompt sits
+**inside `n_swa`** on every windowed architecture.
+
+| the green covers | the green does NOT cover |
+|---|---|
+| the arch serves under `--kv-paged` | **block-table traversal** — one block, no boundary |
+| a graph consumed the pool (`DS4P-CONSUME > 0`) | **cross-block indexing, write-slot mapping, reuse, eviction** |
+| paged output matches static | **sliding-window correctness** — a wrong or absent `visibility_window` is invisible inside the window |
+
+⇒ **The matrix's real sentence is "21 architectures produce correct output for a single-block prompt
+that fits inside any window."** That is a genuine result and a much smaller one than it has been
+read as — **including by me, all week.**
+
+⚠ **Not speculative for this fork.** The corruption hunt in `FINDINGS-paged-cross-request.md`
+root-caused to **the size of the FINAL PARTIAL PREFILL CHUNK** — a multi-block, boundary-shaped
+defect that a 14-token run **cannot express at all**. And the blanket SWA reject shipped on
+2026-08-09, which silently disabled gemma4's windowed paging, **would have printed the same green
+before and after.**
+
+⇒ Both limits now print themselves at the end of every `arch_serve_gate` run. **The fix is a
+sentence, not a threshold**: re-run with `AG_PROMPT`/`AG_NPRED` past a few blocks and past `n_swa`
+when those claims are the ones being made.
+
+---
+
 ## GPU-BOUND (queues behind the running measurement)
 
 | item | cost | why it needs the GPU |
