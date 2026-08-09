@@ -77,7 +77,10 @@ echo "paged parity gate: $(basename "$M")" | tee "$OUT"
 # 2026-08-09 used npred=48 with no warm-up; without these two fields a 48-token cold run and a
 # 512-token warm run are indistinguishable in results/ and would be compared as if they were the same
 # measurement. A parameter that moves the answer belongs in the header, not only in the invocation.
-echo "tip: $(cd "$WT" && git rev-parse --short HEAD)  ctx=$CTX  fill~${FILL}tok  block=$BLK  order=$ORDER  headroom=$LLAMA_PAGED_POOL_HEADROOM  npred=$NPRED  warm=$WARM" | tee -a "$OUT"
+# ⚠ `block_req`, NOT `block`. probe_geometry may clamp it, and a header naming a value the run did not
+# use is the stale-header defect this directory has now recorded three times in one day.
+# The value ACTUALLY used is printed by the geometry line below and is the one to quote.
+echo "tip: $(cd "$WT" && git rev-parse --short HEAD)  ctx=$CTX  fill~${FILL}tok  block_req=$BLK  order=$ORDER  headroom=$LLAMA_PAGED_POOL_HEADROOM  npred=$NPRED  warm=$WARM" | tee -a "$OUT"
 
 python3 - "$D" "$NEEDLE" "$FILL" "$NPRED" <<'PY' | tee -a "$OUT"
 import json, sys
@@ -123,6 +126,61 @@ arm() { # $1 = static|paged
     curl -s --max-time 14400 -X POST "http://127.0.0.1:$PORT/completion" \
         -H 'Content-Type: application/json' --data-binary "@$D/req.json" > "$D/$1.json"
     t1=$(python3 -c 'import time;print(time.time())')
+
+    # ⚠⚠⚠ THE CHECK ABOVE PROVES ALLOCATION AND NOTHING ELSE, AND THAT COST 4.5 HOURS ON 2026-08-09.
+    #
+    # `n_gpu_blocks > 0` says the POOL WAS BUILT. It cannot say a graph ever read it. On the 35B at
+    # `--kv-block-size 64` the paged arm's own log read:
+    #
+    #     DS4P-CHECKOUT           1     pool allocated
+    #     DS4P-SET              110     context attached to the graph
+    #     DS4P-CONSUME            0     ** no graph ever read it **
+    #     capability contract  3610     every attention layer REFUSED
+    #
+    #     "paged layer refused: layer 3: block_size x head_dim exceeds the staged-tile budget
+    #      (need block_size*head_dim <= 8192)"      64 x 256 = 16384.
+    #
+    # Refused layers 3,7,11,...,39 -- every 4th of 40, exactly the full-attention set on this hybrid.
+    # **100% of the attention layers fell back to static, and the gate reported a clean paged arm.**
+    # The 256k and 512k "parity ties" were static vs static-with-an-idle-pool, which is why they came
+    # out inside noise: they were the same code path.
+    #
+    # ⇒ Assert CONSUMPTION, positively, after the request -- the graph is built when the request runs,
+    #   so this cannot be checked at startup. This project's own scars file states the distinction it
+    #   was written from: CHECKOUT proves allocation, CONSUME proves consumption. The instrument was
+    #   built on the wrong one.
+    if [ "$1" = paged ]; then
+        # ⚠⚠ AND THE FIRST VERSION OF THIS ASSERTION GREPPED `DS4P-CONSUME`, WHICH IS INVISIBLE HERE.
+        # That marker is LLAMA_LOG_DEBUG, DEBUG needs verbosity >= 5 (common/log.h: LOG_LEVEL_DEBUG 5),
+        # and this gate runs `-lv 4`. So the count is ALWAYS zero in these logs and the assertion
+        # would have VOIDed every paged arm forever -- a false alarm welded into the instrument,
+        # written in the same edit that fixed a false pass. It also nearly cost a correct retraction:
+        # I read that zero as a measurement before checking whether the line could print at all.
+        #
+        # ⇒ Use the engine's OWN alarm, which is WARN and therefore visible. llama-context.cpp
+        #   evaluates `ds4p_paged_consumer_count() == 0` after 8 decodes and warns once:
+        #       "--kv-paged is ON and a paged pool was allocated, but after N decodes ZERO layers
+        #        have consumed it -- every layer fell back to the static attention path"
+        #   Its ABSENCE is meaningful precisely because the engine performs the positive test itself;
+        #   this gate only has to guarantee the >= 8 decodes that arm the check, which NPRED does.
+        local nocons; nocons=$(grep -ac 'ZERO layers have consumed' "$D/$1.log")
+        local refused; refused=$(grep -ac 'fails the paged capability contract' "$D/$1.log")
+        if [ "${nocons:-0}" -gt 0 ] || [ "$NPRED" -lt 8 ]; then
+            echo "  VOID: paged arm allocated a pool that NO LAYER CONSUMED -- it is STATIC wearing a" | tee -a "$OUT"
+            echo "        paged flag, and the wall/pp/tg from it are static numbers. Cause:" | tee -a "$OUT"
+            grep -m1 -oE 'paged layer refused:.*' "$D/$1.log" | sed 's/^/          /' | tee -a "$OUT"
+            grep -m1 -oE 'n_embd_head_v *= *[0-9]+' "$D/$1.log" | sed 's/^/          /' | tee -a "$OUT"
+            echo "          block_size in use: $BLK   (contract: block_size * head_dim <= 8192)" | tee -a "$OUT"
+            [ "$NPRED" -lt 8 ] && echo "          NPRED=$NPRED is under 8, so the engine's check never armed -- raise it." | tee -a "$OUT"
+            kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; return 1
+        fi
+        # ⚠ REPORT THE REFUSALS EVEN WHEN THE ARM PASSES. Partial fallback is normal on a hybrid --
+        # minority-geometry layers SHOULD fall back -- but the count is the difference between "paged
+        # with two layers static" and "static with a pool", and those produce very different numbers.
+        printf '  paged arm consumed the pool (engine no-consumer alarm silent); %s layer-refusal warnings\n' \
+               "$refused" | tee -a "$OUT"
+    fi
+
     kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; sleep 3
     python3 - "$D/$1.json" "$NEEDLE" "$1" "$t0" "$t1" "$D" <<'PY' | tee -a "$OUT"
 import json, sys, os
@@ -154,6 +212,52 @@ PY
 #
 # ⚠ AND IT IS DISCARDED ON PURPOSE. Nothing here writes a .res file or touches $OUT beyond one line.
 # A warm-up whose numbers can be mistaken for a measurement is worse than no warm-up.
+# DERIVE THE BLOCK SIZE FROM THE MODEL, because a fixed default silently disables paging.
+#
+# ⚠⚠ THE DEFAULT WAS 64 AND IT REFUSED EVERY ATTENTION LAYER OF THE 35B. The kernel stages K and V
+# tiles in threadgroup memory, so the contract is `2 * block_size * head_dim * sizeof(half) <= 32768`,
+# i.e. **block_size * head_dim <= 8192**. head_dim 256 admits block_size 32; 64 is refused. The 9B
+# harness that produced this lane's only real paged numbers ran block_size **16** -- inside the budget
+# by accident of history. **The one parameter I never re-derived when I changed models is the one
+# that broke**, and because a refused layer falls back to static the output stayed correct.
+#
+# ⇒ Ask the model, do not assume. One ~10 s server start at a tiny context, purely to read hparams.
+# ⇒ Clamp DOWN only: a caller asking for 16 on a model that could take 64 gets 16. This function
+#   removes a silent failure, it does not overrule an explicit choice upward.
+probe_geometry() {
+    local plog="$D/probe.log"
+    : > "$plog"
+    "$SRV" -m "$M" -ngl 99 -c 4096 -np 1 --port $PORT --no-warmup -lv 4 > "$plog" 2>&1 &
+    PID=$!
+    local i
+    for i in $(seq 1 300); do
+        [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORT/health 2>/dev/null)" = "200" ] && break
+        kill -0 $PID 2>/dev/null || break
+        sleep 1
+    done
+    local hd; hd=$(grep -m1 -oE 'n_embd_head_v *= *[0-9]+' "$plog" | grep -oE '[0-9]+$')
+    kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; sleep 2
+
+    # ⚠ AN UNREADABLE PROBE MUST NOT SILENTLY LEAVE THE BAD DEFAULT IN PLACE. If hparams could not be
+    # read, say so loudly rather than proceeding with a number nothing verified.
+    if [ -z "$hd" ] || [ "$hd" -le 0 ] 2>/dev/null; then
+        echo "  ⚠ geometry probe could not read n_embd_head_v -- keeping block=$BLK UNVERIFIED." | tee -a "$OUT"
+        echo "    The paged arm's DS4P-CONSUME assertion is now the only thing standing between this" | tee -a "$OUT"
+        echo "    run and another static-vs-static result. It will VOID rather than mislead." | tee -a "$OUT"
+        return 0
+    fi
+
+    local maxbs=$(( 8192 / hd ))
+    if [ "$maxbs" -lt 16 ]; then maxbs=16; fi          # kernel floor; below this the contract is a different one
+    if [ "$BLK" -gt "$maxbs" ]; then
+        echo "  geometry: head_dim=$hd -> block_size must be <= $maxbs (block_size*head_dim <= 8192)." | tee -a "$OUT"
+        echo "            requested $BLK would REFUSE every attention layer; using $maxbs." | tee -a "$OUT"
+        BLK=$maxbs
+    else
+        echo "  geometry: head_dim=$hd, block_size $BLK is within the staged-tile budget (max $maxbs)." | tee -a "$OUT"
+    fi
+}
+
 warmup() {
     [ "$WARM" = 1 ] || { echo "  warm-up: SKIPPED (PP_WARM=0) -- the first measured arm will run cold" | tee -a "$OUT"; return 0; }
     python3 - "$D" <<'PYW'
@@ -203,6 +307,7 @@ PYW
 # ⇒ ABBA runs static,paged,paged,static in ONE invocation and compares POSITION-MATCHED pairs:
 #   position 1 vs 4 (static twice) bounds the drift; 2 vs 3 (paged twice) bounds it again; and the
 #   arm comparison is made WITHIN a position, not across one.
+probe_geometry
 warmup
 case "$ORDER" in
   abba)        arm static; mv "$D/static.res" "$D/static1.res" 2>/dev/null
