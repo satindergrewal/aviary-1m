@@ -25,6 +25,28 @@
 # depend on sed's exit status, not grep's -- so "clean" would print even on a hit. Two defects in one
 # line, and the printed word was "clean".
 #
+# ⚠⚠⚠ AND ON 2026-08-10 I DID IT AGAIN, TO THIS FILE, WHILE QUOTING THIS FILE. Exact form:
+#
+#     git add ... && ./tools/privacy_guard.sh . 2>&1 | tail -2 && git commit ...
+#                                              ^^^^^^^^^^^^^^^
+# **The pipe makes `&&` read `tail`'s exit status, not the guard's.** The guard printed
+# "PRIVACY GUARD: REFUSING -- 1 added line(s)" and named the offending line, `tail` exited 0, and the
+# commit ran anyway. The refusal was on screen. It changed nothing. **This is the same defect as the
+# `grep | sed` one four lines up: I reformatted the guard's output and destroyed its verdict.**
+#
+# ⇒ **WHAT ACTUALLY STOPPED IT WAS THE `--range` MODE, unpiped, on the next line of the same chain.**
+#   It refused, `&&` broke, and the push never happened -- so the leak reached local history and got
+#   no further. That mode was added the previous day on the argument that *"inspection is not a
+#   guard"* at the public boundary, and this is the first time it caught something the staged check
+#   had already waved through. **Two independent guards at two boundaries is why a broken invocation
+#   of one was survivable.**
+#
+# ⇒ RULE, and it is about SHELL not about care: **never pipe this script.** `tail`, `head`, `sed`,
+#   `grep` and `cut` all replace its exit status with their own. If you want less output, redirect to
+#   a file and read that -- `>/dev/null` is safe because it does not change the exit status.
+#   The durable fix is the pre-push hook in `tools/pre-commit-privacy.hook`, which cannot be piped
+#   because nobody invokes it; it is offered there and deliberately not installed by the assistant.
+#
 # usage:  privacy_guard.sh [repo-path]     # checks STAGED changes; exit 1 = REFUSE
 #         privacy_guard.sh --worktree      # checks unstaged working tree too
 #         privacy_guard.sh <repo> --range origin/master..HEAD   # what a PUSH would publish
