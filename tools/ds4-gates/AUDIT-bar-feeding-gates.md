@@ -18,6 +18,44 @@ session, with the **code fine in three of them**:
 
 Plus the standing rule: a **dirty static control voids the run** rather than indicting the code.
 
+---
+
+## ⚠⚠ A FIFTH MODE, ADDED 2026-08-10, AND IT IS THE ONLY ONE THAT RENDERS AS **PASS**
+
+| # | rendering | the discriminator it needs |
+|---|---|---|
+| **5** | a **clean green** produced because the gate counted only ONE of several failure vocabularies | enumerate **every** way the code announces the failure, and count them all |
+
+The four above all render as *"the paged column is wrong or missing"* — they look like trouble. **Mode
+5 looks like success**, which is why it survived a full night of measurement and was found by an
+outside reader rather than by the gate.
+
+**What happened.** `paged_parity_gate` printed `0 layer-refusal warnings` and scored the arm clean.
+The engine has **two** fallback branches and the gate grepped one:
+
+```
+fails the paged capability contract      0    <- the only string counted
+took the STATIC path -- no paged context 110  <- never counted, and firing,
+                                              on exactly layers 3,7,11,...,39
+```
+
+⇒ **The record said the question was asked and passed. It was asked. It was not seen.**
+
+⚠ **This is NOT mode 4.** Mode 4 is *"can the marker fire at all"* — wrong key, wrong log level, wrong
+class. Here the marker fired **110 times, at WARN, in the log the gate was reading**. The gate simply
+did not look at that string. **Mode 4 asks whether failure can speak; mode 5 asks whether the gate is
+listening on every channel it speaks through.**
+
+⇒ **Resolution, and it is a caution against over-correcting:** a `-lv 5` decider split on the request
+marker showed all 210 static-path warnings were **reserve-time graph builds** — the paged context does
+not exist while llama-server builds its ~21 reserve graphs — and **640 consume events with zero
+fallbacks after the request began.** So the branch is real, expected, and **must not be scored as a
+failure**. The fix is to **count and explain both**, not to fail on either.
+
+⇒ **`paged_parity_gate` is not in the table below** — it was written after this audit. It now carries
+LAW 6 (consumption), LAW 7 (dirty tip stamp), both fallback counts, achieved `pred_n`, the model's
+full path, and the kernel selectors. **Re-audit it against all five modes when the bar work settles.**
+
 ## Result
 
 | gate | 2 tie | 3 dead arm | 4 marker | static control | verdict |
