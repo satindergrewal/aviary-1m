@@ -26,6 +26,11 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/_no_abs_paths.sh" 2>/dev/null || true
+# ⚠ DELIBERATELY DOES NOT SOURCE `_gate_common.sh`, and the exemption is stated because an UNSTATED
+# one is how a convention rots. This file starts no servers, issues no requests and computes no
+# verdicts -- it invokes `paged_parity_gate.sh` per rung and quotes the verdicts that gate already
+# printed. **The laws apply where a measurement is made, and none is made here.** If this ever grows
+# a server or a comparison of its own, the include goes in with it.
 
 M=${SW_MODEL:-$HOME/Documents/GitHub/ornith-models/Ornith-1.0-35B-1M-GGUF/ornith-1.0-35b-1M-Q4_K_M.gguf}
 RUNGS=${SW_RUNGS:-"8192 32768 65536 131072"}

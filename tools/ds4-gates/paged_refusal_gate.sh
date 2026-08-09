@@ -28,6 +28,12 @@
 # usage: RG_MODEL=<gguf-that-cannot-page> paged_refusal_gate.sh
 set -uo pipefail
 . "$(dirname "$0")/_no_abs_paths.sh" 2>/dev/null || true
+# ⚠ AND THE SHARED LAWS -- which I FORGOT when I wrote this file, hours after driving the include
+# into five other gates. `lint_common_laws.sh` caught it on the next run, and that lint's own header
+# already records the same author making the same omission the same day. **Writing the lint is not
+# the fix; running it is.** Used below for gate_cause_from_log on the VOID branch, where this gate
+# was about to hand-roll a log diagnosis that already exists.
+. "$(dirname "$0")/_gate_common.sh"  2>/dev/null || true
 
 WT=${WT:-$HOME/Documents/GitHub/llama.cpp-ds4ports}
 SRV=${SRV:-$WT/build-metal/bin/llama-server}
@@ -97,5 +103,10 @@ if [ "$refused" -gt 0 ]; then
     exit 0
 fi
 echo "  ⇒ VOID: the server exited without serving and without any refusal marker. It failed for" | tee -a "$OUT"
-echo "    some OTHER reason, so this run says nothing about the refusal path. Read $LOG." | tee -a "$OUT"
+echo "    some OTHER reason, so this run says nothing about the refusal path." | tee -a "$OUT"
+# ⚠ SAY WHY, rather than pointing at a log the reader has to open. A dead arm and a refused arm
+# render identically as "no result", and two harness faults in this lane were diagnosable only by
+# opening a log by hand. gate_cause_from_log exists precisely for this and lives in the include
+# this file was missing.
+command -v gate_cause_from_log >/dev/null 2>&1 && gate_cause_from_log "$LOG" "refusal gate" | tee -a "$OUT"
 exit 2
