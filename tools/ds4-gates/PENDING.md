@@ -181,12 +181,50 @@ from two pools. **The MASK is the homeless piece.**
 | **2** | CSA + HCA | **the real work** — optional explicit mask input on `ggml_paged_attn_banded`, the Metal kernel, a CPU reference, `test-paged-vs-cpu` coverage |
 | **3** | LID indexer | **skip** — `get_lid()->get_k()` feeds `ggml_mul_mat` + relu + `top_k`. A **scorer**, not attention. |
 
-### ⚠⚠ THE RECOMMENDATION AGAINST, RECORDED INSIDE THE TASK RATHER THAN BESIDE IT
+### ⚠⚠ THE GOAL IS SUPPORT PARITY, NOT THROUGHPUT — AND MY FIRST COST-BENEFIT ANSWERED THE WRONG QUESTION
 
-**96.8 GB of weights on a 128 GB box leaves ~31 GB.** Paging buys KV-memory efficiency; at that
-headroom the KV pool is small whether it is paged or static. **Paging is not the lever for this
-model on this machine.** Tier 2 is worth building **for the kernel** — an optional mask unlocks
-every sparse-attention architecture — and **not** for DSV4's sake here.
+The owner, verbatim: *"the point is to have the model runnable on the machine in expected states,
+and have kv paged supported too as you are doing this work already. **context is not the issue.**
+This is just to make the model work in expected ways on Mac."*
+
+The paragraph that used to sit here argued **against** paging on memory math — 96.8 GB of 128 leaves
+~31 GB, so the KV pool is small either way. **That reasoning is correct and it answers a question
+nobody asked.** It priced paging as a long-context *performance* lever because that is the metric I
+had spent the day measuring. **The frame was mine, not the task's** — the same mistake as filing the
+GGUF-conversion fix "irrelevant" because one download happened to be prebuilt.
+
+⇒ **Support parity is a COVERAGE claim**, and the acceptance test changes with it: not a wall-clock
+ratio, but **`fails the paged capability contract` == 0 on every attention layer**, with paged
+output matching static.
+
+### ★★ AND THE LAYER SPLIT SETTLES THE TIER ARGUMENT — MEASURED FROM THE GGUF, NOT ESTIMATED
+
+Read straight out of `deepseek4.attention.compress_ratios` in the metadata shard (5.3 MB, no need to
+touch the 96 GB of weights):
+
+| ratio | layers | path | pageable today |
+|---|---|---|---|
+| 0 | **5** | PLAIN, single cache, implicit causal mask | **yes** |
+| 4 | **21** | CSA — concat of two caches + **top-k mask** | no |
+| 128 | **20** | HCA — concat of two caches + mask | no |
+
+**Tier 1 covers 5 of 46 layers. Eleven per cent.**
+
+⇒ **That is exactly the state this lane spent 2026-08-09 proving is indistinguishable from static** —
+a pool allocated, a handful of layers reading it, the rest silently falling back, and a green that
+means nothing. **Shipping Tier 1 alone would be a misleading green, not an increment.**
+
+⇒ **So for the owner's actual goal, Tier 2 is not optional. It is 89% of the model.**
+
+Other facts from the same read, both load-bearing:
+
+- `attention.sliding_window = 128`, and `deepseek4.cpp:67` sets **`swa_type = LLAMA_SWA_TYPE_STANDARD`**.
+  ⇒ **The Tier 1 precondition is RESOLVED, by reading the arch rather than inferring from the cache
+  class**: STANDARD is exactly the rolling window the analytic band implements, so the
+  `visibility_window` path covers those layers.
+- `head_count = 64`, `head_count_kv = 1` — MLA-style. GQA ratio 64, integer, so the paged capability
+  contract's GQA check passes.
+- `indexer.top_k = 512` — the sparse selection that has nowhere to go in the banded kernel.
 
 ⚠ Also live upstream and unfixed: **issue #26694, "DeepSeek-V4-Flash degenerates into repetition and
 leaks special tokens in long agentic chats (Metal)"** — Mac Studio, `-ngl 99 -fa on`, 262k ctx.
