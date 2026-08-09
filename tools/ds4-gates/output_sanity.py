@@ -51,6 +51,38 @@ def rep_ratio(t):
         return None                       # too short to be evidence either way
     return sum(1 for a, b in zip(w, w[1:]) if a == b) / (len(w) - 1)
 
+def ngram_loop(t, k=4):
+    """Fraction of k-gram positions occupied by a k-gram that occurs more than once.
+
+    ⚠⚠ THE DETECTOR THIS FILE SHIPPED WITHOUT, AND REAL DATA CAUGHT IT WITHIN THE HOUR.
+    `rep_ratio` only sees ADJACENT identical tokens. Fed the actual 512-token completion from a
+    256k parity arm --
+
+        'MAGENTA-7742. Remember it.7742. Remember it.7742. Remember it.7742. Remember it.'
+
+    -- it scored **0.00** and the whole file returned OK. Whitespace tokens are
+    `it.7742.` `Remember` `it.7742.` `Remember`: **no two neighbours are equal**, so an
+    adjacent-duplicate test is blind to every loop of period 2 or more, which is what looping
+    models actually produce. `'. - - - -'` was period ONE and that is the only reason the original
+    detector worked on it.
+
+    ⇒ A repeated k-gram catches any period up to k. Prose reuses short phrases, so the threshold is
+      set well above ordinary reuse rather than at zero.
+
+    ⚠ I predicted this file would FALSE-FIRE on `ignore_eos` output. It did the opposite: it stayed
+      silent on output that is unambiguously degenerate. **The prediction was wrong in the direction
+      that matters** -- I would have trusted a green.
+    """
+    w = _tokens(t)
+    if len(w) < k * 4:
+        return None
+    grams = [tuple(w[i:i+k]) for i in range(len(w) - k + 1)]
+    seen = {}
+    for g in grams:
+        seen[g] = seen.get(g, 0) + 1
+    repeated = sum(n for g, n in seen.items() if n > 1)
+    return repeated / len(grams)
+
 def alnum_ratio(t):
     """Fraction of non-space characters that are letters or digits.
 
@@ -117,6 +149,10 @@ REP_MAX      = 0.35   # prose ~0.00-0.05; the recorded failures ~0.6-0.8
 ALNUM_MIN    = 0.45   # prose 0.75-0.95; punctuation storms ~0.0-0.2
 SCRIPTS_MAX  = 3      # 1-2 normal (incl. bilingual); 3+ is the word-salad shape
 INTRA_MAX    = 1      # >1 token with mixed scripts INSIDE it; fires at 7 tokens, length-independent
+# ⚠ 0.60 IS DELIBERATELY HIGH. Ordinary prose repeats 4-grams occasionally (lists, refrains, code),
+# and a low bar here would fire on structured output. The real 512-token loop measured on this box
+# scores near 1.0, so the separation is wide and the threshold does not need to be tight.
+NGRAM_MAX    = 0.60
 
 def degeneracy(t):
     """Return (verdict, [reasons]). Only fires on shapes healthy output does not produce."""
@@ -130,6 +166,10 @@ def degeneracy(t):
     s = script_mix(t)
     if s > SCRIPTS_MAX:
         reasons.append(f"{s} distinct scripts mixed (> {SCRIPTS_MAX}) -- word-salad shape")
+    g = ngram_loop(t)
+    if g is not None and g > NGRAM_MAX:
+        reasons.append(f"{g*100:.0f}% of 4-grams are repeated (> {NGRAM_MAX*100:.0f}%) -- the text is "
+                       f"looping with a period an adjacent-duplicate test cannot see")
     m = intra_token_mix(t)
     if m > INTRA_MAX:
         reasons.append(f"{m} tokens mix scripts INTERNALLY (> {INTRA_MAX}), e.g. Han inside a Latin "
@@ -155,6 +195,20 @@ def load(p, as_text):
 
 def main(argv):
     as_text = "--text" in argv
+    # ⚠⚠ --prefix EXISTS BECAUSE OF A COLLISION BETWEEN TWO CORRECT FIXES.
+    # `ignore_eos` makes n_predict a floor, which is required for a readable decode rate. It also
+    # makes the model run PAST its answer, and what follows a completed answer is a loop: the real
+    # 512-token completion from a 256k parity arm scores **97% repeated 4-grams**. So a degeneracy
+    # check over the full completion VOIDs every healthy run of the gate it is meant to protect.
+    # ⇒ Grade the ANSWER, not the filler. Either grade a prefix, or send a second short request with
+    #   ignore_eos off -- the parity gate's needle guard already works that way and is the cleaner
+    #   shape. Two fixes that are each right and jointly wrong is how three defects got built today.
+    prefix = 0
+    if "--prefix" in argv:
+        i = argv.index("--prefix")
+        try: prefix = int(argv[i+1])
+        except Exception: prefix = 0
+        argv = argv[:i] + argv[i+2:]
     args = [a for a in argv[1:] if a != "--text"]
     if len(args) != 2:
         print(__doc__.strip().splitlines()[-3], file=sys.stderr)
@@ -164,6 +218,10 @@ def main(argv):
     except Exception as e:
         print(f"  output-sanity VOID: {e}")
         return 2
+
+    if prefix > 0:
+        ref, got = ref[:prefix], got[:prefix]
+        print(f"  (grading the first {prefix} characters only -- see the --prefix note in the source)")
 
     # ⚠ AN EMPTY SAMPLE MUST NOT GRADE AS CLEAN. Zero bytes passes every detector above by having
     # nothing to detect -- the instrument-examined-nothing failure, which this directory exists to
