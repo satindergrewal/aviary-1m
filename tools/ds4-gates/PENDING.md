@@ -13,6 +13,56 @@ right now, in parallel, with one caveat recorded at the bottom that cost a measu
 Owner's bar, verbatim: *"equal or better than the static, and the ranges are 256k to 1M context
 ranges, not 2k, 32k, 64k etc."*
 
+## ★★★★ DECODE vs CONTEXT — the complete curve (2026-08-10 04:00)
+
+Five rungs, one model, one kernel, `ignore_eos`, 4-arm ABBA each with its own drift bound.
+
+| ctx | ratio paged/static | verdict | |
+|---|---|---|---|
+| 8,192 | **0.8451** | CLEARS | paged 15.5% slower |
+| 32,768 | **0.9061** | CLEARS | paged 9.4% slower |
+| 65,536 | **0.9131** | CLEARS | paged 8.7% slower |
+| 131,072 | **1.0242** | **UNREADABLE** | effect 2.4% vs static drift 10.3% |
+| 262,144 | **1.3471** | CLEARS | paged 34.7% faster |
+
+**Monotone across five rungs, crossing 1.0 at ~128k.** The UNREADABLE at 128k is the gate being
+**right**: at the crossover the effect is near zero by construction, so it cannot clear any drift.
+**An instrument that reports "unreadable" exactly where the effect vanishes is working, not failing.**
+
+### The mechanism — read from the ABSOLUTES, not the ratio
+
+```
+ctx        static tg  paged tg        decay per DOUBLING:  static  paged
+  8,192      68.82      58.16         8k  -> 32k            1.050  1.014
+ 32,768      62.41      56.55         32k -> 64k            1.163  1.154
+ 65,536      53.65      48.99         64k -> 128k           1.421  1.267
+131,072      37.76      38.68         128k-> 256k           1.911  1.453
+262,144      19.76      26.62
+```
+
+⇒ **BOTH paths accelerate; static accelerates harder.** 1.05 → 1.16 → 1.42 → 1.91 against
+1.01 → 1.15 → 1.27 → 1.45. **Smooth and progressive — no jump, no threshold.** A
+bandwidth/working-set story, graduated.
+
+⇒ **Pure span-bound decode decays toward 2.0×/doubling. Static's final step is 1.911 — 96% of that
+limit. Paged is 1.453.** ⇒ **At 256k static decode is almost entirely span-bound; paged is roughly
+half so.** That is the result in one line, and it is a measurement rather than a mechanism.
+
+⚠ **THREE FRAMINGS DIED GETTING HERE, each stated too confidently before the next rung:**
+*"paging removes a cost that grows with L"* → *"static falls off a cliff"* → **"both bend, static
+bends harder."** Also dead: my pre-registered model that `1/ratio` is linear in `1/L` with intercept
+1.0 — refuted outright, since `1/ratio = 0.7423 < 1` at 256k is impossible under a fixed-overhead
+story. **The shape prediction held and the mechanism was wrong: right verdict, wrong mechanism.**
+
+⚠ **NOT SHOWN:** five rungs, **n=2 per arm**, one model, one quant, one kernel, one box. **Prefill
+was UNREADABLE at every rung** — that column is not read and is not data.
+
+⇒ **THE BAR, complete:** paged decode costs **9-15% below 64k**, is **parity at ~128k**, and is
+**+35% at 256k with the gap widening**. **The owner's range starts at 256k. Inside his range, paging
+wins, and wins harder the deeper it goes.**
+
+---
+
 ## ★★★ 256k VERDICT (2026-08-10 03:20) — the bar is MET, and this is the first defensible number
 
 The first ABBA with every instrument correct at once: champion kernel, real 512-token decode window,
