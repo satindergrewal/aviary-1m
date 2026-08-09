@@ -371,6 +371,33 @@ fi
 S_NOPG=$(c_nopg "$LOGDIR/static.log")
 S_CONS=$(( $(c_band "$LOGDIR/static.log") + $(c_auto "$LOGDIR/static.log") ))
 
+# ⚠⚠ IS THE PROMPT LONG ENOUGH TO EXERCISE A SLIDING WINDOW? THIS GATE'S DEFAULT PROMPT IS
+# "The capital of France is" -- SIX TOKENS. On any windowed architecture (gemma2/3/4, cohere2, phi3,
+# llama4, exaone4, ...) a prompt shorter than `n_swa` sits ENTIRELY INSIDE the window, so a windowed
+# layer and a full-causal layer attend over identical context and produce identical logits.
+#
+# ⇒ **DS4P-CONSUME > 0 then proves the layer ran the paged kernel and says NOTHING about whether the
+#   band is correct.** A broken window -- wrong `visibility_window`, or none passed at all -- is
+#   INVISIBLE at this prompt length. That is the vacuous-pass class wearing a gate costume: the
+#   instrument examined nothing about the property in question and would still print a green.
+#
+# ⚠ Not a failure and not scored as one: the gate's OTHER claims (does it serve, does it consume,
+# does paged match static) are unaffected and remain valid. **What is scoped is the WINDOW claim
+# only** -- and saying so beats both silently over-claiming and failing a run that is fine.
+# ⇒ To actually test the band: `AG_PROMPT` longer than `n_swa`, or a needle beyond the window.
+_nswa=$(grep -m1 -oE 'n_swa +=? *[0-9]+' "$LOGDIR/static.log" 2>/dev/null | grep -oE '[0-9]+$')
+_ptok=$(grep -m1 -oE 'prompt_n[^0-9]*([0-9]+)|n_tokens = *[0-9]+' "$LOGDIR/static.log" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+if [ -n "${_nswa:-}" ] && [ "${_nswa:-0}" -gt 0 ] 2>/dev/null; then
+    if [ -z "${_ptok:-}" ] || [ "${_ptok:-0}" -le "${_nswa}" ] 2>/dev/null; then
+        echo "  ⚠ WINDOW CLAIM NOT TESTED: this arch is windowed (n_swa=${_nswa}) and the prompt is" | tee -a "$OUT"
+        echo "    ${_ptok:-<6>} tokens -- inside the window, so a windowed layer and a full-causal one see" | tee -a "$OUT"
+        echo "    identical context. DS4P-CONSUME here proves the kernel RAN, not that the band is" | tee -a "$OUT"
+        echo "    correct. Re-run with AG_PROMPT longer than ${_nswa} tokens to test it." | tee -a "$OUT"
+    else
+        echo "  window claim testable: n_swa=${_nswa} < prompt ${_ptok} tokens" | tee -a "$OUT"
+    fi
+fi
+
 printf '  STATIC  arch=%-14s out=[%s]\n' "${GOT_ARCH:-<none>}" "$S_OUT" | tee -a "$OUT"
 printf '          static-path warns=%-6s cap-fails=%-5s headdim-fails=%-5s DS4P-CONSUME=%s\n' \
        "$S_NOPG" "$(c_cap "$LOGDIR/static.log")" "$(c_hdim "$LOGDIR/static.log")" "$S_CONS" | tee -a "$OUT"
