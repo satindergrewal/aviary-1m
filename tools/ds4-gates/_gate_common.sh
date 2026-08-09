@@ -233,6 +233,28 @@ gate_run_capped() { # $1 = command, $2 = seconds (default 30)
 #   because the engine performed the check itself -- the caller only has to guarantee the >= 8 decodes
 #   that arm it.
 #
+# ⚠⚠⚠ UNPROVEN AS OF 2026-08-09 -- THE ALARM HAS NEVER BEEN OBSERVED FIRING. Raised by Grok, and the
+# benign explanations are already dead:
+#   * "the alarm was not in that binary"  -> `strings libllama.0.0.10621.dylib` (the 14:02 build the
+#     512k run used, tip cbb4c8d93) contains the string; 2c3a4119c is an ancestor.
+#   * "the paged path bypasses llama_context::decode" -> server-context.cpp:3284 calls llama_decode()
+#     on the paged path.
+#   * "n_dec never reached 8" -> a 400k prefill at ub=512 is ~780 decode() calls.
+# The voided 512k run had every attention layer refused and the alarm stayed silent, so the surviving
+# explanation is that `ds4p_paged_consumer_count()` was NOT zero. That counter is GLOBAL with TWO call
+# sites -- the banded funnel (llama-graph.cpp:4742) and the AUTO funnel (:3640) -- so anything reaching
+# the auto funnel keeps the alarm silent no matter how completely the banded path collapses.
+#
+# ⇒ **If that is what happened, this law measures "some layer somewhere consumed" rather than "the
+#   layers I am timing consumed", and it must be replaced by a positive DS4P-CONSUME count from a
+#   one-time untimed `-lv 5` arm.** Pending positive control: champ=0, bs=64, >=8 decodes, watch for
+#   the WARN. Until that control runs, treat a PASS here as WEAK evidence and prefer the independent
+#   WARN-level signal -- `fails the paged capability contract` count, which is zero when every layer
+#   really is paging and was 3,610 in the run this law failed to catch.
+#
+# ⚠ Do not read this caveat as "the law is wrong". It is "the law is untested in the failure it was
+#   built for", which is the same standing this project gives any instrument with no negative control.
+#
 # usage: gate_assert_paged_consumed <server.log> <label> [n_predict]
 #        rc 0 = consumed · rc 1 = allocated but never consumed (VOID the arm) · rc 2 = cannot tell
 gate_assert_paged_consumed() {

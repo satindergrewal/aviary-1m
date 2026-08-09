@@ -143,8 +143,25 @@ detecting a broken band. It would return a clean green that means nothing.
 | decide `-lv 4` vs `-lv 5` in `paged_parity_gate.sh` | **queued, cannot edit a running script.** The gate runs `-lv 4` and proves consumption via LAW 6 (absence of the engine's WARN alarm). The sibling `arch_serve_gate.sh` runs `-lv 5` **specifically so it can read `DS4P-CONSUME` directly** — its own comment says *"At -lv 4 the marker count read ZERO on an arch that was demonstrably paging."* A direct positive count beats an inferred one; the cost is DEBUG-volume I/O during a timed run, which is itself a confound. Record whichever is chosen **as a choice**, so nobody "fixes" it back. |
 | warm-up response is never checked | **known hole.** `warmup()` sends its curl to `/dev/null`, so a 500 or an empty completion still prints "discarded (5s)". Log-line-is-not-work-done, in code I wrote today. |
 | the remaining ISWA archs | `gemma2` `gemma3n` `cohere2` `cohere2moe` `phi3` `olmo2` `exaone4` `exaone-moe` `openai-moe` `plamo3` `mellum` `mimo2` `smallthinker` `afmoe` — minus anything CHUNKED or SYMMETRIC, which the band cannot express at all |
-| `mimo2` sinks / `dflash` non-causal | recorded closed in `PLAN-paged-arch-support.md`; **re-verify, that file's top table was stale enough to cause a real bug** |
+| ~~`mimo2` sinks / `dflash` non-causal~~ | ✅ **re-verified in source, genuinely closed.** `mimo2.cpp:187` passes `sinks` into the paged call; `dflash.cpp:467` passes `/*causal=*/false`. Both were checked because `PLAN-paged-arch-support.md`'s top table was stale enough to cause a real bug, and "recorded closed" is not the same as closed. |
+| ~~does the new `swa_type` guard break them?~~ | ✅ **no.** Both declare `LLAMA_SWA_TYPE_STANDARD`, which the analytic band implements exactly, so the tightened guard is a no-op for them. Checked rather than assumed — the last guard I added silently disabled gemma4. Window and causal are also orthogonal in the kernel (`lo` from the window, upper bound from `causal`), so `dflash` passing a window **and** `causal=false` is not a contradiction. |
 | lint sweep | `lint_paged_consumers` · `lint_scrub_coverage` · `lint_common_laws` — the last reports 6 of 44 gates reach the shared laws |
+| **champion-kernel arch coverage** | `arch_serve_gate.sh` passes no `--kv-block-size`, so it runs the engine default of **16** (`common/common.h:565`) on the scalar path. 16 × head_dim ≤ 8192 holds up to head_dim 512, so every arch pages and the matrix greens are valid. **But the CHAMPION is never exercised there** — 21 architectures verified on one kernel and none on the other, while the champion is the kernel the parity numbers come from. Not urgent, and not nothing. |
+
+### Kernel selection, as a table, because getting it wrong is silent
+
+| gate | block_size | champion | how it proves paging |
+|---|---|---|---|
+| `arch_serve_gate` | 16 (engine default) | off | counts `DS4P-CONSUME` directly — runs `-lv 5` **on purpose** |
+| `long_context_gate` | 32 | off | LAW 6 (engine WARN alarm) |
+| `multislot_gate` | 16 | off | LAW 6 |
+| `warm_multislot_gate` | 16 | off | marker at `MS_LV=5`, else LAW 6 |
+| `paged_parity_gate` | **64** | **on** | LAW 6 |
+
+⚠ `paged_parity_gate` is the only one on the champion, and it is the only one whose output is a
+**speed** claim. That is deliberate — the bar asks whether paging is as fast as static, and the
+answer must come from the kernel paging actually ships with — but it does mean the champion's
+correctness rests on far less arch coverage than the scalar path's.
 
 ---
 
