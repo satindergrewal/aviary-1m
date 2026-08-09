@@ -233,6 +233,28 @@ gate_run_capped() { # $1 = command, $2 = seconds (default 30)
 #   because the engine performed the check itself -- the caller only has to guarantee the >= 8 decodes
 #   that arm it.
 #
+# ✅✅ VALIDATED 2026-08-09 19:22 BY DIRECT CONTROL (`alarm_control.sh`). The caveat below was written
+# while this was unproven; it is kept because its reasoning was published and acted on, and because
+# one of its conclusions turned out to be WRONG in a way worth carrying.
+#
+#     ARM B  champion on, -lv 5:   DS4P-CONSUME total=240  banded=240  **auto=0**   alarm silent
+#            -> the marker demonstrably prints in this binary at this verbosity, so arm A's
+#               silence would have carried information. B gates A; running A alone would have
+#               repeated the very absence-based reasoning that caused the failure.
+#     ARM A  champion OFF, bs=64:  refusals=20  consume=0  **alarm=1**
+#            -> every layer refused AND THE ENGINE ALARM FIRED. **The law holds.**
+#
+# ⚠⚠ AND ARM B REFUTED THE MECHANISM ASSERTED BELOW. `auto=0` -- the auto funnel never fires on that
+# architecture, so it cannot have been keeping the shared counter non-zero. That was written as "the
+# surviving explanation" after eliminating three others. **Elimination is not evidence for the
+# remainder.** The voided run's silent alarm is therefore UNEXPLAINED and is deliberately left that
+# way rather than replaced with a fifth story; the VOID never depended on it, resting instead on
+# 3,610 WARN-level refusal lines.
+#
+# ⇒ Practical effect: a PASS here is now ordinary evidence, not weak evidence. The independent
+#   `fails the paged capability contract` count remains worth printing beside it.
+#
+# --- historical, from before the control ran -------------------------------------------------
 # ⚠⚠⚠ UNPROVEN AS OF 2026-08-09 -- THE ALARM HAS NEVER BEEN OBSERVED FIRING. Raised by Grok, and the
 # benign explanations are already dead:
 #   * "the alarm was not in that binary"  -> `strings libllama.0.0.10621.dylib` (the 14:02 build the
