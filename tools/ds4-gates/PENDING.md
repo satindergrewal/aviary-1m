@@ -451,6 +451,37 @@ agentic use.
 
 ---
 
+## ★ COVERAGE AUDIT — does each gate's DEFAULT input cross the constant its claim scales with?
+
+Grok's class split: a **COUNTING** defect is one the instrument saw and miscounted (sweep =
+enumerate the failure vocabularies); a **COVERAGE** defect is one it never saw (sweep = **name the
+structural constant each claim scales with, and check the default input crosses it**). This is the
+second sweep, done by reading rather than by a parser — a generic parse across five heterogeneously
+named scripts misread four of five on the first attempt, and **a fragile lint is worse than an
+honest table.**
+
+| gate | default input | block_size | crosses a block? | crosses `n_swa`? | `-np` |
+|---|---|---|---|---|---|
+| `arch_serve_gate` | ctx 4096, prompt ~6 + npred **8** | 16 (engine default) | **NO — one block** | **NO** | 1 |
+| `long_context_gate` | ctx 32768, **fill 14000** | 32 | yes (~440 blocks) | yes | 1 |
+| `multislot_gate` | ctx 8192, short prompts | 16 | short — **unverified** | **NO** | **2** ✓ |
+| `warm_multislot_gate` | ctx 8192, short prompts | 16 | short — **unverified** | **NO** | 2 ✓ |
+| `paged_parity_gate` | ctx 262144, **fill 225000**, npred **512** | 64 | yes (~3500 blocks) | yes | 1 |
+
+⇒ **The two long-context gates cross everything. The three short gates cross almost nothing** — and
+those three are the ones that carry the **arch matrix** and the **multi-slot** claims.
+
+⚠ **`-np` is the constant only the multislot gates cross**, and it matters: this lane's open
+`-np > 1` defect (absolute `batch_offsets`/`write_slots` vs local ubatch indices) **cannot be seen by
+any `-np 1` gate at all.** `arch_serve_gate`, `long_context_gate` and `paged_parity_gate` are all
+`-np 1`, so **every parity number and every arch green is single-slot only.**
+
+⇒ **Not a call to change the defaults.** A 14-token arch gate over 21 architectures is cheap on
+purpose, and making it long would trade coverage for a matrix nobody re-runs. **The fix is that each
+green names its size** — now printed by `arch_serve_gate`, and recorded here for the rest.
+
+---
+
 ## ⚠⚠⚠ WHAT THE ARCH MATRIX'S 21 GREENS ACTUALLY CLAIM (2026-08-10)
 
 `arch_serve_gate.sh` defaults: prompt `"The capital of France is"` (~6 tokens) + `AG_NPRED 8`
