@@ -1200,11 +1200,19 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
     257==267 BIT-EXACT → only **all-zero positions** (rope@0 ≡ identity for the whole chunk)
     fit. CPU had correct positions in both arms (KROW identical) ⇒ ubatch.pos/set_input path
     innocent ⇒ **Metal's inp_pos BUFFER held zeros for chunk-2's graph at ub≡0 mod 256.**
-    Confirm instrument (one run): capture inp_pos post-execution — e.g. a tiny debug op reading
-    the pos leaf into a pool-adjacent scratch, or cb_eval on the first rope node's src[1] via
-    the sched split (ask-phase can claim leafs' consumers). If confirmed, the defect is in the
-    Metal-side input upload/allocation for that graph shape — an upstream backend bug worth a
-    minimal standalone repro before any fix.**
+    ✅✅ **CONFIRMED (DS4P-POS capture, cb_eval on kv_pe's src[1], landed in the tap):**
+    ub255 chunk-2 pos = perfect [255..509]; **ub256 chunk-2 pos = GARBAGE
+    (pos[0]=-67044352, min=-67108864=-0x4000000, max=64512, and 0xFC00 patterns = F16 -inf):
+    the inp_pos buffer holds MASK-PATTERNED F16 BYTES.** Warmup, chunk-1, chunk-3 (104) and
+    all decodes have correct pos in BOTH arms. The tap does not perturb (tapped outputs equal
+    untapped). ⇒ inp_pos is CLOBBERED BY (or aliased with) a mask upload for chunk-2's graph
+    at ub≡0 mod 256 — mask width pads differently at exact-64-multiples, shifting allocation
+    into collision. Same allocator-layout trigger class as defect #1.
+    **NEXT UNIT: find the aliasing — llama-context/sched graph-input allocation vs set_input
+    order (pos written, then mask upload lands on overlapping bytes). Instrument: print
+    inp_pos->data and kq_mask->data pointers + sizes per graph on both arms; overlap = proof.
+    Then decide our-bug-vs-upstream and build the minimal standalone repro (upstream-grade if
+    core sched/alloc).**
   - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
     live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
