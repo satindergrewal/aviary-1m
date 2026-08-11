@@ -1245,7 +1245,12 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   8 worse, ≥16 exceeds vec smem). DSV4 recommendation UNCHANGED: bs64 + champion off.**
   Champion path now complete and correct for the archs where it wins (D≤256). OPTIONAL open
   perf question: long-context prefill A/B (champ block-walk vs the scalar 7 t/s @64k tail),
-  ~2h, boarded not scheduled.
+  ~2h, boarded not scheduled. [RESOLVED same session: 12.2× champion win — see the final
+  recommendation entry.]
+- ✅ **TASK #16 DONE — champion contract consolidated to ONE copy** (ggml-paged-champ.h:
+  head-dim set + core geometry; both sites include it; site-specific conditions annotated in
+  place; the lagging-copy incident memorialized in the header). Gated: replay PASS, full
+  sweep ALL PASSED, server arm byte-exact + 128 presence-counted dispatches, zero fallbacks.
 - ⚠⚠ (superseded) **PARTIALS FIRST ATTEMPT REVERTED (ds4ports c514b245a) — it NEVER COMPILED and its
   compile gate was a STALE BINARY.** The champ kernels use kargs_flash_attn_ext (no
   emit_partials field); metal embeds at BUILD time, so the 'gate' passed on old embedded
