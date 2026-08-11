@@ -1146,9 +1146,12 @@ run log).** With defect #1 deleted and the gallocr leaf check landed, the full 4
 paged path matches static on aggregate likelihood. The L95/L100 text flips are model-side
 knife-edges (0.21-nat static margins), NOT corruption — the pre-fix "merge owns 750–1230"
 narrative is fully retired.
-**Remaining for the flag-flip: gates at SCALE (64k× the serve config, the boarded plan) + HIS
-call. Standing for the owner: (1) gallocr leaf-check upstream PR, (2) flag-flip default, (3)
-the 1M rung (~13h).**
+**Remaining for the flag-flip: gates at SCALE + HIS call. Standing for the owner: (1) gallocr
+leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
+- ✅ **16k SCALE GATE GREEN (post-fix): paged == static byte-exact at ptok=16016**
+  ('</think>one, two, three, four' both arms, -c 20480, split=all). Perf datum banked: paged
+  prefill declines 46→28 t/s over 16k (scalar-kernel window cost — the champion-n_seq>1
+  lever's case, perf-only). 32k rung queued.**
 
 ## 2026-08-12 ★★★ DEFECT #2 FIXED — the missing leaf check in ggml-alloc (upstream-grade)
 
