@@ -550,6 +550,33 @@ stays put ⇒ tracks KV bytes. **For the owner's pile (Grok's board word): scala
 is trending UNUSABLE on throughput alone (~45× decode degradation) — extends "multi-req" from a
 correctness caveat to a perf one.**
 
+### ★★★ DEPTH CELL FINAL (set completed): **5.218 with-r1 · 5.30 sans-r1 — FLAT-TO-WORSE. NARROWS is dead.**
+
+```
+static  814  768  757  777   mean 779.0 s   (r1 = the one-time cell-level cold arm)
+paged  4023 4013 4091 4134   mean 4065.2 s  (3.0% spread; drifts UP across the set — thermal-soak
+                                             candidate, flagged not claimed, inside noise)
+                              ratio 5.218 (with-r1) / 5.30 (sans-r1)  vs 4.864 @ 50k
+```
+All 8 arms CLEAN · consume verified every paged arm · **1c did not reproduce at 127,516 tok/seq**
+(now clean at 50k AND 127.5k, 8 warm reps total). The ratio drifts slightly AGAINST depth: paged's
+serialized composition grows on its decode windows (0.33–0.6 t/s measured from server eval lines)
+faster than static's superlinear prefill decay. **The multi-slot lane's future collapses to the two
+options on the owner's pile: champion `n_seq>1` kernel work, or accept single-slot serving.**
+Pair wall is schedule-invariant (r1/r2 arbitrated visibly differently, landed 10 s apart).
+
+**Bonus datum from the control's first pass: static SOLO at 127.5k = 357 s vs 779 s paired** —
+static itself pays 2.2× for co-scheduling. The paged-solo number comes from the control rerun.
+
+⚠ **GATE-SHAPE BUG, found live:** the paged solo arm VOIDed on binary/source provenance (my own
+mid-run commit — the guard working), and the summary printed **"FAIL — 1c REPRODUCES"**: a
+provenance VOID has no word in the summary taxonomy, so `probe()`'s early return leaked its last
+tee'd line into the verdict string and fell into the `paged:*` bad-counter. Same class as the
+http=000 misscore this file already records. Fix: arms that VOID pre-request must return a verdict
+token the tallier can classify (e.g. `VOID-PROVENANCE`), not free text.
+
+### the running history of the cell, kept for the record
+
 **paged-r1 LANDED: pairwall=4023s CLEAN → rep-1 ratio 4023/814 = 4.94 vs 4.86 at 50k — the FLAT
 branch** (n=1; set continues). ⚠ **And the timeline falsified half my interim: decode_B ran
 ~450–500s (~1.6 t/s) with rid=0 already finished — no co-batch present.** The "~45× co-batch
