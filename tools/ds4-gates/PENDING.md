@@ -1212,11 +1212,17 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
 - ★★★ **FINAL RECOMMENDATION for HIM: DSV4 paged config = `--kv-block-size 64` +
   `DS4P_METAL_CHAMP=1`** — genuinely paged everywhere, 12× prefill for 6% decode. The
   champion partials landing (task #14) is what made this config exist.
-- ✅ **PPL under the final flags (bs64+champ env): 3.8875 ± 0.09889 — IDENTICAL to static and
-  bs16-paged.** Provenance: 1509 paged markers, zero static fallbacks, zero asserts. ⚠ Minor
-  open note: CHAMPN counted 0 in this run (perplexity's ubatch shape likely refuses the
-  champion on n_seq and rides the MMA paged path — legal and correct); the parity datum stands
-  regardless of which legal paged kernel served, but "champion-served PPL" is NOT claimed.
+- ⚠⚠⚠ **RETRACTED — BOTH PPL "parity" runs were STATIC-serving and the rung is VACUOUS.**
+  llama-perplexity has no scheduler; the DSV4 paged path routes through the scheduler; every
+  layer logged "took the STATIC path — no paged context" (CHECKOUT: 0). The killer detail:
+  my "1509 paged markers" provenance grep was COUNTING THAT WARNING — the provenance check
+  matched the refusal text. Gate-plumbing in its purest form; filed. The CHAMPN=0 thread is
+  what unraveled it — pull threads.
+  **What stands (stronger than PPL anyway): the server-driven byte-exact ladder @16k/32k/64k
+  (real CHECKOUT/populate provenance) + the final-config battery with fallback counts and
+  presence counters — bit-level equivalence beats aggregate likelihood. What's lost: an
+  aggregate-likelihood datum for the paged path; replacement would be server-driven logprob
+  summation or wiring perplexity through the scheduler (a feature, boarded not scheduled).**
 - ✅ **FINAL-CONFIG BATTERY COMPLETE with fallback-count provenance** (the impostor lesson
   applied): ub255/ub256/ub512 + L60/L100 all byte-exact, champion presence-counted (64-128
   dispatches per run), **static-fallbacks: 0** grep-verified per arm. Every gate his call
