@@ -1173,10 +1173,21 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
   in-bounds-but-WRONG indices are invisible to the OOB assert. Instrument: dump the plan's
   state_read/write/persist idx arrays at chunk 2 for ub255 vs ub256 and diff.**
 - CACHECHK replay (4 combos incl. partials): bad_rows=0 — no attend-kernel scribbles in the
-  harness. ⇒ the pool overwriter is a SERVER graph node the harness lacks. Sharpened
-  instrument: env-gated dump in the METAL set_rows handler (dst name + idx min/max + dst ne1
-  per dispatch), run ub255 vs ub256, diff the streams — finds the in-bounds-but-wrong writer
-  wherever it lives, without guessing the subsystem first.
+  harness. ⇒ the pool overwriter is a SERVER graph node the harness lacks.
+- ✅ **DS4P_SETROWS_DUMP built and FIRED (landed in ds4ports):** per-dispatch dst/idx-range/bound
+  from the Metal set_rows handler. **First diff is a COUNT: odd layers (cache_k_l11/13/15/17…)
+  get 4 set_rows in ub255 but only 3 in ub256 — one dispatch MISSING per odd layer in the
+  corrupt arm.** The arithmetic that explains it is already read: the dsv4 plan builder's
+  `if (n_writes >= n_blocks) continue;` — a chunk that fills its state blocks EXACTLY skips
+  `append_dummy_block`; a partial chunk appends one. At ub256 every chunk is an exact multiple
+  ⇒ no dummy ⇒ the write set is one narrower than something downstream assumes.
+  **NEXT UNIT: find the consumer that assumes the dummy row exists** (state_read_idxs /
+  persist/restore width arithmetic sized `DSV4_*_RATIO*n_blocks`?) — and note the un-audited
+  companion fact: static cache_k writes still run under paging for these layers (23/layer on
+  even layers), which the raw-builder contract says should be skipped — audit whether those are
+  the csa/hca STATIC fallback (legitimate) or another unfed-input class.
+- Also: the idx dumps double as the in-bounds-but-wrong detector once counts are aligned —
+  diff min/max/sum per (dst, occurrence) next.
 - CPU reference arm has its own separate signature (20 alternating layers differ from N=256)
   — a CPU-reference quirk, parked; the ship path is Metal.
 
