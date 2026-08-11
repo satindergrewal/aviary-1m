@@ -1110,13 +1110,18 @@ gates.** The dev flags stay bring-up-only. This is the gates working, recorded a
   static `</think>` −1.59 over ` Required` −1.81 (gap 0.21); paged ` Required` −1.35 over
   `</think>` −2.74. **Order swapped, ~1.4+ nats of movement — three orders above f32
   reassociation. Real defect.**
-- **Working hypothesis (concrete, next read):** a MISSING GRAPH DEPENDENCY. The dense half reads
-  `get_csa()->get_k` in-graph; the compressor COMMITS rows for the current ubatch in the same
-  graph. If the static path's read-after-write ordering rides on expansion order my branch
-  bypasses, the dense half reads STALE rows for the newest ubatch — error grows with ubatch count,
-  exact at ≤2 ubatches, drift at 3, EOS-level by 4. Matches every observation. Next read: where
-  the CSA commit ops are `build_forward_expand`ed relative to the attention call in
-  `build_attention_impl`, and what orders the static concat's read after them.
+- ~~Working hypothesis: a missing graph dependency~~ — **KILLED BY THE READ (2026-08-12):** the
+  compressor consumes HIDDEN STATES (`cur` via `attn_comp_wkv`), not the raw cache (which also
+  proves the conservative static-raw-write retention truly unnecessary — its comment already
+  said the symptom didn't need it); and the comp-update block runs in `build_attention_impl`
+  AFTER the attention call on BOTH paths — expansion ordering identical. No dependency story.
+- **Revised frame:** raw-only ALSO drifts (fluent-vs-fluent at ~1.7k) — the merge (~1.2k onset)
+  and raw-only (~1.7k onset) plausibly share ONE root in the paged RAW half at depth, with the
+  merge amplifying it earlier (its output feeds 41 of 46 layers). The static raw half reads a
+  128-slot SWA RING; the paged half reads logical history under a 128 band — same visible set in
+  principle, and byte-exact to ≥750 tokens, so whatever breaks is depth-conditional inside that
+  equivalence. **The definitive instrument is unchanged: eval-callback tensor bisect at L100,
+  layer-by-layer, paged-vs-static — first diverging tensor names the site.** Fresh unit.
 
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
