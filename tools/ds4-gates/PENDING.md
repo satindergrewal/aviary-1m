@@ -1235,13 +1235,24 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
     correctly, executed correctly). Under reuse-ON the tap DID see chunk 2 (garbage pos), so
     the bypass shape differs by reuse mode, but in both modes chunk 2+ skips the split-input
     copy pass.
-    ⇒ **PRIME SUSPECT MOVED BACK TO OUR CODE: the paged-scheduler mid-prefill compute path
-    (populate_batch_from → whatever drives ubatches 2+) bypasses llama-context's normal
-    decode/compute route — no input re-copy, no cb_eval, at minimum on Metal with CPU-hosted
-    leafs.** NOT upstream until this is traced.
-    **NEXT UNIT: trace how mid-prefill ubatches 2+ are computed in the paged scheduler (fifth
-    funnel / populate_batch_from / llama_decode loop) — find the compute call that skips
-    sched's input copies; the fix is to route it through the same path chunk 1 takes.**
+    ⚠⚠ **RETRACTED (both, same session): "copy pass never fires" and "chunks 2+ bypass
+    process_ubatch" were CRASHED-RUN ARTIFACTS.** Every DS4P_SCHED_CPY run had died at chunk 2
+    with `tensor read out of bounds` — MY probe read 4 bytes from EMPTY I32 inputs (the
+    aligned chunks' zero-width state-write sets — full circle to the retracted count lead).
+    crash=3/populate=1 in all three "evidence" logs; the clean runs always showed populate=3.
+    Guard added (>=1 element), probe host-side-only.
+  - ★★★ **THE GUARDED RUN GIVES THE REAL ANSWER (complete, crash=0, populate=3):**
+    `chunk1: src=0x148f30400 n=256 src0=0` → correct
+    `chunk2: src=0x148f30400 n=256 src0=-67044352` → **THE HOST inp_pos TENSOR ITSELF HOLDS
+    THE GARBAGE AT SCHED-COPY TIME.** The copy pass fires and copies faithfully; the sched is
+    INNOCENT. set_input wrote pos0=256 correctly to this exact address (INPTR run). ⇒ a
+    HOST-SIDE CLOBBER lands on inp_pos between its set_input and the sched's input copy.
+    The clobber bytes are F16 -inf patterns ⇒ prime suspect: ANOTHER INPUT'S set_input
+    overruns its own tensor (mask-pad fill sized from live state while the tensor kept
+    build-time size — reuse keeps shapes, state grows between chunks).
+    **NEXT UNIT (one probe): in llm_graph_result::set_inputs, read pos[0] after EVERY
+    individual input->set_input call and print the name of the input whose call flips it to
+    garbage. That names the clobberer directly. Then the fix is that input's size arithmetic.**
   - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
     live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
