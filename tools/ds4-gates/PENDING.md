@@ -981,6 +981,19 @@ must bind it + an `has_sinks`/args flag; per-head scalar indexed by `head_idx`.
 under the flag), gate goes green on both arms and all sub-paths (staged/MMA/LPK × prefill/decode ×
 read-only), then the flag defaults on and the DSV4 raw layers unblock at D=512.
 
+### ★★★ TIER 2(b) SHIPPED + **DSV4 PAGES END TO END FOR THE FIRST TIME** (2026-08-12 early, `4e4a75865`+`64a734396`)
+
+Sinks in the scalar kernel: three finalize sites from the map, CPU-reference math verbatim,
+-INF-guarded, buffer(9). **Gate green BOTH arms at every head_dim 64–512** (finite ≤4.5e-08 vs the
+CPU reference; -inf control bit-exact 0.0). Behind `DS4P_SCALAR_SINKS=1`; the ops abort stays the
+default until the flag flips. Same run documents the 18 pre-existing CAUSAL failures kernel-side
+(audit row #4; graph guard fences real archs; kernel fix scoped separately: 2 mask sites + decode
+loop bound `n_tok` + the tail-zero assumption that leans on causal).
+
+**Then the milestone: DSV4 with both bring-up flags serves PAGED — consume=264, zero aborts, zero
+refusals, output byte-identical to static.** Raw layers (D=512 + sinks + window + Hadamard) live on
+the scalar paged kernel. CSA/HCA still static by design until Tier 2(a).
+
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
    sinks-in-scalar OR champion-d512 (raw layers), (c) V=K aliasing (optional, halves raw-layer
