@@ -1184,11 +1184,15 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
   target STATIC cache_k_l* tensors — **no set_rows touches the paged pool at all.** The pool's
   ONLY writer is the funnel's write phase, whose inputs are proven correct (KROW content, slots,
   table), the kernels pass replay, no scribbles — yet KVSUM reads different pool bytes from
-  token 257. One premise in that syllogism is false. **NEXT UNIT: dump k_new row sums from the
-  METAL write phase per dispatch (stderr, same style as DS4P_CPU_KROW) and, in the same runs, a
-  raw-byte dump of pool rows for tokens 255–258 right after chunk 2 — if Metal-side write
-  content matches across arms while the pool bytes differ, the divergence is between the write
-  and the readback (offsets/planes), not in any content.** Also audit whether KVSUM's layer
+  token 257. One premise in that syllogism is false. **NEXT UNIT — corrected once already: a Metal-side k_new
+  probe CANNOT live in the op handler (Metal encodes the whole graph before executing;
+  tensor_get at encode time reads pre-run bytes — built it, realized it lies, reverted before
+  running it). The valid probe is SCHEDULER-SIDE, post-execution: extend the KVSUM block with a
+  raw-byte row dump (first 8 halves of tokens 254–258, layers 0–2, addressed through the block
+  table exactly as debug_seq_kv_checksum does) and diff ub255 vs ub256. If pool bytes differ
+  while CPU-graph content is identical, the false premise is either Metal-side compute
+  divergence or readback addressing — and the byte pattern (garbage vs other-token's row) says
+  which.** Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
 - CPU reference arm has its own separate signature (20 alternating layers differ from N=256)
   — a CPU-reference quirk, parked; the ship path is Metal.
