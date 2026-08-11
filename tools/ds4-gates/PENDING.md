@@ -1154,6 +1154,20 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   across 32k vs static flat ~227 t/s — the scalar window cost curve, THE quantified case for
   the champion-prefill/n_seq>1 lever (purely perf, zero correctness caveats).**
 - 64k rung QUEUED (the last before the flag-flip call): -c 68608, -ngpub 4300, ~2h paged arm.
+- ★★ **CHAMPION LEVER READ (CPU work while the gate ran):** refusal predicate is
+  `bs!=64 | n_seq!=1 | head_dim∉{64,96,128,192,256} | ktype!=f16` — and **DSV4 runs
+  `--kv-block-size 16`, so the champion NEVER serves DSV4 at all (decode included): the whole
+  perf curve measured today is scalar-only.** TWO levers, cheapest first:
+  (1) **`--kv-block-size 64` on DSV4** — zero kernel work; champion serves decode immediately
+      IF the pool/gate arithmetic holds at bs=64 (staged-tile bound: 64×512=32768 > 8192 —
+      the SCALAR path refuses that geometry, so bs=64 needs the champion capability relaxation
+      + D=512 champion instantiation — head_dim 512 NOT in the champion's hd_ok list! ⇒ needs
+      the D=512 champion instantiation first (the template exists for dk256; dk512 must be
+      added + smem-checked). Perf-only, correctness-gated by the existing battery re-run at
+      bs=64.
+  (2) **n_seq>1**: per-query-token seq resolution (the write kernels' batch_offsets/lens scan,
+      already proven) + block_table[seq]/ctx_lens[seq] indexing + per-seq extra-mask spans.
+  Ordering: (1) unlocks DSV4 decode; (2) unlocks multi-slot for both models. Both purely perf.
 
 ## 2026-08-12 ★★★ DEFECT #2 FIXED — the missing leaf check in ggml-alloc (upstream-grade)
 
