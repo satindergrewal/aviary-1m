@@ -1280,11 +1280,20 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
     input leaf.** This ALSO explains reuse-disable changing nothing (fresh graphs hit the same
     kept layout) and the ub%256 knife-edge (only aligned runs produce the topology match that
     keeps the layout while n_kv happens to step).
-    **NEXT UNIT: read ggml_gallocr_needs_realloc + ggml_gallocr_node_needs_realloc for leaf
-    handling (suspect: input-flagged leafs compared by ne at RESERVE time or skipped), build
-    the minimal repro (any model whose mask leaf grows across topologically-matching graphs),
-    then fix upstream-style: realloc on ANY node/leaf size growth. Gate battery afterwards:
-    ub255/ub256/L100/CPU + fresh-graph control + the whole earlier green set.**
+    ✅ needs_realloc READ — and it is correct on paper for every scenario traceable by hand:
+    a grown fresh leaf (data==NULL) sizes at 262144 > size_max 131072 ⇒ realloc fires; a
+    tensor with data!=NULL is SKIPPED (node_size=0 ⇒ "fits") — which is only reachable if
+    the graph result was reused (but the dsv4 reuse check should REJECT on 256≠512), and
+    NOREUSE runs corrupt anyway. **The byte-proof and the code reading are in direct
+    contradiction — one premise about which path actually ran is false.**
+    **NEXT UNIT (one instrument, then the answer falls out): env-gated prints at
+    (a) ggml_gallocr_node_needs_realloc for any node whose node_size > size_max OR whose
+    data!=NULL at check time (name, size_max, node_size, data), (b) every gallocr realloc
+    event, (c) llama-context's reuse decision per ubatch (approved/rejected + which input
+    failed). One ub256 run then answers: did chunk-2 reuse after all (which input check
+    lied?), did realloc fire and STILL produce the overlapping layout (reserve-offset bug),
+    or did the check skip the mask (data!=NULL — who allocated it early?). Fix follows the
+    answer; gate battery ub255/ub256/L100/CPU + fresh-graph control after.**
   - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
     live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
