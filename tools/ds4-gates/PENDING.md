@@ -1115,13 +1115,16 @@ gates.** The dev flags stay bring-up-only. This is the gates working, recorded a
   proves the conservative static-raw-write retention truly unnecessary — its comment already
   said the symptom didn't need it); and the comp-update block runs in `build_attention_impl`
   AFTER the attention call on BOTH paths — expansion ordering identical. No dependency story.
-- **Revised frame:** raw-only ALSO drifts (fluent-vs-fluent at ~1.7k) — the merge (~1.2k onset)
-  and raw-only (~1.7k onset) plausibly share ONE root in the paged RAW half at depth, with the
-  merge amplifying it earlier (its output feeds 41 of 46 layers). The static raw half reads a
-  128-slot SWA RING; the paged half reads logical history under a 128 band — same visible set in
-  principle, and byte-exact to ≥750 tokens, so whatever breaks is depth-conditional inside that
-  equivalence. **The definitive instrument is unchanged: eval-callback tensor bisect at L100,
-  layer-by-layer, paged-vs-static — first diverging tensor names the site.** Fresh unit.
+- **NARROWED AGAIN (2026-08-12, the discriminator's third pass): the defect is an INTERACTION.**
+  At L100, `DS4P_SPLIT=csa` alone is **byte-exact** (raw 5 + CSA 21 = 26 paged layers) and
+  `DS4P_SPLIT=hca` alone is **byte-exact** (25 paged layers) — only `all` (46) diverges. ⇒ The
+  merge algebra AND each class's machinery are BOTH exonerated in vivo, not just on synthetics.
+  The break requires **>26 paged layers at ≥3 ubatches** — a layer-count × depth interaction,
+  which smells like a RESOURCE or a fixed bound (something crossing between 26 and 46 concurrent
+  paged layers per graph), not math. Candidates to check by reading: per-layer arrays sized 32/40
+  anywhere in the paged write/encode path; compute-buffer sizing vs reserve-time n_csa; scheduler
+  per-graph bookkeeping bounds. The tensor bisect at L100 (all-mode) remains the decisive
+  instrument — first diverging layer index against the 26/46 boundary would essentially name it.
 
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
