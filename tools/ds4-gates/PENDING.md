@@ -1201,8 +1201,17 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   (GGML INFO markers are swallowed — the known log hole). ⇒ before any further champion
   claims: a stderr presence counter in the champ dispatch path. The partials-emission card
   stays the real unlock regardless.
-- **RECOMMENDATION standing for HIM: DSV4 paged default config = `--kv-block-size 64`,
-  champion OFF** (battery green + free 27-30% over bs16).
+- ⚠⚠ **RECOMMENDATION REWRITTEN after the 64k champion arm exposed an impostor:** the earlier
+  "bs64 champion-off = 23.0 decode" arm was **STATIC-serving, not paged** — 129 capability
+  warnings in its log ("fails the paged capability contract — this layer takes the static
+  path"). Arms differed in PAGED-NESS ITSELF — the arms-differ-in-one-thing class's grandest
+  instance this session. The TRUE paged-vs-paged table:
+    · bs16 scalar (paged): decode 18.17 t/s, prefill 7.05 t/s tail @64k (9074 s)
+    · **bs64 champion (paged, all 43 layers): decode 17.0-17.5 t/s (-6%), prefill 85.9 t/s
+      @64k (745.6 s) — 12.2× FASTER, byte-exact, 4096 presence-counted dispatches.**
+- ★★★ **FINAL RECOMMENDATION for HIM: DSV4 paged config = `--kv-block-size 64` +
+  `DS4P_METAL_CHAMP=1`** — genuinely paged everywhere, 12× prefill for 6% decode. The
+  champion partials landing (task #14) is what made this config exist.
 - ✅ **CHAMPION IN-SERVER: PROVEN AND HONESTLY A LOSS (for now).** The graph-side
   champ_geometry was the THIRD contract copy still lacking 512 — fixed in lockstep, and the
   relaxation is now `!partials`-gated after the smem assert correctly aborted the first try
