@@ -1138,10 +1138,16 @@ gates.** The dev flags stay bring-up-only. This is the gates working, recorded a
    chunk… which contradicts the byte-exact outputs at ≤750 tokens **unless the tap itself
    perturbs**: cb_eval works by splitting the graph at observed tensors, and the paged op FUSES
    its KV write — split-induced scheduling around a fused-write op is plausible interference.
-3. **Control required before ANY of (2) is believed:** tap-on vs tap-off byte-compare of the
-   paged output at L60 (where untapped output is byte-exact). If tap-on changes the output, the
-   instrument interferes and needs a non-splitting design (in-graph sum-reduction tensors
-   appended to the graph instead of cb_eval).
+3. ✅ **The control RAN: tap-on vs tap-off at L60 — outputs IDENTICAL.** No output-level
+   interference. Which sharpens (2) into a paradox that names the next instrument: chunk-1
+   (tokens 0–503) is the SAME computation in the L60 and L100 runs; L60 is byte-exact end-to-end,
+   so a real 100%-level chunk-1 CSA divergence CANNOT propagate — yet the sums scream. Either
+   cb_eval's split-scheduling yields SUM artifacts (reading buffers already recycled by
+   ggml-alloc reuse) without touching outputs, or a real divergence cancels downstream
+   (implausible). ⇒ **Next instrument: in-graph reduction nodes** — append ggml_sum tensors for
+   the watched names INTO the graph (immune to split/reuse artifacts by construction), then
+   re-run the span-matched comparison. Also: token arithmetic resolved — the prompt is 1,018
+   tokens (static chunks 504+508+4+2, paged 504+512+2, chunk 1 span-aligned at 0–503 both arms).
    Also, from the SET trace: the single `ctx=0x0` fifth-funnel fire is INIT-TIME (before
    "listening"), not the request — the first-ubatch-missing-keys theory is DEAD as stated; the
    request's init_batches all carry a live paged ctx.
