@@ -1212,6 +1212,11 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
 - ★★★ **FINAL RECOMMENDATION for HIM: DSV4 paged config = `--kv-block-size 64` +
   `DS4P_METAL_CHAMP=1`** — genuinely paged everywhere, 12× prefill for 6% decode. The
   champion partials landing (task #14) is what made this config exist.
+- ✅ **PPL under the final flags (bs64+champ env): 3.8875 ± 0.09889 — IDENTICAL to static and
+  bs16-paged.** Provenance: 1509 paged markers, zero static fallbacks, zero asserts. ⚠ Minor
+  open note: CHAMPN counted 0 in this run (perplexity's ubatch shape likely refuses the
+  champion on n_seq and rides the MMA paged path — legal and correct); the parity datum stands
+  regardless of which legal paged kernel served, but "champion-served PPL" is NOT claimed.
 - ✅ **FINAL-CONFIG BATTERY COMPLETE with fallback-count provenance** (the impostor lesson
   applied): ub255/ub256/ub512 + L60/L100 all byte-exact, champion presence-counted (64-128
   dispatches per run), **static-fallbacks: 0** grep-verified per arm. Every gate his call
