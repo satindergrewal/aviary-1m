@@ -1212,6 +1212,16 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   **Champion earns nothing for DSV4 until partials emission serves all 43 layers — the card
   is the whole game now.** Contract-copy count: FOUR sites must move in lockstep (metal hd_ok,
   vec builder, graph champ_geometry, and the abort predicate) — consolidation candidate.
+- ★ **PARTIALS EMISSION: PREFILL HALF LANDED (inert).** The champ store branch is in
+  (un-normalized O, M@DV S@DV+1, DV+2 scalar rows), library compiles, existing arms pass.
+  DELIBERATELY unreachable: no graph relaxation yet, because the DECODE half (champ_vec) is
+  undone and relaxing prefill alone strands decode partials layers with no legal bs=64
+  executor. **Vec-half design note (read done): champ_vec ALREADY emits S/M after results for
+  its NWG>1 cross-workgroup combine (`dst1 = dst + nrows*DV*NWG`, 'store S and M') — its
+  partials mode = reuse that emission shape at the op-level [D+2] layout, skip the NWG==1
+  inline 1/S. FRESH-SESSION UNIT: vec partials + host op_params[9] champion admit + graph
+  relaxation (all three together) + harness partials replay at bs=64 + decode-shaped
+  partials arm + server A/B.**
 
 ## 2026-08-12 ★★★ DEFECT #2 FIXED — the missing leaf check in ggml-alloc (upstream-grade)
 
