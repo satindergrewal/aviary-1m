@@ -963,6 +963,24 @@ logs `using the dsv4 composite's paged attention pool`, server serves.
 `rel/rel_extent`: audited CLEAN on both paths (scalar :3326/:3566, champ mask fill :13016).
 **The table has no undiffed rows; a fifth hole needs a NEW kernel argument to exist first.**
 
+### ★ TIER 2(b) IMPLEMENTATION MAP — sinks in the scalar kernel (written before implementing)
+
+**Verifier exists:** `test-paged-vs-cpu` sink_mode 1 (finite sinks vs CPU reference) + sink_mode 2
+(-inf sink must bit-match the no-sinks answer — plumbing and math fail on DIFFERENT arms).
+
+**Finalize sites in `kernel_paged_attn_f32`, enumerated by grep over :3123–3760 — exactly three:**
+| site | path | state | sink join (before the divide) |
+|---|---|---|---|
+| :3387 | MMA prefill, per-row | `Mr[jl]`, `Sr[jl]`, `so[]` | `m2=max(Mr,sink); Sr=Sr·e^{Mr−m2}+e^{sink−m2}; so·=e^{Mr−m2}` |
+| :3680 | vec decode | `m_i`, `l_i`, `accv[]` | same shape |
+| :3756 | decode combine | `l_all` (+ its m) | same shape, at the COMBINED max |
+
+**Plumbing:** the sinks buffer is op `src[11]` (champion already consumes it); the scalar encode
+must bind it + an `has_sinks`/args flag; per-head scalar indexed by `head_idx`.
+**Sequencing:** implement behind `DS4P_SCALAR_SINKS=1` (the abort at ops.cpp:5635 relaxes only
+under the flag), gate goes green on both arms and all sub-paths (staged/MMA/LPK × prefill/decode ×
+read-only), then the flag defaults on and the DSV4 raw layers unblock at D=512.
+
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
    sinks-in-scalar OR champion-d512 (raw layers), (c) V=K aliasing (optional, halves raw-layer
