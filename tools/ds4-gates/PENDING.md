@@ -1250,9 +1250,27 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
     The clobber bytes are F16 -inf patterns ⇒ prime suspect: ANOTHER INPUT'S set_input
     overruns its own tensor (mask-pad fill sized from live state while the tensor kept
     build-time size — reuse keeps shapes, state grows between chunks).
-    **NEXT UNIT (one probe): in llm_graph_result::set_inputs, read pos[0] after EVERY
-    individual input->set_input call and print the name of the input whose call flips it to
-    garbage. That names the clobberer directly. Then the fix is that input's size arithmetic.**
+    ✅✅✅ **CLOBBERER NAMED AND MECHANISM COMPLETE (POSWATCH stage 1 + 2, one run each):**
+    stage 1: `llm_graph_input_dsv4::set_input` flips pos[0] 256 → -67044352.
+    stage 2: the flip is exactly across **`inp_raw->set_input`** (before-raw=256,
+    after-raw=garbage; csa/hca/lid innocent). inp_raw's mask fill delegates to the CORE
+    `kv_swa->set_input_kq_mask`, which writes **LIVE (post-apply) n_kv columns** — at chunk 2
+    that is 512 — into a mask tensor the reused graph built with 256 columns
+    (`dsv4_build_raw_kq_mask` ne[0] = build-time n_kv; iswa n_kv is PADDED in 256 steps, so it
+    jumps 256→512 exactly at chunk 2). A 256-column × 256-row block of F16 -inf sprays past
+    the tensor into the adjacent host allocs — inp_pos among them.
+    **And the ub≡0 mod 256 pattern is fully explained as "when can_reuse accidentally
+    approves":** dsv4 graph reuse passes only when consecutive chunks have IDENTICAL
+    plan-vector sizes (csa blocks 256/4=64==64 etc.) — exactly the aligned chunks. Unaligned
+    chunks fail some `dsv4_can_reuse_tensor_1d`, get fresh graphs, and are always correct.
+    `dsv4_can_reuse_raw_kq_mask` compares ne[0] to get_n_kv() at CAN_REUSE time (pre-apply,
+    still 256) — the fill runs post-apply (512): admission checked, delivery not — the
+    admission/delivery class AGAIN, instance 5.
+    **FIX (next session, with the full gate battery ub255/ub256/L100/CPU + fresh-graph
+    control): mirror mainline — the raw context must SNAPSHOT n_kv at construction and both
+    the reuse check and the fill must use the same snapshot; alternatively (and additionally,
+    defensively) the fill must be bounded by dst->ne. Root fix is the snapshot; the bound is
+    the guard that would have made this loud.**
   - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
     live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
