@@ -1154,10 +1154,20 @@ was invisible to the check.
 - ⚠ L100 split=all: still diverges at ub {384, 509, 512} — chunk-shape-INDEPENDENT ⇒ the
   ORIGINAL depth-dependent merge defect, now isolated from all allocator noise. L60 (616 tok)
   exact, L100 (1018 tok) diverges ⇒ onset in (616, 1018] with the split active.
-**NEXT: (1) L-bisect the onset in 616..1018 under split=all; (2) csa-vs-hca at the onset
-(pre-fix data said csa diverges / hca exact — retest post-fix); (3) upstream the leaf check as
-its own minimal PR (any arch with view-consumed growing inputs is exposed) — HIS CALL on
-timing/venue per third-party-repo rule.**
+**L-bisect + logprob ruling (post-fix, this session):**
+- L70/L98 arms byte-agree; L80/L90 agree (on a DIFFERENT answer — the model's own
+  length-sensitivity, both arms together); L95 and L100 disagree — NON-monotonic ⇒ knife-edge
+  logit territory, not a hard onset.
+- L100 top-logprobs: static top2 gap only 0.21 nats ('</think>' -1.595 vs ' Required' -1.807);
+  paged shifts '</think>' by ~1.1 nats (to -2.736, rank 3). **~1-nat drift at 1018 tokens from
+  the SPLIT arithmetic specifically (split=off byte-exact) — above fp tie-break noise, below
+  the old 'clearly real' bar. The pre-fix '>1.4 nats REAL' ruling was allocator-contaminated
+  and is SUPERSEDED.**
+**NEXT: quantify, don't knife-edge — llama-perplexity static vs paged(split=all) same text,
+ctx 2048: PPL delta is the drift metric that scales and has no tie-break artifacts. If ΔPPL
+≈ 0 (<0.1%), the split is numerically healthy and flag-flip gates move to scale; if PPL
+degrades with depth, the merge arithmetic (f16 mask? LSE order?) needs precision work.
+Then: csa-vs-hca retest only if PPL indicts; leaf-check upstream PR — HIS CALL.**
 
 ## 2026-08-12 — THE DEPTH DEFECT WAS NEVER DEPTH: ubatch-size knife-edge, one corruptor killed, one cornered
 
