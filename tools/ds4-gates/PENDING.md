@@ -1192,6 +1192,17 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
       + the OMS-vs-CPU and norm self-check arms; then server battery at bs=64.
   **After the 64k gate frees the GPU: bs=64 end-to-end battery → decode A/B (scalar-bs16 vs
   champ-bs64) → partials emission → full-champ DSV4 A/B.**
+- ✅ **bs=64 BATTERY GREEN** (L60 ub255/256/512 + L100 ub512 all byte-match static).
+- ✅ **DECODE A/B DONE, with the one-factor control that killed the easy story:**
+  bs16: 18.17 t/s decode / 143.5 prefill · bs64+champ: 23.0 / 186.7 · **bs64 NO-champ:
+  23.01 / 187.1 — IDENTICAL.** The whole +27% decode / +30% prefill gain is BLOCK-SIZE-64
+  scalar efficiency; **the champion's in-server contribution is unmeasurable at this config.**
+  The harness proved dk512 works in isolation; whether it SERVES in the server is unverified
+  (GGML INFO markers are swallowed — the known log hole). ⇒ before any further champion
+  claims: a stderr presence counter in the champ dispatch path. The partials-emission card
+  stays the real unlock regardless.
+- **RECOMMENDATION standing for HIM: DSV4 paged default config = `--kv-block-size 64`**
+  (battery green + free 27-30% over bs16).
 
 ## 2026-08-12 ★★★ DEFECT #2 FIXED — the missing leaf check in ggml-alloc (upstream-grade)
 
