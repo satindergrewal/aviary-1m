@@ -1126,6 +1126,26 @@ gates.** The dev flags stay bring-up-only. This is the gates working, recorded a
   per-graph bookkeeping bounds. The tensor bisect at L100 (all-mode) remains the decisive
   instrument — first diverging layer index against the 26/46 boundary would essentially name it.
 
+### ★ THE TAP IS BUILT AND RAN (2026-08-12, `DS4P_TENSOR_SUMS` cb_eval hook in the server) — three findings, one confound
+
+1. **The arms CHUNK THE PROMPT DIFFERENTLY** (from ne-keyed sums): static ran 504/508/4(+2)-token
+   graphs, paged 504/512/2 — the paged scheduler chunks by its own budget, the static server by
+   its own. ⇒ naive per-graph tensor comparison is invalid; only span-matched chunks compare
+   (chunk 1 = tokens 0–503 aligns on both arms). Occurrence-aligned comparisons made earlier
+   tonight were garbage for exactly this reason, caught by counting.
+2. **On the span-matched chunk 1, `attn_csa_lid-*` sums diverge massively** (layer 2 rel≈1.19,
+   layer 18 rel≈192) while raw layers are close — pointing INTO the CSA merge on the very first
+   chunk… which contradicts the byte-exact outputs at ≤750 tokens **unless the tap itself
+   perturbs**: cb_eval works by splitting the graph at observed tensors, and the paged op FUSES
+   its KV write — split-induced scheduling around a fused-write op is plausible interference.
+3. **Control required before ANY of (2) is believed:** tap-on vs tap-off byte-compare of the
+   paged output at L60 (where untapped output is byte-exact). If tap-on changes the output, the
+   instrument interferes and needs a non-splitting design (in-graph sum-reduction tensors
+   appended to the graph instead of cb_eval).
+   Also, from the SET trace: the single `ctx=0x0` fifth-funnel fire is INIT-TIME (before
+   "listening"), not the request — the first-ubatch-missing-keys theory is DEAD as stated; the
+   request's init_batches all carry a live paged ctx.
+
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
    sinks-in-scalar OR champion-d512 (raw layers), (c) V=K aliasing (optional, halves raw-layer
