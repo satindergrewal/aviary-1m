@@ -1138,6 +1138,47 @@ gates.** The dev flags stay bring-up-only. This is the gates working, recorded a
    chunk… which contradicts the byte-exact outputs at ≤750 tokens **unless the tap itself
    perturbs**: cb_eval works by splitting the graph at observed tensors, and the paged op FUSES
    its KV write — split-induced scheduling around a fused-write op is plausible interference.
+## 2026-08-12 — THE DEPTH DEFECT WAS NEVER DEPTH: ubatch-size knife-edge, one corruptor killed, one cornered
+
+**The mystery reduced to a knife-edge in ONE session:** L60 paged is byte-exact at ub
+{128, 224, 255, 257, 384, 512} and corrupt at ub {256} (×3 deterministic) — and L100/ub512's
+"depth onset 750–1230" is this same defect: its middle chunk is exactly 512 tokens. Depth is
+EXONERATED; the trigger is a prompt chunk whose execution corrupts state, surfacing as
+chunk-size-correlated. `DS4P_SPLIT` unset means **"all"**, not off — every earlier "raw-only"
+run under that assumption actually ran the split (board corrected).
+
+**Defect #1 FOUND, PROVEN, DELETED (fa564bf42):** the conservative static raw cpy_k retained in
+the csa/hca split branches consumed a k_idxs input that NOTHING sets when the paged branch
+serves. CPU caught it the moment the run went `-ngl 0`: `set_rows OOB dst=cache_k_l2
+src1=leaf_96 i1=-2.9e17` (the assert now names its offender). Metal scatters those garbage
+indices unchecked into the pool — all-planes corruption. The "mod-256" pattern was ALLOCATOR
+LAYOUT: at most shapes the stale leaf held the previous chunk's still-plausible indices; at
+256-multiples it held poison. Class: admission/delivery mismatch — the write was kept, its
+input feed never existed. The deletion candidate was the corruptor.
+
+**Instruments built (all landed):** DS4P_TEST_REPLAY harness arm (exact server geometry
+D=512/H=64/HKV=1/BS=16, two prefill chunks via rows_dec, partials + sinks wired into
+run_paged_split) — ALL replay combinations PASS, exonerating the kernels; DS4P_ARGDUMP now
+prints via stderr (the server log callback swallows GGML INFO — an ARGDUMP that cannot reach
+the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows OOB assert.
+
+**Defect #2 REMAINS (the ub-256 knife-edge survives the deletion), now cornered:**
+- k_new CONTENT identical ub255-vs-ub256 (CPU KROW, 253 rows, 0 diffs); write_slots contiguous
+  and identical (ARGDUMP); block table identical; ctx/batch lens correct.
+- Kernels pass replay at the exact shape; GRAPH_OPTIMIZE/FUSION/CONCURRENCY disables change
+  nothing; graph-reuse disable changes nothing; checkpoints-off changes nothing.
+- Metal KVSUM: chunk-1 identical, ALL 43 planes differ from token 257. Corrupt row deltas
+  repeat with the prompt's token-id period → position-blind content.
+- **Next suspect, by elimination: the dsv4 state-plan set_rows/get_rows indices —
+  in-bounds-but-WRONG indices are invisible to the OOB assert. Instrument: dump the plan's
+  state_read/write/persist idx arrays at chunk 2 for ub255 vs ub256 and diff.**
+- CPU reference arm has its own separate signature (20 alternating layers differ from N=256)
+  — a CPU-reference quirk, parked; the ship path is Metal.
+
+**Falsified this session:** graph-reuse theory, chunk-count theory, middle-chunk>window theory,
+checkpoint theory, rope-fusion theory, Metal reorder/concurrency theories, write-kernel and
+attend-kernel defects at this shape, k_new content divergence, slot/table divergence.
+
 3. ✅ **The control RAN: tap-on vs tap-off at L60 — outputs IDENTICAL.** No output-level
    interference. Which sharpens (2) into a paradox that names the next instrument: chunk-1
    (tokens 0–503) is the SAME computation in the L60 and L100 runs; L60 is byte-exact end-to-end,
