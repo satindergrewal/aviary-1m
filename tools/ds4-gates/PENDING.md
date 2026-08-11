@@ -1032,6 +1032,23 @@ result.
 ⇒ A is the recommendation; the sink join precedent says the (O,M,S) merge math is the same online
 softmax algebra just proven at three sites. Decision + implementation next session (multi-day).
 
+### ✅ STEP 1 GREEN (`e4264087b` red → `71fa34114` green, 2026-08-12)
+
+`ggml_paged_attn_banded_partials` → `[D+2,H,N]` (O un-normalized, M at D, S at D+1). **The CPU op
+is the M/S oracle by design** — normalize(partials)==normal cannot see a wrong M (M cancels from
+O/(S+eps)) and M is what the merge depends on; the gate compares O, M, S each against CPU AND runs
+the norm self-check. Red-first caught a real bug on the way: the first Metal build widened `q_off`
+to the dst stride and **attended with wrong queries** (~2e-2 norm divergence — admission/delivery
+inside its own fix). Split offsets → **ALL PASSED**: OMS ≤3.8e-06, norm ≤3e-08, D=64–512, full
+sweep intact. Contract rows landed with the argument: partials SCALAR-ONLY (champion excluded at
+dispatch) + NO SINKS (the sink joins once, at the merge; CPU asserts).
+
+**Next unit (step 2): the graph-side merge** — plain ggml algebra, no new kernel:
+`m=max(M1,M2); out=(O1·e^{M1−m}+O2·e^{M2−m}+sink-fold)/(S1·e^{M1−m}+S2·e^{M2−m}+e^{sink−m})` —
+then the CSA/HCA callers split raw-half (partials, paged) from compressed-half (dense masked,
+decomposed softmax emitting its own O/M/S via existing ops), acceptance = paged CSA output ==
+static CSA output at the model level.
+
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
    sinks-in-scalar OR champion-d512 (raw layers), (c) V=K aliasing (optional, halves raw-layer
