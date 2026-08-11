@@ -1153,7 +1153,12 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   both arms, -c 36864, split=all). **Perf series complete: paged prefill 46→28→23→20→16→14 t/s
   across 32k vs static flat ~227 t/s — the scalar window cost curve, THE quantified case for
   the champion-prefill/n_seq>1 lever (purely perf, zero correctness caveats).**
-- 64k rung QUEUED (the last before the flag-flip call): -c 68608, -ngpub 4300, ~2h paged arm.
+- ✅✅ **64k GATE GREEN: paged == static byte-exact at ptok=64016** ('</think>one, two,
+  three, four' both arms, -c 68608, split=all). **THE SCALE LADDER IS COMPLETE: PPL parity
+  @2048 → byte-exact @16k → @32k → @64k, all post-both-fixes. The flag-flip has ZERO
+  technical blockers left — it is now purely HIS call.** Perf series final point: paged
+  prefill 7.05 t/s at 64k depth (vs static ~187) — the scalar tail, the champion-partials
+  card's motivation in one number.
 - ★★ **CHAMPION LEVER READ (CPU work while the gate ran):** refusal predicate is
   `bs!=64 | n_seq!=1 | head_dim∉{64,96,128,192,256} | ktype!=f16` — and **DSV4 runs
   `--kv-block-size 16`, so the champion NEVER serves DSV4 at all (decode included): the whole
