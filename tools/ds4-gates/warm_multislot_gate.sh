@@ -23,10 +23,14 @@ WT=$HOME/Documents/GitHub/llama.cpp-ds4ports
 SRV=$WT/build-metal/bin/llama-server
 M=${MS_MODEL:-$HOME/Documents/GitHub/ornith-models/Ornith-1.0-9B-1M-GGUF/ornith-1.0-9b-1M-IQ2_M.gguf}
 REPS=${MS_REPS:-6}
-LOGDIR=${CLAUDE_JOB_DIR:-/tmp}/warmslot; mkdir -p "$LOGDIR"
+# ⚠ PER-RUN dir, not fixed. The fixed dir cost evidence within the hour on 2026-08-10: the scalar
+# re-run overwrote the champion run's paged-r1.log, and by the time it was needed the binary AND the
+# configuration had both changed -- the run was repeatable, the specific comparison was not. Rule
+# (PENDING.md): any gate whose logs feed a cross-run comparison gets a per-run $D REGARDLESS of runtime.
+LOGDIR=${CLAUDE_JOB_DIR:-/tmp}/warmslot/$(date +%Y%m%d-%H%M%S); mkdir -p "$LOGDIR"
 OUT=$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-$(date +%Y%m%d-%H%M).txt
 PORT=${MS_PORT:-21500}
-echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  model=$(basename "$M")  reps=$REPS  regime=WARM" | tee "$OUT"
+echo "tip: $(cd "$WT" && git rev-parse --short HEAD) dirty=$(cd "$WT" && git status --porcelain|wc -l|tr -d ' ')  model=$(basename "$M")  reps=$REPS  regime=WARM  logdir=$LOGDIR" | tee "$OUT"
 
 # ★★ LONG-CONTEXT MODE (added 2026-08-10) -- THE EMPTY COMPOSITION CELL.
 #
@@ -137,6 +141,32 @@ probe() { # $1=tag $2=flags
         [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORT/health 2>/dev/null)" = "200" ] && break
         kill -0 $pid 2>/dev/null || { echo "$tag: SERVER DIED" | tee -a "$OUT"; return 1; }; sleep 1; done
 
+    # ★ BINARY/SOURCE PROVENANCE (ported from paged_parity_gate, 2026-08-10). This gate's own header
+    # stamps `tip:` from the TREE, and on 2026-08-10 the tree was at 92c2957cd while the binary that
+    # actually ran was a4e8aeb08 -- one commit behind, and nothing in the artifact could say so.
+    # Read the commit the BINARY prints into its own log (`build N (sha)`, emitted at -lv >= 4),
+    # compare against the tree, VOID the arm on mismatch unless MS_ALLOW_STALE_BIN=1 says the older
+    # binary is being measured on purpose. Verified live: the line appears at -lv 4, NOT at -lv 3,
+    # so at MS_LV < 4 this degrades to "UNVERIFIED", stated rather than silent.
+    local binsha srcsha
+    binsha=$(grep -m1 -oE 'build [0-9]+ \([0-9a-f]+\)' "$LOGDIR/$tag.log" | grep -oE '\([0-9a-f]+\)' | tr -d '()')
+    srcsha=$(cd "$WT" && git rev-parse --short HEAD 2>/dev/null)
+    if [ -n "$binsha" ] && [ -n "$srcsha" ]; then
+        # compare on the shorter of the two lengths -- the binary prints its own abbreviation
+        local shalen=${#binsha}; [ ${#srcsha} -lt "$shalen" ] && shalen=${#srcsha}
+        if [ "${binsha:0:$shalen}" != "${srcsha:0:$shalen}" ]; then
+            echo "$tag: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at $binsha, tree at $srcsha." | tee -a "$OUT"
+            if [ "${MS_ALLOW_STALE_BIN:-0}" != "1" ]; then
+                echo "$tag: VOID -- refusing to attribute this arm to source the binary does not contain." | tee -a "$OUT"
+                echo "      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE." | tee -a "$OUT"
+                kill $pid 2>/dev/null; return 1
+            fi
+            echo "$tag: MS_ALLOW_STALE_BIN=1 -- proceeding, and the mismatch is recorded above." | tee -a "$OUT"
+        fi
+    else
+        echo "$tag: ⚠ could not read the binary's build commit (MS_LV<4?) -- provenance UNVERIFIED for this arm." | tee -a "$OUT"
+    fi
+
     # ★ CONSUMER PRECONDITION -- for the PAGED arm only. If no layer consumed the paged context, a CLEAN
     # verdict is vacuous: it measured the static path wearing paged flags. Requires MS_LV=5.
     # (Earlier tonight "Gemma4 runs zero paged layers" was asserted from a -lv 4 log that COULD NOT print
@@ -156,12 +186,20 @@ probe() { # $1=tag $2=flags
         kill $pid 2>/dev/null; return 1;; esac
 
     # now the concurrent pair, WARM
-    local ra rb
+    # ★ PAIR WALL-CLOCK (added 2026-08-10 after the 6.6x retraction). A per-sequence tok/s at -np>1
+    # is the WRONG metric: the slots do not progress together (measured: one slot at 36,282 tokens
+    # while the other sat at 65), so a per-seq rate depends entirely on scheduler phase at the moment
+    # of reading. The robust quantity is wall-clock for the WHOLE pair to complete, timed here around
+    # launch->join of all sequences. 1-second resolution; meaningful only when MS_FILL makes the pair
+    # take minutes, and the summary says so when it does not.
+    local ra rb pair_t0 pair_t1 pairwall
     local n=${MS_NP:-2} i pids=()
+    pair_t0=$(date +%s)
     for i in $(seq 1 "$n"); do
         ask "$(fill_prompt "$i" "${PROMPTS[$((i-1))]}")" > "$LOGDIR/$tag-S$i.txt" & pids+=($!)
     done
     for i in "${pids[@]}"; do wait "$i"; done
+    pair_t1=$(date +%s); pairwall=$((pair_t1 - pair_t0))
     local -a R=()
     for i in $(seq 1 "$n"); do R+=("$(cat "$LOGDIR/$tag-S$i.txt")"); done
 
@@ -287,8 +325,12 @@ probe() { # $1=tag $2=flags
            | grep -oE '/ *[0-9]+ tokens' | grep -oE '[0-9]+' | sort -rn | head -1)
     ptok=${ptok:-0}
     blocks=$(( ptok / ${MS_BLK:-16} ))
-    printf "  %-14s np=%-2s prime=%-4s post=%-4s consume=%-6s ptok=%-7s blocks=%-6s -> %s\n" \
-        "$tag" "$n" "${p:0:4}" "${p3:0:4}" "$consumed" "$ptok" "$blocks" "$verdict" | tee -a "$OUT"
+    # record the pair wall beside its verdict: the summary means over CLEAN arms only, because a
+    # REFUSED-BY-CONTRACT arm's wall is a STATIC-path time wearing paged flags, and a VOID arm's
+    # wall is the timeout constant.
+    echo "$pairwall $verdict" > "$LOGDIR/$tag.pairwall"
+    printf "  %-14s np=%-2s prime=%-4s post=%-4s consume=%-6s ptok=%-7s blocks=%-6s pairwall=%-5ss -> %s\n" \
+        "$tag" "$n" "${p:0:4}" "${p3:0:4}" "$consumed" "$ptok" "$blocks" "$pairwall" "$verdict" | tee -a "$OUT"
     if [ "$blocks" -le 1 ]; then
         echo "      ⚠ COVERAGE: the longest prompt spans $blocks block(s) at --kv-block-size ${MS_BLK:-16}." | tee -a "$OUT"
         echo "        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is" | tee -a "$OUT"
@@ -323,6 +365,22 @@ for v in "${V[@]}"; do case "$v" in
     paged:*) pb2=$((pb2+1));; esac; done
 echo "static: $sc clean / $sb bad     paged: $pc clean / $pb2 bad / $pr refused-by-contract / $pv no-response" | tee -a "$OUT"
 echo "verdicts: ${V[*]}" | tee -a "$OUT"
+# ★ PAIR WALL-CLOCK SUMMARY -- the metric that replaces the RETRACTED "scalar paged is 6.6x slower"
+# (that number came from ONE timed-out run's per-seq rate; the re-run hit the same point 2.8x faster).
+# Means over CLEAN arms only; n printed beside each mean because a rate without its sample size
+# cannot be audited (artifact-omits-the-load-bearing-field, 4x in one night).
+swall=$(cat "$LOGDIR"/static-*.pairwall 2>/dev/null | awk '$2=="CLEAN"{s+=$1;n++} END{if(n)printf "%.1f %d",s/n,n}')
+pwall=$(cat "$LOGDIR"/paged-*.pairwall  2>/dev/null | awk '$2=="CLEAN"{s+=$1;n++} END{if(n)printf "%.1f %d",s/n,n}')
+if [ -n "$swall" ] && [ -n "$pwall" ]; then
+    set -- $swall; sw=$1; sn=$2; set -- $pwall; pw=$1; pn=$2
+    ratio=$(awk -v p="$pw" -v s="$sw" 'BEGIN{if(s>0)printf "%.3f",p/s; else print "n/a"}')
+    echo "pair wall-clock: static mean ${sw}s (n=$sn)  paged mean ${pw}s (n=$pn)  paged/static = $ratio" | tee -a "$OUT"
+    awk -v s="$sw" -v p="$pw" 'BEGIN{ if (s<30 || p<30) { \
+        print "  ⚠ COARSE: a mean under 30s against 1-second timer resolution is not a speed claim."; \
+        print "    Raise MS_FILL until the pair takes minutes before quoting this ratio." } }' | tee -a "$OUT"
+else
+    echo "pair wall-clock: NOT COMPARABLE -- need >=1 CLEAN arm on each side (static: ${swall:-none}; paged: ${pwall:-none})" | tee -a "$OUT"
+fi
 # ⚠ A NO-RESPONSE ARM CANNOT INDICT ANYTHING. It is checked BEFORE the corruption headline,
 # because the two runs that produced it on 2026-08-10 both printed "1c REPRODUCES" from evidence
 # that contained no answer at all.

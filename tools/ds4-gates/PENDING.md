@@ -484,6 +484,36 @@ served at that moment. **A per-sequence rate is the wrong metric for a multi-slo
 one is **wall-clock for both sequences to complete**, which neither run produced: the first timed
 out, the second was stopped for a machine restart.
 
+### ★★★ 2026-08-11 17:20 — THE REPLACEMENT NUMBER: **paged/static = 4.86 on pair wall-clock**
+
+`warmslot-20260811-1559.txt`, 35B Q4_K_M, `-c 131072 -np 2`, block 16, champ off, **50,011 tok/seq
+measured** (3,125 blocks/seq), `ignore_eos`-free short answers, `MS_NPRED=768`, 8 arms, order
+alternated, ALL CLEAN:
+
+```
+static pairwall  160  158  162  159   mean 159.8 s   spread ±1.3%
+paged  pairwall  746  812  752  799   mean 777.2 s   spread ±4.3%
+                                      paged/static = 4.864
+```
+
+- Every paged arm **verified consuming** (engine no-consumer alarm silent, refusals=0); every arm's
+  needle answers correct; primes and post-pair primes healthy — **1c did not reproduce in 4 warm
+  reps at 50k/seq.**
+- The static side's four positions agree to ±1.3% **including static-r1 immediately after a machine
+  restart** — the pre-registered cold-r1 concern did not materialise (the model had been paged in
+  by the two dead runs before it).
+- The scheduler behavior that invalidated the per-seq metric is now measured, not anecdotal: the
+  paged scheduler serializes prefill (rid=0 to 100% while rid=1 holds at ~60 tokens), so per-seq
+  rates read scheduler phase. Pair wall prices it correctly.
+- **Scope, pre-registered before the run: 50k/seq does NOT enter the 256k–1M band.** This number
+  replaces the retracted 6.6× claim; it does not answer the bar at multi-slot. And per the
+  co-registration with Grok (#9461/#9463): the direction survived, but 4.86 is not "6.6 corrected"
+  — the retracted figure measured a different quantity (one slot's starvation window) and stays a
+  non-measurement.
+- ⚠ What 4.86 is NOT: not a champion number (champion cannot multi-slot), not single-slot (that is
+  1.97x FASTER at 512k), not a corruption verdict (that is the PASS). It prices the scalar kernel
+  serving two long slots concurrently, on one model, one box, n=4.
+
 ⇒ **What SURVIVES the retraction, because it rests on different evidence:**
 - `champion + multi-slot` is **impossible by contract** — from an abort message and a source read,
   not from timing. **Unaffected.**
@@ -491,6 +521,61 @@ out, the second was stopped for a machine restart.
   `refusals=0`, no abort, both prior arms' static controls CLEAN. **Unaffected.**
 - **"Scalar multi-slot is too slow to use" is RETRACTED and must be re-measured on wall-clock with
   `MS_TIMEOUT` high enough to finish, n≥2.**
+
+### ★ 2026-08-11 — THE RE-MEASURE IS RUNNING, on an instrument that can now carry it
+
+Post-restart, binary rebuilt at tip `92c2957cd` (it had been committed-not-built). Three edits to
+`warm_multislot_gate.sh`, all smoke-verified at cheap defaults before the real run:
+
+1. **Pair WALL-CLOCK is the metric** (`pairwall` per arm, summary means over CLEAN arms only).
+   Per-sequence tok/s at `-np>1` was the retracted number's root defect: the slots do not progress
+   together (36,282 vs 65 tokens observed), so a per-seq rate reads scheduler phase, not speed.
+   REFUSED-BY-CONTRACT and VOID arms are excluded from the means — one is a static-path time
+   wearing paged flags, the other is the timeout constant. Sub-30s means print their own COARSE
+   warning instead of posing as a speed claim.
+2. **Binary/source provenance ported from `paged_parity_gate`** — this gate stamped `tip:` from the
+   tree while the binary that ran was one commit behind, and nothing in the artifact could say so.
+   Verified live before trusting the regex: the `build N (sha)` line prints at `-lv 4` and NOT at
+   `-lv 3`, so at `MS_LV<4` the check degrades to a stated UNVERIFIED rather than silence.
+3. **Per-run `LOGDIR`** — the fixed dir is the one that overwrote the champion run's log within the
+   hour on 2026-08-10.
+
+Run config matches the retracted one on purpose (35B, `MS_BLK=16`, champ off, `-np 2`, 40k fill/seq)
+with the two things it lacked: `MS_TIMEOUT=1200` and `MS_REPS=4` (n=2 per side). Result lands in
+`results/warmslot-*.txt` when done.
+
+⚠ **First attempt (15:48) VOID, my config: `MS_FILL=40000` tokenised to 50,011 actual tokens against
+a 49,152-token slot** (`MS_CTX=98304 / 2`). The gate's own comment says the ~12-tok/line fill is a
+TARGET, not the record; it undershot 25% and I sized the context to the target. Relaunched 15:59 at
+`MS_CTX=131072` (65,536/slot), `MS_TIMEOUT=1800` — so the cell is **50,011 tok/seq measured**, not
+"40k".
+
+### ⚠⚠ AND THE DEAD RUN PAID FOR ITSELF: PAGED ADMISSION SKIPS THE CHECK STATIC PERFORMS
+
+Same oversized request, both arms, `-np 2`:
+
+```
+static:  <ERR:request (50011 tokens) exceeds the avail>     refused UPFRONT, ~0 s
+paged:   ACCEPTED -> prefilled 50,011 tokens (rid=1 reached progress=1.00 at t=527 s)
+         -> "paged decode failed" (generic), tasks 135/136 at ~281 s, task 235 (the post
+            request, a 12-token prime!) also "paged decode failed"
+```
+
+⇒ **The paged path admits a request the static path refuses, burns minutes of GPU on it, and dies
+with an error that names neither the size nor the limit.** The upfront refusal exists; the paged
+slot path does not run it. Same family as the `--kv-paged`-on-unpageable-arch assert: a designed
+refusal exists elsewhere and the paged path bypasses it. **Fix in ds4ports: run the same
+request-size admission check on the paged slot path, with the same message.** (Also note the shutdown
+`GGML_ASSERT([rsets->data count] == 0)` in that log is my pkill mid-flight, not the defect.)
+GPU-cheap to verify once written: send one oversized request, expect the static-shaped refusal.
+Evidence preserved: `/tmp/warmslot/20260811-154808/paged-r1.log` — the per-run LOGDIR fix is the
+only reason this log survived its own re-run.
+
+⚠ **OPEN QUESTION the fix does NOT answer (raised with Grok, #9456):** the post-pair 12-token prime
+failed the same way as the pair — the failed request left slot state behind. The admission fix stops
+OVERSIZED requests from reaching that state; whether **any** legitimately-failed paged decode also
+poisons its slot is a separate defect the oversized case merely triggered cheapest. Check when the
+GPU frees: fail a paged decode by another route (e.g. pool exhaustion) and probe the slot after.
 
 ---
 
@@ -736,12 +821,12 @@ green server with an unread pool is not.
 `gate_assert_paged_consumed` law is the check that would catch a partial ship, and the acceptance
 bar stays what it was: **capability-contract refusals == 0 on every attention layer**, paged ≡ static.
 
-### ⚠ SEPARATE CHEAP DEFECT: a user-passed flag CRASHES the server
+### ✅ ~~SEPARATE CHEAP DEFECT: a user-passed flag CRASHES the server~~ — FIXED `074672e33` (2026-08-10)
 
-`--kv-paged` on any arch whose memory is not paged-capable hits `GGML_ASSERT` and aborts. **A
-designed refusal — "this model's memory type does not support paging; remove `--kv-paged`" — is
-strictly better than an assert**, and this lane already refuses by design in three other places.
-Small, and squarely inside "make the model work in expected ways".
+`--kv-paged` on an unpageable arch now REFUSES at startup with the named reason instead of
+`GGML_ASSERT`+backtrace (`server-context.cpp:1592`, and the comment there records why
+warn-and-continue was rejected: a silently ignored paged flag is the 2026-08-09 static-vs-static
+trap by design). This row predated the fix; verified closed by reading the shipped code 2026-08-11.
 
 ### Step 0 — RUN IT BEFORE WRITING ANY CODE
 
@@ -957,13 +1042,13 @@ detecting a broken band. It would return a clean green that means nothing.
 | ⛔⛔ **STALE `.res` CAN BE READ AS THIS RUN'S ARM** (found by Grok, 2026-08-09) | If an arm dies, `arm()` returns early, `static.res` is never written, the ABBA rename never happens — and **the previous run's file survives and is loaded as this arm.** Right now `static2.res` on disk is an **8k fixture from my own smoke test**: `n=3665, wall 6.5s, ok=true, needle PASS`. It parses, it passes every check the summariser makes, and it would produce **"paged is 104% SLOWER"** with full confidence. Two one-line fixes: **(a)** assert all four arms share `prompt_n`, else VOID — the field is already recorded and compared against nothing; **(b)** clear `$D/*.res` at gate start. Same class as the stale headers and the stale arch table: **an old file indistinguishable from a new one**, and this instance I created myself by running smoke tests into the measurement directory. |
 | ⚠ **the `.res` omits the field a verdict depended on** | The artifact carries wall/pp/tg/n and **no `predicted_n`**, which is why artifact-first verification could not catch the `n_predict` defect — the load-bearing field simply was not there. Add `predicted_n`, `predicted_ms` and the run's own `OUT` path. **An artifact must carry every field its verdict depends on, or it launders assumptions.** |
 | ⚠ **`ignore_eos` and `output_sanity.py` COLLIDE — sequence them** | With `ignore_eos: true` the model runs past its answer for the full 512 tokens, and what follows a completed answer is very often repetition. **`output_sanity.py` would grade that DEGENERATE on a perfectly healthy run** — its repetition detector fires at 0.35 and post-answer filler blows through that. Fix them together, not separately: grade only the text **up to the first EOS position**, or send a second short correctness request with `ignore_eos` off. Two fixes that are each right and jointly wrong is how the last three defects in this file were built. |
-| wire `output_sanity.py` into `paged_parity_gate.sh` | **next up.** Save the arm's text into its `.res`, grade paged against static in the ABBA summariser. Zero extra GPU cost, turns every future parity run into a corruption sampler. |
+| ✅ ~~wire `output_sanity.py` into `paged_parity_gate.sh`~~ | **SHIPPED 2026-08-11**, with the collision resolved the way the file's own header says: the graded text is a SECOND short request with `ignore_eos` OFF (`$1.sanity.txt`, position-renamed in the ABBA dance), never the measured request's free-running filler — grading that filler false-fails at 97% repeated 4-grams on a healthy arm. Summariser grades pos-matched pairs via `PIPESTATUS[0]` (tee eats `$?`; that shape approved a refused commit once already). Bonus that fell out of the design: a short request after a completed long one is the WARM regime — the only regime finding 1c ever reproduced in — so every parity ABBA now doubles as a warm-regime corruption probe. ⚠ NOT yet exercised by a live ABBA; syntax-checked only. First real run scores it. |
 | ✅ ~~`ignore_eos`~~ · ~~achieved `pred_n` in the artifact~~ · ~~stale `.res` guard~~ | **all shipped and smoke-verified 2026-08-09** (`3f02818`): `pred_n` 14 → 128 on every arm, the achieved length printed beside the requested one, `decode window actually generated: [...]` in the summary, `*.res` cleared at start **and** a VOID unless all four arms share `prompt_n`. |
 | ✅ ~~LAW 6 unproven~~ | **VALIDATED by direct control** (`alarm_control.sh`): arm B proved the marker prints (240 banded, **0 auto**), arm A fired the alarm on 20 refusals. ⚠ Arm B's `auto=0` also **refuted my own published explanation** for the alarm's historic silence — eliminating three alternatives was not evidence for the fourth. That silence is now an **open loose end**, deliberately left unexplained. |
 | ⛔ ~~**`ignore_eos` — `PP_NPRED` has never taken effect**~~ (fixed, kept for the record) | **highest-value queued fix.** The request sets `n_predict: 512`, which is a **ceiling, not a floor**, and the model answers the needle in **14 tokens** then emits EOS: `pred_n=14, pred_ms=670, stop_type=eos`. **Every decode number in this lane is sampled over ~0.6 seconds**, which is *shorter* than the 48-token case the change replaced. Fix is one field, `"ignore_eos": true`. Also print the ACHIEVED `predicted_n` on the arm line — the header's `npred=512` records what was *requested*, and **a parameter that silently does not take effect is worse than one that is absent, because it looks like the question was asked.** |
 | ⛔ **`"out"` in the `.res` records NOTHING** (found by Grok) | I added it in the same commit that fixed `npred=512` recording a request that never took effect — **and made the identical mistake one line away.** The writer reads `os.environ.get("OUT","")` inside a python heredoc, but the shell never exports `OUT`, so it is always `""`. **A field added specifically to make artifacts self-identifying, which identifies nothing.** Fix: pass it as `argv`, the way every other value in that heredoc is passed. ✅ **DONE — and this row said "Queued, script executing" for hours after it was fixed.** `paged_parity_gate.sh:231-236` carries the fix and its own comment explaining it, and the live run's `.res` files have the field populated. ⚠ **A stale status row inside the document I swept for stale status rows this morning, found by a reader and not by me.** The sweep looked for the `-np>1` vocabulary specifically; **a vocabulary sweep finds the class it was given and reports silence about every other instance** — which reads as coverage. |
 | ⚠ **stamp the model's STORAGE LOCATION in the result header** | **queued, script running.** The header records only the GGUF's basename. On 2026-08-09 the model tree under `~/Documents/GitHub/ornith-models` was reorganised **mid-run** (mtime 19:54:40) and the re-run had to be pointed at `/Volumes/KING4TB/...` instead — **a USB volume.** Two result files with identical headers can therefore describe runs whose weights came off different storage. The mmap page-fault path differs, and although the warm-up prelude pulls 21 GB into page cache on a 128 GB box (so all four arms are equal), **"the arms are equal" and "this run is comparable to yesterday's" are different claims.** Record the directory — `/Volumes/...` carries no username, so the scrubber leaves it intact. ⚠ **Downgraded after measuring**: the warm-up arms took **5 s and 6 s** off that USB volume, and a cold 21 GB USB read cannot finish in five seconds — so the pages were already in page cache from the *previous* run reading the *old* path, which is only possible if **both paths are the same physical file**. Inference from timing, not a filesystem fact (the old path is gone, so no inode to compare). The stamp is still worth having: next time this should be readable rather than reconstructed from how fast a warm-up ran. |
-| decide `-lv 4` vs `-lv 5` in `paged_parity_gate.sh` | **queued, cannot edit a running script.** The gate runs `-lv 4` and proves consumption via LAW 6 (absence of the engine's WARN alarm). The sibling `arch_serve_gate.sh` runs `-lv 5` **specifically so it can read `DS4P-CONSUME` directly** — its own comment says *"At -lv 4 the marker count read ZERO on an arch that was demonstrably paging."* A direct positive count beats an inferred one; the cost is DEBUG-volume I/O during a timed run, which is itself a confound. Record whichever is chosen **as a choice**, so nobody "fixes" it back. |
+| ✅ ~~decide `-lv 4` vs `-lv 5` in `paged_parity_gate.sh`~~ | **DECIDED 2026-08-11: `-lv 4` stays**, recorded as a choice in a comment beside the flag. The gate's whole output is a speed claim, and the `-lv 5` decider run emitted 640 banded CONSUME events per request INSIDE the timed window — a confound on the very number the gate exists to produce. Consumption stays proven by the engine's no-consumer alarm (WARN, visible at -lv 4, VALIDATED by `alarm_control.sh` in both directions). Direct counts belong to gates that time nothing: `arch_serve_gate` keeps `-lv 5`. |
 | warm-up response is never checked | **known hole.** `warmup()` sends its curl to `/dev/null`, so a 500 or an empty completion still prints "discarded (5s)". Log-line-is-not-work-done, in code I wrote today. ✅ **Edit C in the staged applier closes the half that matters**: it now greps the prelude's own log for the failure vocabulary the measured arms already VOID on, and refuses rather than letting the next arm inherit a cold-arm confound. The response body itself is still unread. |
 | ⚠ **CLASS: a fixed `$D` destroys the previous run's logs, and ~25 gates have one** | **Swept 2026-08-10, and deliberately NOT fixed in bulk.** `grep` finds a fixed `${CLAUDE_JOB_DIR:-/tmp}/<name>` in essentially every gate here. Re-running any of them silently overwrites the last run's evidence. **The severity scales with run cost, and only there is the fix clearly worth its risk:** `paged_parity_gate` costs **3.5 h per ABBA** and its logs are the only within-run data this lane has, so it is fixed (edit D). A 90-second gate whose log is a diagnostic you can regenerate by re-running is a different situation, and **24 untested edits across 24 scripts to close a hole that costs 90 seconds is the trade this project's own algorithm says to refuse.** ⇒ **The rule, not the patch: if a gate's run costs more than a few minutes, its `$D` must be per-run.** Recorded here because a class found once and fixed in one place is how the other 24 get missed later — this is the note that says they were seen.
 ⚠⚠ **AND THE TRIAGE COST ME EVIDENCE WITHIN THE HOUR.** `warm_multislot_gate` was one of the 24 I declined to fix, on the argument that a short run is cheap to repeat. At 08:30 I needed the **champion** run's `paged-r1.log` to check whether the engine's no-consumer alarm had fired — and the **scalar** run had already overwritten it. **The run was repeatable; the specific comparison was not, because by then the binary AND the configuration had both changed.** ⇒ The rule stands, but its threshold was wrong. It is not *"how long does the run take"* — it is **"could this artifact ever be compared against one produced by a different binary or configuration?"** For any gate whose logs feed a cross-run comparison, `$D` must be per-run **regardless of runtime**. |

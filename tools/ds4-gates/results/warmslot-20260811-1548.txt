@@ -1,0 +1,13 @@
+tip: 92c2957cd dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=4  regime=WARM  logdir=/tmp/warmslot/20260811-154808
+  static-r1      np=2  prime=4    post=4    consume=-1     ptok=12      blocks=0      pairwall=0    s -> SUSPECT
+      ⚠ COVERAGE: the longest prompt spans 0 block(s) at --kv-block-size 16.
+        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is
+        scoped to one block per slot. Raise MS_FILL to cross it.
+      S1  <ERR:request (50011 tokens) exceeds the avail>
+      S2  <ERR:request (50011 tokens) exceeds the avail>
+  paged-r1       np=2  prime=4    post=<ERR consume=1      ptok=12      blocks=0      pairwall=277  s -> POST-PAIR-DIRTY
+      ⚠ COVERAGE: the longest prompt spans 0 block(s) at --kv-block-size 16.
+        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is
+        scoped to one block per slot. Raise MS_FILL to cross it.
+      S1  <ERR:paged decode failed>
+      S2  <ERR:paged decode failed>

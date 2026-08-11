@@ -96,7 +96,7 @@ echo "  run dir: .../parity/$(basename "$D")   (previous runs are no longer over
 # indistinguishable from one this run wrote -- same name, same schema, plausible numbers. The
 # same-prompt_n assertion below is the backstop; this is the fix. Two guards because the failure is
 # silent and the cost is a wrong verdict printed with confidence.
-rm -f "$D"/*.res 2>/dev/null
+rm -f "$D"/*.res "$D"/*.sanity.txt 2>/dev/null
 OUT=${OUT:-$HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/parity-$(date +%Y%m%d-%H%M).txt}
 mkdir -p "$(dirname "$OUT")"
 NEEDLE="MAGENTA-7742"
@@ -159,6 +159,14 @@ PY
 arm() { # $1 = static|paged
     local flags=""; [ "$1" = paged ] && flags="--kv-paged --kv-block-size $BLK"
     : > "$D/$1.log"
+    # ★ `-lv 4` IS A CHOICE, DECIDED 2026-08-11 -- do not "fix" it to 5. The trade, from the board:
+    # a direct positive DS4P-CONSUME count needs -lv 5 (DEBUG), but DEBUG-volume logging lands
+    # INSIDE the timed window -- the -lv 5 decider run emitted 640 banded CONSUME events per
+    # request, and this gate's entire output is a speed claim, so that I/O is a confound on the
+    # measurement itself. Consumption is instead proven by the engine's own no-consumer alarm
+    # (WARN, visible at -lv 4), which was VALIDATED by direct control (alarm_control.sh: fires on
+    # 20 refusals, silent on 240 banded consumes). A direct count belongs to the gates that do not
+    # time anything -- arch_serve_gate runs -lv 5 for exactly that reason.
     # shellcheck disable=SC2086
     env DS4P_PAGED_HYBRID=1 DS4P_PAGED_SWA=1 DS4P_METAL_CHAMP="${DS4P_METAL_CHAMP:-0}" "$SRV" -m "$M" -ngl 99 -c "$CTX" \
         -np 1 -b 512 -ub 512 --port $PORT --no-warmup -lv 4 $flags > "$D/$1.log" 2>&1 &
@@ -293,6 +301,23 @@ arm() { # $1 = static|paged
                "$refused" "$staticpath" | tee -a "$OUT"
         printf '    ⚠ static-path fallbacks are EXPECTED at reserve time (the paged context is not set\n      yet during graph reserve). A -lv 5 run is what proves they stop once the request starts.\n' | tee -a "$OUT"
     fi
+
+    # ★ SANITY SAMPLE (wired 2026-08-11, the board's "next up" item). A SECOND short request with
+    # ignore_eos OFF, graded by output_sanity.py in the ABBA summariser. Why a separate request and
+    # not the measured one's text -- the collision the board said to fix TOGETHER, not separately:
+    # the measured request runs ignore_eos, and output_sanity's own header MEASURES that grading
+    # free-running filler false-fails (a healthy arm's post-answer filler scored 97% repeated
+    # 4-grams). Its stated resolution is scope: grade an ANSWER. This is that answer.
+    # ⚠ And it is not merely a sample: a short request AFTER a completed long request on the same
+    # slot is the WARM regime -- the only regime FINDING 1c ever reproduced in (7/12 warm, 0/24
+    # cold). Every future parity run therefore doubles as a warm-regime corruption probe, at the
+    # cost of ~160 tokens of decode after the timed request has already finished.
+    curl -s --max-time 300 -X POST "http://127.0.0.1:$PORT/completion" -H 'Content-Type: application/json' \
+        -d '{"prompt":"Describe in two or three plain sentences what a page table does in an operating system.","n_predict":160,"temperature":0,"seed":7,"cache_prompt":false}' \
+        | python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: raise SystemExit          # empty file = VOID downstream, stated not silent
+if "error" not in d: sys.stdout.write(d.get("content",""))' > "$D/$1.sanity.txt"
 
     kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; sleep 3
     # ⚠⚠ OUT AND THE MODEL PATH GO IN AS ARGV, NOT AS ENV. The first version wrote
@@ -492,12 +517,16 @@ case "$ORDER" in
   # ⇒ cp, not mv: "$D/static.log" keeps working for everything that already reads it.
   abba)        arm static; mv "$D/static.res" "$D/static1.res" 2>/dev/null
                cp "$D/static.log" "$D/static1.log" 2>/dev/null
+               mv "$D/static.sanity.txt" "$D/static1.sanity.txt" 2>/dev/null
                arm paged;  mv "$D/paged.res"  "$D/paged1.res"  2>/dev/null
                cp "$D/paged.log"  "$D/paged1.log"  2>/dev/null
+               mv "$D/paged.sanity.txt" "$D/paged1.sanity.txt" 2>/dev/null
                arm paged;  mv "$D/paged.res"  "$D/paged2.res"  2>/dev/null
                cp "$D/paged.log"  "$D/paged2.log"  2>/dev/null
+               mv "$D/paged.sanity.txt" "$D/paged2.sanity.txt" 2>/dev/null
                arm static; mv "$D/static.res" "$D/static2.res" 2>/dev/null
                cp "$D/static.log" "$D/static2.log" 2>/dev/null
+               mv "$D/static.sanity.txt" "$D/static2.sanity.txt" 2>/dev/null
                echo "  per-position logs kept: static1/paged1/paged2/static2.log" | tee -a "$OUT"
                echo "    ⇒ cold-vs-drift split:  prefill_curve.py \$D/static1.log \$D/static2.log" | tee -a "$OUT" ;;
   paged-first) arm paged; arm static ;;
@@ -641,6 +670,28 @@ print()
 print("  ⚠ n=2 per arm. This bounds the drift; it does not estimate variance. A tie here means")
 print("  'not distinguishable at n=2', not 'proven equal'.")
 PY2
+
+# ★ OUTPUT SANITY -- grade each paged position's short-answer sample against its position-matched
+# static reference. This is the corruption sampler the parity gate never had: needle=PASS validates
+# the SPEED number, it was never a corruption detector (a fluent-but-wrong answer still contains the
+# passcode). Exit meanings from output_sanity.py: 0 OK, 1 DEGENERATE (real defect), 3 DIVERGENT
+# (reported, not failed), 2 VOID.
+# ⚠ The exit status is read via PIPESTATUS[0], not $? -- piping through tee replaces the exit
+# status, and reading tee's 0 as the grader's verdict is the exact shape that let a REFUSED privacy
+# guard approve a commit on 2026-08-10.
+for _sp in 1 2; do
+    if [ -s "$D/paged$_sp.sanity.txt" ] || [ -s "$D/static$_sp.sanity.txt" ]; then
+        echo "  output-sanity pos-matched (paged$_sp vs static$_sp):" | tee -a "$OUT"
+        python3 "$(dirname "$0")/output_sanity.py" --text "$D/static$_sp.sanity.txt" "$D/paged$_sp.sanity.txt" 2>&1 | tee -a "$OUT"
+        _src=${PIPESTATUS[0]}
+        if [ "$_src" = "1" ]; then
+            echo "  ⚠⚠ DEGENERATE PAGED OUTPUT at position $_sp. The ratios above are speed numbers from a" | tee -a "$OUT"
+            echo "     run whose paged text failed sanity -- quote them ONLY with this caveat attached." | tee -a "$OUT"
+        fi
+    else
+        echo "  output-sanity: no sample for position $_sp (arm died before the sanity request, or an older gate)." | tee -a "$OUT"
+    fi
+done
 fi
 
 if [ "$ORDER" != abba ]; then

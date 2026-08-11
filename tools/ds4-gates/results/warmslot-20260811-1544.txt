@@ -1,0 +1,33 @@
+tip: 92c2957cd dirty=0  model=ornith-1.0-9b-1M-Q4_K_M.gguf  reps=2  regime=WARM  logdir=/tmp/warmslot/20260811-154437
+  static-r1      np=2  prime=4    post=4    consume=-1     ptok=16      blocks=1      pairwall=5    s -> CLEAN
+      ⚠ COVERAGE: the longest prompt spans 1 block(s) at --kv-block-size 16.
+        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is
+        scoped to one block per slot. Raise MS_FILL to cross it.
+      S1  One, two, three, four, five.
+      S2  A, B, C, D, E
+  paged-r1       np=2  prime=4    post=4    consume=1      ptok=16      blocks=1      pairwall=6    s -> CLEAN
+      ⚠ COVERAGE: the longest prompt spans 1 block(s) at --kv-block-size 16.
+        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is
+        scoped to one block per slot. Raise MS_FILL to cross it.
+      S1  One, two, three, four, five.
+      S2  A, B, C, D, E
+  paged-r2       np=2  prime=4    post=4    consume=1      ptok=16      blocks=1      pairwall=6    s -> CLEAN
+      ⚠ COVERAGE: the longest prompt spans 1 block(s) at --kv-block-size 16.
+        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is
+        scoped to one block per slot. Raise MS_FILL to cross it.
+      S1  One, two, three, four, five.
+      S2  A, B, C, D, E
+  static-r2      np=2  prime=4    post=4    consume=-1     ptok=16      blocks=1      pairwall=5    s -> CLEAN
+      ⚠ COVERAGE: the longest prompt spans 1 block(s) at --kv-block-size 16.
+        A single-block prompt cannot exercise a block TABLE, so a CLEAN verdict here is
+        scoped to one block per slot. Raise MS_FILL to cross it.
+      S1  One, two, three, four, five.
+      S2  A, B, C, D, E
+-----
+static: 2 clean / 0 bad     paged: 2 clean / 0 bad / 0 refused-by-contract / 0 no-response
+verdicts: static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN
+pair wall-clock: static mean 5.0s (n=2)  paged mean 6.0s (n=2)  paged/static = 1.200
+  ⚠ COARSE: a mean under 30s against 1-second timer resolution is not a speed claim.
+    Raise MS_FILL until the pair takes minutes before quoting this ratio.
+WARM MULTI-SLOT GATE: PASS -- both paths clean across 2 warm reps (1c did not reproduce)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260811-1544.txt

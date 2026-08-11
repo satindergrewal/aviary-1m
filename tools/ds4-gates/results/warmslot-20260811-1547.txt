@@ -1,0 +1,1 @@
+tip: 92c2957cd dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=4  regime=WARM  logdir=/tmp/warmslot/20260811-154742
