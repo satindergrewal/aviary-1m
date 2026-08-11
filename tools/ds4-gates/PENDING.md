@@ -1138,6 +1138,27 @@ gates.** The dev flags stay bring-up-only. This is the gates working, recorded a
    chunk… which contradicts the byte-exact outputs at ≤750 tokens **unless the tap itself
    perturbs**: cb_eval works by splitting the graph at observed tensors, and the paged op FUSES
    its KV write — split-induced scheduling around a fused-write op is plausible interference.
+## 2026-08-12 ★★★ DEFECT #2 FIXED — the missing leaf check in ggml-alloc (upstream-grade)
+
+**Root cause, proven by discriminator:** `ggml_gallocr_needs_realloc` checked every node and
+every node's direct srcs — NEVER THE LEAFS. A graph input consumed only through views sizes at
+0 on the consumer side; a leaf that GROWS between topology-matching builds (the DSV4 raw kq
+mask stepping 131072→262144 when iswa n_kv pads 256→512) keeps its old smaller offset and
+legally overruns the next leaf — inp_pos, at exactly +131072 (the byte-proof). Reuse verdicts:
+ALL FRESH (secret-reuse dead); needs_realloc=0 across three topologies because the grown leaf
+was invisible to the check.
+**FIX LANDED (ds4ports): leaf loop added to needs_realloc.** Gate battery:
+- L60 paged ub {128, 255, 256, 512}: ALL byte-exact vs static — **the ub%256 knife-edge is DEAD.**
+- L100 split=off: byte-exact — the raw-path "late L0/L1 corruption" was the same bug. **RAW
+  PAGED PATH FULLY GREEN at every tested shape.**
+- ⚠ L100 split=all: still diverges at ub {384, 509, 512} — chunk-shape-INDEPENDENT ⇒ the
+  ORIGINAL depth-dependent merge defect, now isolated from all allocator noise. L60 (616 tok)
+  exact, L100 (1018 tok) diverges ⇒ onset in (616, 1018] with the split active.
+**NEXT: (1) L-bisect the onset in 616..1018 under split=all; (2) csa-vs-hca at the onset
+(pre-fix data said csa diverges / hca exact — retest post-fix); (3) upstream the leaf check as
+its own minimal PR (any arch with view-consumed growing inputs is exposed) — HIS CALL on
+timing/venue per third-party-repo rule.**
+
 ## 2026-08-12 — THE DEPTH DEFECT WAS NEVER DEPTH: ubatch-size knife-edge, one corruptor killed, one cornered
 
 **The mystery reduced to a knife-edge in ONE session:** L60 paged is byte-exact at ub
