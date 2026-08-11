@@ -1228,10 +1228,20 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
     deletion, so "reproduces without reuse" is CONTAMINATED — re-run ub256 +
     LLAMA_GRAPH_REUSE_DISABLE=1 on the CURRENT build; if clean, defect #2 is fully
     reuse-conditional and the fix target is the reuse path's skipped input copies.
-    **NEXT UNIT: (1) that NOREUSE re-run; (2) find which compute path chunk 2 took (print at
-    compute_splits entry: n_splits + a call counter; absence for chunk 2 = proof of bypass);
-    (3) then the minimal repro + upstream prior-art check — a reused graph whose split-input
-    copies are skipped breaks ANY CPU-leaf→GPU-split model, this is upstream-grade.**
+    ✅ NOREUSE re-run on the CURRENT build: **still corrupt** — defect #2 is NOT
+    reuse-conditional. And the maximal-info run (NOREUSE + SCHED_CPY + tap) REFRAMES it:
+    **chunks 2–3 produce NO sched input-copy lines AND NO cb_eval observations at all** — they
+    execute through a route invisible to both probes (chunk 1: copied correctly, observed
+    correctly, executed correctly). Under reuse-ON the tap DID see chunk 2 (garbage pos), so
+    the bypass shape differs by reuse mode, but in both modes chunk 2+ skips the split-input
+    copy pass.
+    ⇒ **PRIME SUSPECT MOVED BACK TO OUR CODE: the paged-scheduler mid-prefill compute path
+    (populate_batch_from → whatever drives ubatches 2+) bypasses llama-context's normal
+    decode/compute route — no input re-copy, no cb_eval, at minimum on Metal with CPU-hosted
+    leafs.** NOT upstream until this is traced.
+    **NEXT UNIT: trace how mid-prefill ubatches 2+ are computed in the paged scheduler (fifth
+    funnel / populate_batch_from / llama_decode loop) — find the compute call that skips
+    sched's input copies; the fix is to route it through the same path chunk 1 takes.**
   - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
     live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
