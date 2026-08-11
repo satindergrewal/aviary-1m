@@ -1212,7 +1212,15 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   **Champion earns nothing for DSV4 until partials emission serves all 43 layers — the card
   is the whole game now.** Contract-copy count: FOUR sites must move in lockstep (metal hd_ok,
   vec builder, graph champ_geometry, and the abort predicate) — consolidation candidate.
-- ★ **PARTIALS EMISSION: PREFILL HALF LANDED (inert).** The champ store branch is in
+- ⚠⚠ **PARTIALS FIRST ATTEMPT REVERTED (ds4ports c514b245a) — it NEVER COMPILED and its
+  compile gate was a STALE BINARY.** The champ kernels use kargs_flash_attn_ext (no
+  emit_partials field); metal embeds at BUILD time, so the 'gate' passed on old embedded
+  metal. Gate-plumbing class, stale-binary flavor. Task #14 carries the re-landing
+  constraints: FC function constant (not args field) + partials-suffixed pipeline names,
+  verify per-kernel local names, and EVERY metal edit gates through a freshly built test
+  binary. Tree is back to known-good (fresh-binary replay PASS at dk512/bs64).
+- ~~PARTIALS EMISSION: PREFILL HALF LANDED (inert).~~ (superseded above)
+  Original note: **PREFILL HALF LANDED (inert).** The champ store branch is in
   (un-normalized O, M@DV S@DV+1, DV+2 scalar rows), library compiles, existing arms pass.
   DELIBERATELY unreachable: no graph relaxation yet, because the DECODE half (champ_vec) is
   undone and relaxing prefill alone strands decode partials layers with no legal bs=64
