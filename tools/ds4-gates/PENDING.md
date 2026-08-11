@@ -915,6 +915,47 @@ still a compile, and the reads-only rule exists because an arm came back 5.2% sl
 is how unverified code accumulates. **The implementation is mechanical once the GPU frees; the
 locating was the part worth doing in dead time.**
 
+### ✅ TIER 0 SHIPPED `eca146657` (2026-08-11) — flag-gated, smoked both directions
+
+Fourth `dynamic_cast` branch + pool on the composite + context accessors, EXACTLY the four located
+pieces. **Gated on `DS4P_PAGED_DSV4=1`: the default `--kv-paged` on DSV4 still REFUSES** (verified
+live), so the silent-fallback state below is not shipped — the flag exists to develop Tier 1+2
+against a scheduler that accepts the memory. With the flag: pool constructs (580 blocks), scheduler
+logs `using the dsv4 composite's paged attention pool`, server serves.
+
+### ★ TIER 1 PRECONDITION ANSWERED + a design point the tier table missed (2026-08-11)
+
+- **swa_type read from the LOADER, not inferred:** `deepseek4.cpp:67` sets `LLAMA_SWA_TYPE_STANDARD`
+  (+ `n_swa` from the GGUF sliding-window key). STANDARD is exactly what the analytic band
+  implements — the guard passes on the real value.
+- ⚠ **The "PLAIN" raw site (:877) is not plain:** `GGML_ASSERT(hparams.is_swa(il))` — the raw
+  layers are WINDOWED, with a Hadamard rotation on q/kv before attention and on out after, and
+  **MERGED K=V** (`build_attn_mha(q, k, k, …)`). Rotation is paged-compatible (inputs pre-rotated,
+  the cache stores rotated kv, output rotated back — all outside the kernel). The window is
+  band-expressible. **The open design point is merged-KV storage: the paged pool holds K and V as
+  separate planes, so these layers need either (a) write kv into both planes — correctness-first,
+  2× pool waste bounded to the raw layers — or (b) kernel V=K aliasing, which is Tier-2-grade
+  kernel work.** Option (a) is the Tier 1 recommendation; (b) can fold into the Tier 2 kernel pass.
+
+### ✅ TIER 1 SHIPPED `90139c50f` (2026-08-11 late) — the graph plumbing is DONE; the block is the KERNEL
+
+1. Raw-layer branch through the funnel (window from loader-read STANDARD, rotation outside the
+   kernel, merged K=V → both planes).
+2. **The FIFTH set funnel** (`dsv4::init_batch`): Tier 0 left an accessor with NO producer —
+   measured true `DS4P-SET` fires: **zero** (the 107 "SET" counts were the consumer's advisory
+   text matching the grep — instrument note for future greps). With it: **consume=22, the first
+   DSV4 layers ever to read a paged pool.**
+3. **Second admission-narrower-than-kernel hole, found by the first execution:** raw layers pass
+   SINKS at head_dim 512 → champion (the only sinks kernel) has no d512 instantiation → scalar
+   aborts on sinks by design → server aborted. New call-site sinks guard (window-guard shape).
+   Re-smoked: 0 aborts, 44 loud refusals, correct output.
+
+⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
+   (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
+   sinks-in-scalar OR champion-d512 (raw layers), (c) V=K aliasing (optional, halves raw-layer
+   pool waste). **It merges with champion `n_seq>1` on the owner's pile — ONE kernel workstream
+   now serves both product goals (DSV4 support parity AND multi-slot speed). Ordering is his call.**
+
 ### ⚠⚠ AND TIER 0 MUST NOT SHIP ALONE EITHER — IT WOULD BUILD THE SILENT-FALLBACK STATE ON PURPOSE
 
 Tier 0 makes the **scheduler** accept DSV4. It does **nothing** about the graph. So on its own it
