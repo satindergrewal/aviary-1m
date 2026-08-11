@@ -1266,11 +1266,25 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
     `dsv4_can_reuse_raw_kq_mask` compares ne[0] to get_n_kv() at CAN_REUSE time (pre-apply,
     still 256) — the fill runs post-apply (512): admission checked, delivery not — the
     admission/delivery class AGAIN, instance 5.
-    **FIX (next session, with the full gate battery ub255/ub256/L100/CPU + fresh-graph
-    control): mirror mainline — the raw context must SNAPSHOT n_kv at construction and both
-    the reuse check and the fill must use the same snapshot; alternatively (and additionally,
-    defensively) the fill must be bounded by dst->ne. Root fix is the snapshot; the bound is
-    the guard that would have made this loud.**
+    ⚠ CORRECTED same-session by stage-3 + the RAWMASK byte-proof (the n_kv-snapshot story was
+    one level short): the core fill IS ne-bounded and the reuse story doesn't require approval —
+    **the defect is at the ALLOCATOR.** Byte-exact proof (DS4P-RAWMASK + INPTR, one run):
+      chunk-1: mask data=0x124ba0400 bytes=131072 (ne0=256); pos data=0x124bc0400 — pos begins
+      at EXACTLY the first byte past the mask (tight layout, valid).
+      chunk-2: mask reports ne0=512 bytes=262144 at THE SAME data=0x124ba0400 — its write range
+      [base, +262144) now CONTAINS pos. The ne-bounded fill legally obliterates inp_pos from
+      its first byte.
+    No code mutates ne in place (grepped) ⇒ chunk-2's graph is a FRESH build whose grown mask
+    leaf (iswa n_kv stepping 256→512) was assigned the OLD measured offset — **ggml_gallocr
+    kept a layout sized for 131072 under a 262144 leaf. The realloc check tolerated a grown
+    input leaf.** This ALSO explains reuse-disable changing nothing (fresh graphs hit the same
+    kept layout) and the ub%256 knife-edge (only aligned runs produce the topology match that
+    keeps the layout while n_kv happens to step).
+    **NEXT UNIT: read ggml_gallocr_needs_realloc + ggml_gallocr_node_needs_realloc for leaf
+    handling (suspect: input-flagged leafs compared by ne at RESERVE time or skipped), build
+    the minimal repro (any model whose mask leaf grows across topologically-matching graphs),
+    then fix upstream-style: realloc on ANY node/leaf size growth. Gate battery afterwards:
+    ub255/ub256/L100/CPU + fresh-graph control + the whole earlier green set.**
   - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
     live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
