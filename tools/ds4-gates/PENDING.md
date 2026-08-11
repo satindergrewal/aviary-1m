@@ -1208,11 +1208,23 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
     untapped). ⇒ inp_pos is CLOBBERED BY (or aliased with) a mask upload for chunk-2's graph
     at ub≡0 mod 256 — mask width pads differently at exact-64-multiples, shifting allocation
     into collision. Same allocator-layout trigger class as defect #1.
-    **NEXT UNIT: find the aliasing — llama-context/sched graph-input allocation vs set_input
-    order (pos written, then mask upload lands on overlapping bytes). Instrument: print
-    inp_pos->data and kq_mask->data pointers + sizes per graph on both arms; overlap = proof.
-    Then decide our-bug-vs-upstream and build the minimal standalone repro (upstream-grade if
-    core sched/alloc).**
+    ✅✅✅ **THE JOIN RUN CLOSED IT (DS4P_INPUT_PTRS + DS4P-POS with addresses, one run):**
+    - set_input side: chunk-1 AND chunk-2 positions both written CORRECTLY (pos0=0 then
+      pos0=256) into the SAME host tensor data=0x1227ec400 (graph reused at ub256; ub255's
+      chunks get distinct graphs).
+    - execution side: the rope reads from **0x3006a0000 — the SCHEDULER'S SPLIT-INPUT COPY**,
+      which holds correct [0..255] for chunk 1 and **mask-patterned GARBAGE for chunk 2**.
+    ⇒ **The defect is ggml_backend_sched's input-copy into the Metal split buffer: correct on
+    the first execution, garbage on the second, at ub≡0 mod 256.** Host-side writes are
+    innocent; builders innocent; kernels innocent. No pointer overlap among host tensors
+    (checked all masks vs pos, both arms).
+    **NEXT UNIT: instrument the sched input-copy (ggml_backend_sched_compute_splits — print
+    src/dst/bytes per split-input copy) at ub256 and see why the chunk-2 copy carries mask
+    bytes (skipped copy? wrong source offset? stale staging?). Then the minimal standalone
+    repro — this smells UPSTREAM (any CPU-leaf → Metal-split model with reused/matched graph
+    shapes could hit it), so repro-first before any fix, and check upstream issues for prior
+    art.** Note: corruption reproduces with graph-reuse DISABLED and tap OFF too — the copy
+    defect does not require either; the join run merely made it visible.
   - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
     live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
