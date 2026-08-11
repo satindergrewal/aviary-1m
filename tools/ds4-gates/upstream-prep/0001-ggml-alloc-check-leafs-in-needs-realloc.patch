@@ -1,0 +1,48 @@
+# From: (set authorship at submission)
+Subject: [PATCH] ggml-alloc: check leafs in ggml_gallocr_needs_realloc
+
+ggml_gallocr_needs_realloc validates every node and every node's direct
+sources, but never the graph's leafs. A graph input consumed only through
+views is sized at 0 on the consumer side (view_src set), so a leaf whose
+allocation size grows between two topology-matching graphs is invisible to
+the check: alloc_graph then assigns it the stored smaller offset, and any
+full-extent write of the tensor legally overruns the next leaf's allocation.
+
+Observed on Apple Metal with a DeepSeek-V4-class model: a sliding-window KQ
+mask leaf stepping 131072 -> 262144 bytes (padded n_kv 256 -> 512) between
+same-topology prefill graphs kept its old offset and overwrote the adjacent
+inp_pos leaf with F16 -inf mask bytes, corrupting rope positions and every
+downstream KV write, deterministically, whenever prompt chunking produced
+topology-matching consecutive graphs.
+
+Fix: mirror the existing node loop over the leafs.
+
+---
+ ggml/src/ggml-alloc.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+--- a/ggml/src/ggml-alloc.c
++++ b/ggml/src/ggml-alloc.c
+@@ ggml_gallocr_needs_realloc @@
+     if (galloc->n_leafs != graph->n_leafs) {
+ #ifndef NDEBUG
+         GGML_LOG_DEBUG("%s: graph has different number of leafs\n", __func__);
+ #endif
+         return true;
+     }
+ 
++    for (int i = 0; i < graph->n_leafs; i++) {
++        struct ggml_tensor * leaf = graph->leafs[i];
++        struct leaf_alloc * leaf_alloc = &galloc->leaf_allocs[i];
++
++        if (!ggml_gallocr_node_needs_realloc(galloc, leaf, &leaf_alloc->leaf)) {
++#ifndef NDEBUG
++            GGML_LOG_DEBUG("%s: leaf %s is not valid\n", __func__, leaf->name);
++#endif
++            return true;
++        }
++    }
++
+     for (int i = 0; i < graph->n_nodes; i++) {
+         struct ggml_tensor * node = graph->nodes[i];
+         struct node_alloc * node_alloc = &galloc->node_allocs[i];

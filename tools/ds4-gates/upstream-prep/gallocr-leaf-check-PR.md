@@ -60,6 +60,13 @@ The DS4P_* diagnostic prints living near this code in our tree
 (DS4P_ALLOC_TRACE etc.) are lane-local. The PR is the leaf loop only,
 rebased onto upstream master, no other hunks.
 
+## Apply-ready artifact
+
+`0001-ggml-alloc-check-leafs-in-needs-realloc.patch` sits next to this doc. The hunk header
+uses a function-name anchor rather than line numbers -- regenerate offsets against upstream
+master at apply time (`git apply --3way` or hand-apply; the insertion point is immediately
+after the n_leafs count check, before the node loop).
+
 ## Suggested PR title
 
     ggml-alloc: check leafs in ggml_gallocr_needs_realloc
