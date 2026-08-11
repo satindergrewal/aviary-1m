@@ -1172,9 +1172,21 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   28,672/32,768 exactly as computed, `CHAMP-PAGED ACTIVE D=512 bs=64` live; harness replay
   PASS on plain / sinks / banded-window+sinks arms (~2e-6 vs CPU, bit-exact schedules).
   ⚠ Honest bound: partials dispatches EXCLUDE the champion by contract ⇒ at bs=64 only the
-  raw non-partials layers ride it under split=all. **The full DSV4 unlock = champion partials
-  emission (O/M/S out, defer normalize) — next kernel unit. After the 64k gate: bs=64
-  end-to-end correctness battery, then decode-rate A/B (scalar bs16 vs champ bs64).**
+  raw non-partials layers ride it under split=all.
+- ★ **CHAMPION PARTIALS EMISSION — implementation card (design read done, CPU-side):**
+  The champ finalize (metal ~12816-12846 region) is: optional sink-join into running (M,S) via
+  online-softmax update, then `scale = S==0 ? 0 : 1/S` at the store. Partials mode =
+  (a) SKIP the sink join (contract: sinks join at the merge — assert has_sinks==false when
+      emitting, mirroring the funnel's `!(partials && sinks)`);
+  (b) SKIP the 1/S scale (store un-normalized O);
+  (c) dst layout [D+2, H, N]: O at row base, M at +D, S at +D+1 — mirror the scalar's split
+      q_off(read@D)/o_off(write@D+2) lesson EXACTLY (that off-by-stride cost a session);
+  (d) host: relax `champ_enabled && op_params[9]==0` exclusion (ops.cpp:5236) once the variant
+      exists + pass emit_partials into the champ args + dst stride OD=D+2;
+  (e) GATE: the harness partials replay arm at bs=64/D=512 (already built — REPLAY "512,W,c2,0,1")
+      + the OMS-vs-CPU and norm self-check arms; then server battery at bs=64.
+  **After the 64k gate frees the GPU: bs=64 end-to-end battery → decode A/B (scalar-bs16 vs
+  champ-bs64) → partials emission → full-champ DSV4 A/B.**
 
 ## 2026-08-12 ★★★ DEFECT #2 FIXED — the missing leaf check in ggml-alloc (upstream-grade)
 
