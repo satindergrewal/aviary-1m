@@ -950,12 +950,18 @@ logs `using the dsv4 composite's paged attention pool`, server serves.
    aborts on sinks by design → server aborted. New call-site sinks guard (window-guard shape).
    Re-smoked: 0 aborts, 44 loud refusals, correct output.
 
-⚠ **QUEUED (CPU-only, Grok #9559): contract-vs-kernel argument AUDIT.** Two admission holes in two
-days (`n_seq_max`, sinks) were both found by EXECUTION — the contract keeps learning the kernels'
-real argument sets from aborts. Enumerate every precondition the two kernels actually read (scalar:
-staged-tile budget, no sinks, causal, window, any-n_seq; champion: bs=64, n_seq=1, head_dim set,
-sinks OK, …) against every check `paged_layer_supported` + the call-site guards perform, and close
-the diff by reading. The third hole should never need a smoke.
+✅ ~~contract-vs-kernel argument AUDIT~~ — **CLOSED 2026-08-11 late, one pass, FOUR holes total**
+(`55a69653b` + `1db0a45b4`):
+
+| # | hole | found by | fix |
+|---|---|---|---|
+| 1 | `n_seq_max` not in champ admission | abort | `cparams.n_seq_max == 1` in champ_geometry |
+| 2 | sinks admitted onto the scalar kernel | abort | call-site champion-only guard |
+| 3 | **champion is f16-ONLY** — the "5 q8_0 instantiations" its refusal-removal comment cites WERE NEVER ADDED; a non-f16 pool would dequantise raw bytes as halfs at a `nb[1]/sizeof(f16)` stride: plausible garbage, silently | **reading** | `kv->type == F16` in champ_geometry + sinks guard + `ktype!=f16` in the kernel's named refusal list; smoked both directions (q8_0 → 16 loud refusals, correct; f16 → consume=24) |
+| 4 | **scalar hard-codes causal** — both scalar sites mask `kpos > q_pos` with no `args.causal` consult; dflash's `causal=false` would silently lose its future context | **reading** | sinks guard generalised to champion-only-arguments (sinks OR `!causal`) |
+
+`rel/rel_extent`: audited CLEAN on both paths (scalar :3326/:3566, champ mask fill :13016).
+**The table has no undiffed rows; a fifth hole needs a NEW kernel argument to exist first.**
 
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
