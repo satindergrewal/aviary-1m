@@ -565,8 +565,27 @@ faster than static's superlinear prefill decay. **The multi-slot lane's future c
 options on the owner's pile: champion `n_seq>1` kernel work, or accept single-slot serving.**
 Pair wall is schedule-invariant (r1/r2 arbitrated visibly differently, landed 10 s apart).
 
-**Bonus datum from the control's first pass: static SOLO at 127.5k = 357 s vs 779 s paired** —
-static itself pays 2.2× for co-scheduling. The paged-solo number comes from the control rerun.
+### ★★★ THE CELL IS CLOSED — the solo controls fired the pre-registered bracket: **KERNEL-DOMINANT**
+
+```
+                 SOLO (n=1-2)            PAIRED (n=4)         co-scheduling tax = pair/(2×solo)
+static     357/363 s (~385 t/s pf,      779.0 s               1.09×
+                     30.6 t/s dec)
+paged           1520 s (86.0 t/s pf,    4065.2 s              1.34×   <- ≤1.5 = KERNEL-DOMINANT
+                      7.6 t/s dec)
+```
+- ⚠ my in-room "static pays 2.2× for pairing" was WRONG (divided by solo, not 2×solo) — corrected
+  to 1.09× before it was banked.
+- **The scalar kernel at depth is ~4–4.5× slower than static on BOTH phases with no scheduler
+  involved** (prefill 86 vs ~385 t/s; decode 7.6 vs 30.6 t/s). Co-scheduling adds only 1.34× on
+  wall — prefill dominates and merely serializes — even though the co-batched decode WINDOW
+  degrades ~23× vs solo (0.33 vs 7.6 t/s): real, but small in the wall.
+- ⇒ **Multi-slot was never the special problem. Scalar-at-depth is.** The owner's pile item
+  resolves to: **champion is the only fast path at depth (1.97× FASTER than static, single-slot,
+  512k) and it is single-slot by contract — champion `n_seq>1` kernel work is the one lever that
+  changes the product.** Kernel choice swings ~8× end to end.
+- Solo static ran on BOTH sides of the history rewrite (357 s pre, 363 s post, different binaries,
+  1.7% apart) — incidental control that the rewrite changed names and nothing else.
 
 ⚠ **GATE-SHAPE BUG, found live:** the paged solo arm VOIDed on binary/source provenance (my own
 mid-run commit — the guard working), and the summary printed **"FAIL — 1c REPRODUCES"**: a

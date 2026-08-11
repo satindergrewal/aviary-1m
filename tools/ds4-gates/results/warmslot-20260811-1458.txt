@@ -1,0 +1,11 @@
+tip: 5ec33f1c0 dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=1  regime=WARM  logdir=/tmp/warmslot/20260811-145831
+  static-r1      np=1  prime=4    post=4    consume=-1     ptok=127516  blocks=7969   pairwall=363  s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+  paged-r1       np=1  prime=4    post=4    consume=1      ptok=127516  blocks=7969   pairwall=1520 s -> CLEAN
+      S1  one, two, three, four, five
+-----
+static: 1 clean / 0 bad     paged: 1 clean / 0 bad / 0 refused-by-contract / 0 no-response
+verdicts: static:CLEAN paged:CLEAN
+pair wall-clock: static mean 363.0s (n=1)  paged mean 1520.0s (n=1)  paged/static = 4.187
+WARM MULTI-SLOT GATE: PASS -- both paths clean across 1 warm reps (1c did not reproduce)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260811-1458.txt

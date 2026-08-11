@@ -1,0 +1,12 @@
+tip: a3b1cae74 dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=1  regime=WARM  logdir=/tmp/warmslot/20260811-144742
+  static-r1      np=1  prime=4    post=4    consume=-1     ptok=127516  blocks=7969   pairwall=357  s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+paged-r1: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at a3b1cae74, tree at a117c5962.
+paged-r1: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+-----
+static: 1 clean / 0 bad     paged: 0 clean / 1 bad / 0 refused-by-contract / 0 no-response
+verdicts: static:CLEAN paged:      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+pair wall-clock: NOT COMPARABLE -- need >=1 CLEAN arm on each side (static: 357.0 1; paged: none)
+WARM MULTI-SLOT GATE: FAIL -- paged 1 bad, static CLEAN (1c REPRODUCES on this binary)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260811-1447.txt

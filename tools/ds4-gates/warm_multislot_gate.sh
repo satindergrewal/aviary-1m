@@ -159,7 +159,15 @@ probe() { # $1=tag $2=flags
             if [ "${MS_ALLOW_STALE_BIN:-0}" != "1" ]; then
                 echo "$tag: VOID -- refusing to attribute this arm to source the binary does not contain." | tee -a "$OUT"
                 echo "      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE." | tee -a "$OUT"
-                kill $pid 2>/dev/null; return 1
+                kill $pid 2>/dev/null
+                # ⚠ RETURN A VERDICT TOKEN, NOT FREE TEXT. Measured 2026-08-11: this early return
+                # made the caller's `tail -1` capture the "Rebuild, or set..." advice line as the
+                # arm's VERDICT, which fell into the `paged:*` bad-counter and the summary printed
+                # "FAIL -- 1c REPRODUCES" -- a KV-corruption headline from a provenance refusal.
+                # Same class as the http=000 misscore this gate already carries a state for: a
+                # verdict path that can emit text the tallier has no word for will be mis-tallied.
+                echo "VOID-PROVENANCE"
+                return 1
             fi
             echo "$tag: MS_ALLOW_STALE_BIN=1 -- proceeding, and the mismatch is recorded above." | tee -a "$OUT"
         fi
@@ -355,8 +363,12 @@ sc=0; sb=0; pc=0; pb2=0; pv=0
 # ⚠ REFUSED-BY-CONTRACT IS NOT "BAD". Counting it as bad is what made a correct run print
 # "1c REPRODUCES". It gets its own tally so the headline can never call it a corruption.
 pr=0
+pprov=0
 for v in "${V[@]}"; do case "$v" in
     static:CLEAN) sc=$((sc+1));;
+    # provenance VOIDs are neither corruption nor a pass -- they say the ARM never ran a valid
+    # binary, and they must not touch the corruption tallies in either column
+    static:VOID-PROVENANCE|paged:VOID-PROVENANCE) pprov=$((pprov+1));;
     static:*) sb=$((sb+1));;
     paged:CLEAN) pc=$((pc+1));;
     paged:REFUSED-BY-CONTRACT) pr=$((pr+1));;
@@ -384,7 +396,10 @@ fi
 # ⚠ A NO-RESPONSE ARM CANNOT INDICT ANYTHING. It is checked BEFORE the corruption headline,
 # because the two runs that produced it on 2026-08-10 both printed "1c REPRODUCES" from evidence
 # that contained no answer at all.
-if [ "${pv:-0}" -ne 0 ]; then
+if [ "${pprov:-0}" -ne 0 ]; then
+    echo "WARM MULTI-SLOT GATE: **VOID** -- $pprov arm(s) refused on BINARY/SOURCE PROVENANCE." | tee -a "$OUT"
+    echo "  The binary does not match the tree; nothing was measured. Rebuild and re-run." | tee -a "$OUT"
+elif [ "${pv:-0}" -ne 0 ]; then
     echo "WARM MULTI-SLOT GATE: **VOID** -- $pv arm(s) returned NO HTTP RESPONSE (timeout or dead server)." | tee -a "$OUT"
     echo "  There is no answer to judge, so this run says NOTHING about corruption in either direction." | tee -a "$OUT"
     echo "  The per-arm block above says whether the server ABORTED or simply ran out of time." | tee -a "$OUT"
