@@ -8,3 +8,24 @@ tip: a3b1cae74 dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=4  regime=WARM
   paged-r2       np=2  prime=4    post=4    consume=1      ptok=127516  blocks=7969   pairwall=4013 s -> CLEAN
       S1  one, two, three, four, five.  Sequence 1 archival record line 
       S2  A, B, C, D, E
+  static-r2      np=2  prime=4    post=4    consume=-1     ptok=127516  blocks=7969   pairwall=768  s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+      S2  A, B, C, D, E
+  static-r3      np=2  prime=4    post=4    consume=-1     ptok=127516  blocks=7969   pairwall=757  s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+      S2  A, B, C, D, E
+  paged-r3       np=2  prime=4    post=4    consume=1      ptok=127516  blocks=7969   pairwall=4091 s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+      S2  A, B, C, D, E
+  paged-r4       np=2  prime=4    post=4    consume=1      ptok=127516  blocks=7969   pairwall=4134 s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+      S2  A, B, C, D, E
+  static-r4      np=2  prime=4    post=4    consume=-1     ptok=127516  blocks=7969   pairwall=777  s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+      S2  A, B, C, D, E
+-----
+static: 4 clean / 0 bad     paged: 4 clean / 0 bad / 0 refused-by-contract / 0 no-response
+verdicts: static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN static:CLEAN paged:CLEAN paged:CLEAN static:CLEAN
+pair wall-clock: static mean 779.0s (n=4)  paged mean 4065.2s (n=4)  paged/static = 5.218
+WARM MULTI-SLOT GATE: PASS -- both paths clean across 4 warm reps (1c did not reproduce)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260811-0922.txt
