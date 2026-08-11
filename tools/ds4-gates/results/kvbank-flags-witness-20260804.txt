@@ -1,4 +1,4 @@
 # P1-5 increment-4 flags witness, 2026-08-04 ~02:40, tip 6c9c2554, flags-only (no env)
-0.01.427.692 I srv     configure:  - kv-bank: enabled, dir = <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank, cap = 64 MiB
-0.13.976.146 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-935ca107290192a6.kv (3.517 MiB, n_tok = 25, total spills = 1)
-0.13.976.653 I srv         probe:  - kv-bank: admitted <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-935ca107290192a6.kv (lcp = 22 of 23 new tokens, 3.517 MiB, admits = 1)
+0.01.427.692 I srv     configure:  - kv-bank: enabled, dir = <SCRATCH>/kvbank, cap = 64 MiB
+0.13.976.146 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/kvbank/kvbk-935ca107290192a6.kv (3.517 MiB, n_tok = 25, total spills = 1)
+0.13.976.653 I srv         probe:  - kv-bank: admitted <SCRATCH>/kvbank/kvbk-935ca107290192a6.kv (lcp = 22 of 23 new tokens, 3.517 MiB, admits = 1)

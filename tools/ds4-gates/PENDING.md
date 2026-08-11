@@ -514,6 +514,51 @@ paged  pairwall  746  812  752  799   mean 777.2 s   spread ±4.3%
   1.97x FASTER at 512k), not a corruption verdict (that is the PASS). It prices the scalar kernel
   serving two long slots concurrently, on one model, one box, n=4.
 
+### ★ DEPTH CELL IN FLIGHT (warmslot-20260811-0922, ~127.5k tok/seq) — PRE-REGISTERED before its paged arms
+
+First arm: static-r1 CLEAN, ptok=127,516, blocks=7,969/seq, pairwall=814s. **Static's pair wall is
+superlinear in depth: 160s@50k → 814s@127.5k = 5.1× cost for 2.55× depth (exponent ~1.74)** — the
+same signature as single-slot static's decode collapse toward the span-bound limit.
+
+**The discriminating prediction, registered with Grok (#9486/#9487) before any paged arm landed:**
+the bandwidth-bound whole-KV mechanism predicts superlinear STATIC cost in both cells, so
+- **4.864 NARROWS at this depth** → mechanism-consistent (paged degrades more gracefully, as it did
+  single-slot: 1.45 vs 1.91 per doubling);
+- **4.86 holds FLAT** → multi-slot scalar pays a fixed scheduling tax, and depth won't rescue it.
+Either answer discriminates; neither is a failure of the run. Tokeniser ×1.25 (target→actual) is now
+a three-point constant, usable for sizing future fills.
+
+**Exhibit (c), observed LIVE inside paged-r1 (boarded before its arm line landed):** rid=0 finished
+its full 127,516-token prefill at ~455s and moved to decode — and rid=1 advanced only 127→166
+tokens in the following ~300s. Not prefill-vs-prefill serialization: **decode starving prefill**.
+rid=0's deep-context decode wins essentially every scheduler tick over rid=1's pending 127k
+prefill, so the paged pair composes near-SEQUENTIALLY (prefill A → decode A → prefill B → decode B)
+while the static arm overlaps its slots. If the ratio lands flat-or-worse, this is the named
+mechanism, and the fix conversation is the scheduler's prefill/decode interleaving policy — kernel
+speed is not the lever.
+
+**Refined mid-run (t≈1369s): BOTH sequences lose — the mixed decode+prefill TICK is itself
+pathological at depth.** rid=0's decode ran ~900s for ≤768 tokens ≈ **0.85 t/s against ~38 t/s
+solo at comparable depth — ~45× co-batch degradation** — while rid=1 crawled at ~0.09 t/s. Not
+arbitration alone. Cross-cell (Grok #9499, INFERRED pending the .res decode fields): 50k's window
+back-computes to ~12× degradation, so degradation growth 3.75× for 2.55× depth — the same
+superlinear family. **Registered probes, in order:** (1) close the 12×/45× arithmetic from the
+`.res` `pred_ms` fields when the arms land (no new run); (2) if confirmed, the one-factor
+block-count discriminator: same depth, same KV bytes, `MS_BLK 16→32` halves live block count —
+pair wall improves ~2× ⇒ per-tick cost tracks BLOCK COUNT (graph/block-table rebuild is the lever);
+stays put ⇒ tracks KV bytes. **For the owner's pile (Grok's board word): scalar multi-slot at depth
+is trending UNUSABLE on throughput alone (~45× decode degradation) — extends "multi-req" from a
+correctness caveat to a perf one.**
+
+**paged-r1 LANDED: pairwall=4023s CLEAN → rep-1 ratio 4023/814 = 4.94 vs 4.86 at 50k — the FLAT
+branch** (n=1; set continues). ⚠ **And the timeline falsified half my interim: decode_B ran
+~450–500s (~1.6 t/s) with rid=0 already finished — no co-batch present.** The "~45× co-batch
+degradation" divided by the WRONG baseline: ~38 t/s deep decode is a CHAMPION number; **scalar
+block-16 single-slot deep decode has never been measured.** The kernel-vs-scheduler split is
+therefore open, and the control is registered BEFORE the remaining reps land: scalar `-np 1`,
+block 16, champ off, one ~127.5k prefill + 768 decode (~10 min). Solo ≈1.6 t/s ⇒ the scalar KERNEL
+is the story at depth and the scheduler is exonerated; solo fast ⇒ the mixed-tick pathology stands.
+
 ⇒ **What SURVIVES the retraction, because it rests on different evidence:**
 - `champion + multi-slot` is **impossible by contract** — from an abort message and a source read,
   not from timing. **Unaffected.**

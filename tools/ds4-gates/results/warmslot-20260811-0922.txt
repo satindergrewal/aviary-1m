@@ -1,0 +1,10 @@
+tip: a3b1cae74 dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=4  regime=WARM  logdir=/tmp/warmslot/20260811-092250
+  static-r1      np=2  prime=4    post=4    consume=-1     ptok=127516  blocks=7969   pairwall=814  s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+      S2  A, B, C, D, E
+  paged-r1       np=2  prime=4    post=4    consume=1      ptok=127516  blocks=7969   pairwall=4023 s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+      S2  A, B, C, D, E
+  paged-r2       np=2  prime=4    post=4    consume=1      ptok=127516  blocks=7969   pairwall=4013 s -> CLEAN
+      S1  one, two, three, four, five.  Sequence 1 archival record line 
+      S2  A, B, C, D, E

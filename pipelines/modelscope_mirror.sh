@@ -1,7 +1,7 @@
 #!/bin/bash
 export MODELSCOPE_ENDPOINT=https://www.modelscope.ai
 MS=~/.local/bin/modelscope
-SP=<SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/45a478b3-69b0-4f18-b949-04b99bb04a0f/scratchpad
+SP=${SP:-$(mktemp -d /tmp/modelscope-scratch.XXXXXX)}
 M=~/Documents/GitHub/ornith-models
 G=~/Documents/GitHub/ornith-1m
 

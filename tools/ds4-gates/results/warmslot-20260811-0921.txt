@@ -1,0 +1,32 @@
+tip: a3b1cae74 dirty=0  model=ornith-1.0-35b-1M-Q4_K_M.gguf  reps=4  regime=WARM  logdir=/tmp/warmslot/20260811-092112
+static-r1: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 26c900dfa, tree at a3b1cae74.
+static-r1: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+paged-r1: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 26c900dfa, tree at a3b1cae74.
+paged-r1: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+paged-r2: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 26c900dfa, tree at a3b1cae74.
+paged-r2: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+static-r2: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 26c900dfa, tree at a3b1cae74.
+static-r2: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+static-r3: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 26c900dfa, tree at a3b1cae74.
+static-r3: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+paged-r3: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 26c900dfa, tree at a3b1cae74.
+paged-r3: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+paged-r4: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 26c900dfa, tree at a3b1cae74.
+paged-r4: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+static-r4: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 26c900dfa, tree at a3b1cae74.
+static-r4: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+-----
+static: 0 clean / 4 bad     paged: 0 clean / 4 bad / 0 refused-by-contract / 0 no-response
+verdicts: static:      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE. paged:      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE. paged:      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE. static:      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE. static:      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE. paged:      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE. paged:      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE. static:      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+pair wall-clock: NOT COMPARABLE -- need >=1 CLEAN arm on each side (static: none; paged: none)
+WARM MULTI-SLOT GATE: **VOID** -- static (no paging) scored 4 bad. The gate is measuring itself, not the code.
+  (a dirty static arm can never indict paging; fix the harness before reading the paged column)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260811-0921.txt

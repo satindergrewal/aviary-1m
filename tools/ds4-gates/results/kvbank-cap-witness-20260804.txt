@@ -1,7 +1,7 @@
 # P1-5 increment-3 LRU cap witness, 2026-08-04 ~01:55, DS4P_KV_BANK_CAP_MIB=5
-0.13.370.344 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-935ca107290192a6.kv (3.517 MiB, n_tok = 25, total spills = 1)
-0.18.807.537 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-34dc45420e63ae2d.kv (3.235 MiB, n_tok = 23, total spills = 2)
-0.18.807.646 I srv   enforce_cap:  - kv-bank: cap 5 MiB exceeded, evicted <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-935ca107290192a6.kv (3.517 MiB)
-0.24.987.599 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-b07da164968b1829.kv (3.235 MiB, n_tok = 23, total spills = 3)
-0.24.987.724 I srv   enforce_cap:  - kv-bank: cap 5 MiB exceeded, evicted <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-34dc45420e63ae2d.kv (3.236 MiB)
+0.13.370.344 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/kvbank/kvbk-935ca107290192a6.kv (3.517 MiB, n_tok = 25, total spills = 1)
+0.18.807.537 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/kvbank/kvbk-34dc45420e63ae2d.kv (3.235 MiB, n_tok = 23, total spills = 2)
+0.18.807.646 I srv   enforce_cap:  - kv-bank: cap 5 MiB exceeded, evicted <SCRATCH>/kvbank/kvbk-935ca107290192a6.kv (3.517 MiB)
+0.24.987.599 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/kvbank/kvbk-b07da164968b1829.kv (3.235 MiB, n_tok = 23, total spills = 3)
+0.24.987.724 I srv   enforce_cap:  - kv-bank: cap 5 MiB exceeded, evicted <SCRATCH>/kvbank/kvbk-34dc45420e63ae2d.kv (3.236 MiB)
 files remaining: 1

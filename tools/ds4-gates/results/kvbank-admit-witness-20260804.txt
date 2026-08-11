@@ -1,10 +1,10 @@
 # P1-5 increment-2 probe/admit witnesses, 2026-08-04 ~01:40, real qwen3-4b IQ4_KT, Mac CPU
 # recipe: --cache-ram 4 + DS4P_KV_BANK; spill P1 via 3-prompt eviction; then three admit probes
 == same-run PARTIAL admit (P1-variant after P1 evicted) ==
-0.13.408.578 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-935ca107290192a6.kv (3.517 MiB, n_tok = 25, total spills = 1)
-0.13.409.041 I srv         probe:  - kv-bank: admitted <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-935ca107290192a6.kv (lcp = 22 of 26 new tokens, 3.517 MiB, admits = 1)
+0.13.408.578 I srv         spill:  - kv-bank: spilled evicted entry -> <SCRATCH>/kvbank/kvbk-935ca107290192a6.kv (3.517 MiB, n_tok = 25, total spills = 1)
+0.13.409.041 I srv         probe:  - kv-bank: admitted <SCRATCH>/kvbank/kvbk-935ca107290192a6.kv (lcp = 22 of 26 new tokens, 3.517 MiB, admits = 1)
 == cross-model-prompt MISS (P2 vs banked P1 -> below salvage floor, correct) ==
 0
 == CROSS-RESTART exact admit: fresh process, prompt_n = 1 (cold would be 22) ==
-0.02.057.212 I srv         probe:  - kv-bank: admitted <SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/243baf36-fb4a-4436-95b6-8d9af70d804e/scratchpad/kvbank/kvbk-935ca107290192a6.kv (lcp = 22 of 22 new tokens, 3.517 MiB, admits = 1)
+0.02.057.212 I srv         probe:  - kv-bank: admitted <SCRATCH>/kvbank/kvbk-935ca107290192a6.kv (lcp = 22 of 22 new tokens, 3.517 MiB, admits = 1)
 prompt_n = 1

@@ -5,7 +5,7 @@
 set -u
 LC=~/Documents/GitHub/llama.cpp
 M=~/AI/mtptest/Qwen3.6-27B-Q4_K_M.gguf
-S=<SCRATCH>/-Users-<user>-Documents-GitHub-ornith-1m/eb691b13-b1a4-4013-9767-83af97b8d410/scratchpad
+S=${S:-$(mktemp -d /tmp/f2-scratch.XXXXXX)}
 CAL=$S/calib.txt
 
 echo "=== CONTROL: --no-mtp (old behaviour) ==="
