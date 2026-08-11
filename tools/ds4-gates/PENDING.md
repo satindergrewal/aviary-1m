@@ -1174,20 +1174,22 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
   state_read/write/persist idx arrays at chunk 2 for ub255 vs ub256 and diff.**
 - CACHECHK replay (4 combos incl. partials): bad_rows=0 — no attend-kernel scribbles in the
   harness. ⇒ the pool overwriter is a SERVER graph node the harness lacks.
-- ✅ **DS4P_SETROWS_DUMP built and FIRED (landed in ds4ports):** per-dispatch dst/idx-range/bound
-  from the Metal set_rows handler. **First diff is a COUNT: odd layers (cache_k_l11/13/15/17…)
-  get 4 set_rows in ub255 but only 3 in ub256 — one dispatch MISSING per odd layer in the
-  corrupt arm.** The arithmetic that explains it is already read: the dsv4 plan builder's
-  `if (n_writes >= n_blocks) continue;` — a chunk that fills its state blocks EXACTLY skips
-  `append_dummy_block`; a partial chunk appends one. At ub256 every chunk is an exact multiple
-  ⇒ no dummy ⇒ the write set is one narrower than something downstream assumes.
-  **NEXT UNIT: find the consumer that assumes the dummy row exists** (state_read_idxs /
-  persist/restore width arithmetic sized `DSV4_*_RATIO*n_blocks`?) — and note the un-audited
-  companion fact: static cache_k writes still run under paging for these layers (23/layer on
-  even layers), which the raw-builder contract says should be skipped — audit whether those are
-  the csa/hca STATIC fallback (legitimate) or another unfed-input class.
-- Also: the idx dumps double as the in-bounds-but-wrong detector once counts are aligned —
-  diff min/max/sum per (dst, occurrence) next.
+- ⚠ **RETRACTED (same session, by the instrument's own data): the 4-vs-3 count was NOT a
+  defect.** Reading the streams row-by-row: ub255 hca writes rows {0},{1,2},{3} across chunks;
+  ub256 writes {0,1},{2,3},∅ — the "missing" dispatch is a LEGITIMATELY EMPTY write set on an
+  aligned chunk; both arms cover rows 0–3 completely. The dummy is CSA-only and empty-set-only;
+  no consumer assumes it. The count diff was chunk-alignment bookkeeping, not corruption.
+  Falsified-by-reading before any fix was built on it.
+- ★★ **The surviving contradiction, sharpened into the real question:** the dumped set_rows all
+  target STATIC cache_k_l* tensors — **no set_rows touches the paged pool at all.** The pool's
+  ONLY writer is the funnel's write phase, whose inputs are proven correct (KROW content, slots,
+  table), the kernels pass replay, no scribbles — yet KVSUM reads different pool bytes from
+  token 257. One premise in that syllogism is false. **NEXT UNIT: dump k_new row sums from the
+  METAL write phase per dispatch (stderr, same style as DS4P_CPU_KROW) and, in the same runs, a
+  raw-byte dump of pool rows for tokens 255–258 right after chunk 2 — if Metal-side write
+  content matches across arms while the pool bytes differ, the divergence is between the write
+  and the readback (offsets/planes), not in any content.** Also audit whether KVSUM's layer
+  ordering actually matches the dispatch ordering (assumption, never verified).
 - CPU reference arm has its own separate signature (20 alternating layers differ from N=256)
   — a CPU-reference quirk, parked; the ship path is Metal.
 
