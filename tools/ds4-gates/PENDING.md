@@ -1212,7 +1212,17 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   **Champion earns nothing for DSV4 until partials emission serves all 43 layers — the card
   is the whole game now.** Contract-copy count: FOUR sites must move in lockstep (metal hd_ok,
   vec builder, graph champ_geometry, and the abort predicate) — consolidation candidate.
-- ⚠⚠ **PARTIALS FIRST ATTEMPT REVERTED (ds4ports c514b245a) — it NEVER COMPILED and its
+- ✅✅ **PARTIALS EMISSION LANDED (second attempt, FC-constant design — task #14 COMPLETE):**
+  all 43 DSV4 layers champion-servable; partials replay arms + decode-shaped arm PASS
+  (norm-selfcheck 2.4e-7; raw-OMS bar recalibrated informational-2e-2 with documented
+  cancellation rationale); full default sweep ALL PASSED; server battery byte-exact with
+  presence counts (64-128 champ dispatches). **Honest perf verdict: champion-full decode
+  17.0-17.5 vs 23.0 uniform-scalar at bs=64 — vec@D=512 does not win DSV4 decode (nsg 4 best,
+  8 worse, ≥16 exceeds vec smem). DSV4 recommendation UNCHANGED: bs64 + champion off.**
+  Champion path now complete and correct for the archs where it wins (D≤256). OPTIONAL open
+  perf question: long-context prefill A/B (champ block-walk vs the scalar 7 t/s @64k tail),
+  ~2h, boarded not scheduled.
+- ⚠⚠ (superseded) **PARTIALS FIRST ATTEMPT REVERTED (ds4ports c514b245a) — it NEVER COMPILED and its
   compile gate was a STALE BINARY.** The champ kernels use kargs_flash_attn_ext (no
   emit_partials field); metal embeds at BUILD time, so the 'gate' passed on old embedded
   metal. Gate-plumbing class, stale-binary flavor. Task #14 carries the re-landing
