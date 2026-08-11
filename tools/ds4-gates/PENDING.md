@@ -1218,13 +1218,20 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
     the first execution, garbage on the second, at ub≡0 mod 256.** Host-side writes are
     innocent; builders innocent; kernels innocent. No pointer overlap among host tensors
     (checked all masks vs pos, both arms).
-    **NEXT UNIT: instrument the sched input-copy (ggml_backend_sched_compute_splits — print
-    src/dst/bytes per split-input copy) at ub256 and see why the chunk-2 copy carries mask
-    bytes (skipped copy? wrong source offset? stale staging?). Then the minimal standalone
-    repro — this smells UPSTREAM (any CPU-leaf → Metal-split model with reused/matched graph
-    shapes could hit it), so repro-first before any fix, and check upstream issues for prior
-    art.** Note: corruption reproduces with graph-reuse DISABLED and tap OFF too — the copy
-    defect does not require either; the join run merely made it visible.
+    ✅ **DS4P_SCHED_CPY ran (probe in ggml-backend.cpp compute_splits, landed): the chunk-2
+    SPLIT-INPUT COPY PASS NEVER FIRED.** leaf_11 (inp_pos) copied to Metal exactly ONCE at
+    n=256 (chunk 1, src0=0); no second 256-wide copy exists; ALL big inputs show the same
+    single-copy pattern — while decode graphs re-copy every step. ⇒ chunk-2's execution took a
+    path that BYPASSES compute_splits' input-copy loop (graph reused, copy-slot possibly
+    rotated ⇒ reads a NEVER-FILLED slot = the mask-patterned garbage).
+    ⚠ CAVEAT on the old NOREUSE data point: the reuse-disable run predates defect #1's
+    deletion, so "reproduces without reuse" is CONTAMINATED — re-run ub256 +
+    LLAMA_GRAPH_REUSE_DISABLE=1 on the CURRENT build; if clean, defect #2 is fully
+    reuse-conditional and the fix target is the reuse path's skipped input copies.
+    **NEXT UNIT: (1) that NOREUSE re-run; (2) find which compute path chunk 2 took (print at
+    compute_splits entry: n_splits + a call counter; absence for chunk 2 = proof of bypass);
+    (3) then the minimal repro + upstream prior-art check — a reused graph whose split-input
+    copies are skipped breaks ANY CPU-leaf→GPU-split model, this is upstream-grade.**
   - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
     live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
