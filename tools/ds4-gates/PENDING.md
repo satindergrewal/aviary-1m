@@ -1184,15 +1184,23 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
   target STATIC cache_k_l* tensors — **no set_rows touches the paged pool at all.** The pool's
   ONLY writer is the funnel's write phase, whose inputs are proven correct (KROW content, slots,
   table), the kernels pass replay, no scribbles — yet KVSUM reads different pool bytes from
-  token 257. One premise in that syllogism is false. **NEXT UNIT — corrected once already: a Metal-side k_new
-  probe CANNOT live in the op handler (Metal encodes the whole graph before executing;
-  tensor_get at encode time reads pre-run bytes — built it, realized it lies, reverted before
-  running it). The valid probe is SCHEDULER-SIDE, post-execution: extend the KVSUM block with a
-  raw-byte row dump (first 8 halves of tokens 254–258, layers 0–2, addressed through the block
-  table exactly as debug_seq_kv_checksum does) and diff ub255 vs ub256. If pool bytes differ
-  while CPU-graph content is identical, the false premise is either Metal-side compute
-  divergence or readback addressing — and the byte pattern (garbage vs other-token's row) says
-  which.** Also audit whether KVSUM's layer
+  token 257. One premise in that syllogism is false. The scheduler-side ROWDUMP ran (DS4P_KVSUM_ROWDUMP, landed) and CONVERGED THE SEARCH:
+  - Token-256 row, both planes: **first dims BIT-IDENTICAL across arms, full-row bitsum
+    DIFFERS** — the divergence lives in the row's TAIL. K==V within each arm (merged-KV write
+    coherent). Combined with the corrupt rows' token-id periodicity (257==267 bit-exact), the
+    signature reads as: **the rope'd tail section of chunk-2's K arrives UNROTATED (rope@pos=0
+    ≡ identity ≡ rope never landed) while the nope head is correct — Metal arm, ub≡0 mod 256,
+    non-first chunks.** CPU graph content is proven identical across arms (KROW full-row sums),
+    so the CPU-side graph is innocent; Metal fusion/reorder/concurrency are ALL disabled-and-
+    still-corrupt, so it is not scheduling.
+  - **NEXT UNIT: read how build_attention_impl constructs the raw K's rope for the coupled
+    layers (nope/pe concat) and what the paged funnel actually receives — the hypothesis space
+    is now one line wide: an inplace-rope/view whose result the funnel's src misses on Metal
+    for non-first chunks at exact-multiple sizes, OR a builder branch that hands the funnel a
+    pre-rope node. Then a one-run confirm: dump the same row with tail halves printed and check
+    it equals rope⁻¹(correct row).**
+  - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
+    live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
 - CPU reference arm has its own separate signature (20 alternating layers differ from N=256)
   — a CPU-reference quirk, parked; the ship path is Metal.
