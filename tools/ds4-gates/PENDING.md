@@ -1057,9 +1057,24 @@ out = O / S                                       # broadcast div
 ```
 The one inventory gap that shaped this: ggml has NO row-max op — `pool_1d(MAX, k=row)` IS one, and
 Metal implements it. M1/S1/O1 come as views of the paged partials `[D+2,H,N]`.
-Then the CSA/HCA callers split raw-half (partials, paged) from compressed-half (dense via the
-recipe), acceptance = **paged CSA output == static CSA output at the model level**. This unit is
-now mechanical; it starts fresh (graph code + model-level smoke, ~2–3h).
+
+### ★★★ STEP 2 SHIPPED `5b629e6a7` (2026-08-12) — **ALL 46 DSV4 LAYERS PAGE, BYTE-IDENTICAL, both scales**
+
+Acceptance met at 6 tokens AND ~600 tokens (dense halves live, ~150 csa rows): output byte-equal to
+static, consume=516, zero aborts. Two bugs on the way, both caught by instruments, neither by
+plumbing: (1) the merge-algebra oracle (1.8e-07 both backends) exonerated the recipe while the
+model was degenerate → the bug was in the INPUTS; the CSA/HCA env discriminator (`DS4P_SPLIT`)
+split the space. (2) **The killer: `-inf + inf = NaN`** — a fully-masked dense row (top-k selecting
+nothing, guaranteed short-prompt) made `m2=-inf`, and `m2+relu(M1−m2)` NaN'd the whole output with
+every marker green. Fixed by clamping scores to −1e9 before pooling; **the oracle now presents a
+fully-masked row** so the class cannot pass it again. ⚠ Honest note: the static-write restoration
+was added against the NaN symptom and did NOT fix it; it stays conservatively (compressor commits
+plausibly read the raw cache) with a comment saying exactly that — removing it needs a
+long-conversation gate.
+
+**DSV4 Tiers 0+1+2 are functionally COMPLETE under `DS4P_PAGED_DSV4=1 + DS4P_SCALAR_SINKS=1`.**
+Remaining for flag-flip: gates at scale (long-context parity + the warm gate on DSV4) and the
+owner's default call. The champion-d512 and V=K-aliasing items are now PERF work, not coverage.
 
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
