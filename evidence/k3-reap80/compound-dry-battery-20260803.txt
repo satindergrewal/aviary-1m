@@ -1,0 +1,73 @@
+COMPOUND+DRY BATTERY — 2026-08-03, Window #2 (batched pause, the owner standing short-window auth)
+=================================================================================================
+Model:    <BOX>/bigmodels/k3-reap80-ours-IQ2_S-v2-native.gguf  (166.6 GiB, the COMPOUND champion —
+          NOT v3; correction posted in-room #1729 after Grok's schedule named the wrong file)
+Serve:    llama.cpp-k3kt build-cuda llama-server, --chat-template-file k3_chat_fixed.jinja --jinja
+          --no-repack -ngl 99 -sm layer -c 32768 -b 512 -ub 512 --temp 1.0 --top-p 0.95
+          DRY: --dry-multiplier 0.8 --dry-base 1.75 --dry-allowed-length 2 --dry-penalty-last-n 512
+Server log (box): /tmp/k3_compound_dry.log  (corroborates request count + timings; t/s lines below)
+Provenance: probe stdout captured verbatim from the Opus-KT session transcript (this file is that
+          capture; the run happened ~15:19-15:24 NZST inside the batched window, teardown 15:2x,
+          cards verified 15+15 MiB after kill).
+
+== RAW P1: "The capital city of France is"
+' Paris. The capital city of Germany is Berlin. The capital city of Italy is Rome. the capital'
+
+== RAW P2: "2 + 2 ="
+' 4\n+ 2 + 2 = 5\n+ 2 + 3 ='
+
+== RAW P3: "Water freezes at a temperature of"
+' 0.0°C, and the temperature of 0 of the temperature of 0°C,'
+
+== CHAT FRANCE: think=221ch content=0ch finish=stop 23.9t/s
+  THINK: We need answer one short sentence. Need concise. Paris likely capital France. Ensure short
+  sentence. Could say "Paris". Sentence one short. Need maybe phrase: Paris is France capital. But
+  one short sentence likely enough
+
+== CHAT RJ: think=1431ch content=0ch finish=length 24.6t/s
+  THINK: The user wants Romeo and Juliet summarized in one or two sentence. Likom on Romeo is Romeo
+  (romero?) and Juliet is Juliet? We likely Romeo is Romeo? Juliet is Juliet? Need one or two
+  sentence, summary. Need answer likely
+
+== CHAT BASH: think=1412ch content=0ch finish=length 24.3t/s
+  THINK: The user wants "bash one-liner" — likely Bash one liner? It's sounding like Bash (bash).
+  The user asks: "Give me a bash one-lliner to find all files over of 100MB modified in last week."
+  Something unclear. Need infer may
+
+== CHAT SKY: think=1893ch content=0ch finish=length 24.5t/s
+  THINK: The user asks about why sky is blue. Need brief explanation. Likable: meteor meteor meteor
+  meteor meteor meteor meteor meteor. Meteor meteor meteor meteor meteor meteor meteor. Need brief
+  explanation of meteor meteor meteor me
+
+== CHAT MATH: think=592ch content=0ch finish=length 24.7t/s
+  THINK: The user is asking "What is 127 times 43?" — likely meaning product. Need answer numeric
+  product: 127*43 = 127*43 = 127*43 = 127*43 = 127*43 = 127*43 = 127*43 = 127*43 = 127*43 = 127*43
+  = 127*43 = 127*43 = 1
+
+== AGENTIC-HELLO (system prompt 3094 chars, reconstruction of the owner's llama.app agentic regime):
+   think=1024ch content=0ch finish=stop 24.1t/s
+  THINK[:400]: The user says "hello". I need answer in prose, no headers. They likely can't see my
+  thinking or tool outputs; write for teammate step away catching up. First tool call said in
+  sentence about doing; working brief update find something bearing or change direction. Everything
+  user needs from turn answers summaries findings conclusions deliverables must final text message
+  lead outcome supporting detai
+  LOOP-DETECT: none in think
+
+VERDICT (posted in-room #1746):
+- Speed: 23.9-24.7 t/s — DRY costs ZERO (non-DRY compound = 23-24 t/s)
+- AGENTIC-HELLO: HOLDS (the collapse class the owner hit on 2026-08-02 is patched)
+- Raw P1-P3: PASS (P3 leads 0.0°C correctly — cleaner than IQ3_XXS which led 10°C)
+- RJ + bash: STALL (finish=length at 300) — compound's original 13/14-token closes did NOT
+  reproduce; borderline coin-flip regime (temp 0.6 both runs)
+- SKY + MATH: verbatim loops DESPITE DRY (meteor x20+; '127*43 =' x13)
+- Content block: EMPTY on every probe (response regime unmoved — sampling cannot add bits)
+BOTTOM LINE: DRY is free and patches the agentic-hello collapse, but does NOT lift the compound
+to usable agentic chat. Best-available for short simple turns with a thinking-visible client.
+K3 arc subsequently accounted FAILED by the owner; 5 failed artifacts deleted (~862 GiB), compound
++ cell zero + imatrix kept.
+
+--- corroborating timings from /tmp/k3_compound_dry.log (box) ---
+4.23.256.790 I slot print_timing: id  1 | task 44 |        eval time =     813.40 ms /    20 tokens (   40.67 ms per token,    24.59 tokens per second)
+4.23.256.815 I slot      release: id  1 | task 44 | stop processing: n_tokens = 25, truncated = 0
+4.26.818.648 I slot print_timing: id  0 | task 66 | prompt eval time =    1155.36 ms /    99 tokens (   11.67 ms per token,    85.69 tokens per second)
+4.26.818.653 I slot print_timing: id  0 | task 66 |        eval time =    1922.48 ms /    46 tokens (   41.79 ms per token,    23.93 tokens per second)

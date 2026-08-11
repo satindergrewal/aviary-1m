@@ -1,0 +1,17 @@
+map: 92 layers, keep-count(s) [179]
+ops: expert=98808 router=184 passthrough=2444 (from 96 source shards)
+plan: 101436 tensors -> 10 shards, 402.4 GB
+  [1/10] model-00001-of-00010.safetensors 42.9 GB  (42.9 GB done, 188 MB/s, 3.8 min)
+  [2/10] model-00002-of-00010.safetensors 42.9 GB  (85.9 GB done, 183 MB/s, 7.8 min)
+  [3/10] model-00003-of-00010.safetensors 42.9 GB  (128.8 GB done, 182 MB/s, 11.8 min)
+  [4/10] model-00004-of-00010.safetensors 42.9 GB  (171.8 GB done, 184 MB/s, 15.6 min)
+  [5/10] model-00005-of-00010.safetensors 42.9 GB  (214.7 GB done, 185 MB/s, 19.4 min)
+  [6/10] model-00006-of-00010.safetensors 42.9 GB  (257.7 GB done, 183 MB/s, 23.4 min)
+  [7/10] model-00007-of-00010.safetensors 42.9 GB  (300.6 GB done, 184 MB/s, 27.2 min)
+  [8/10] model-00008-of-00010.safetensors 42.9 GB  (343.6 GB done, 185 MB/s, 31.0 min)
+  [9/10] model-00009-of-00010.safetensors 42.9 GB  (386.5 GB done, 185 MB/s, 34.8 min)
+  [10/10] model-00010-of-00010.safetensors 15.9 GB  (402.4 GB done, 187 MB/s, 35.9 min)
+aux: config num_experts -> 179, expert_counts written
+verify: 101436 tensors, 92 MoE layers, contiguous 0..178 experts each
+VERIFY PASS
+TOTAL 402.4 GB -> <BOX>/bigmodels/kimi-k3-reap80-ours

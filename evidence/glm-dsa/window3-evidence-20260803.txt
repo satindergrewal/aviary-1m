@@ -1,0 +1,48 @@
+WINDOW #3 EVIDENCE — 2026-08-03, GLM/DSA queue items (the owner-authorized, regen paused 11,873)
+=================================================================================================
+Window: ~52 min, cards verified 15+15 MiB at teardown. Box logs: /tmp/glm_w3.log (stock serve),
+/tmp/glm_dq_f16.log, /tmp/glm_dq_q8.log (dequant arms, wt-dsa-dequant @42942e19b).
+
+ITEM 1 — fused Lightning Indexer probe: CONFIRMED (as the corrected queue doc predicted).
+  resolve_fused_ops lines (stock fleet serve, tensor-split 49,51, -lv 4):
+    "fused Gated Delta Net (autoregressive) enabled"
+    "fused Gated Delta Net (chunked) enabled"
+    "Lightning Indexer enabled"
+    "fused DeepSeek V4 HC pre/comb/post enabled"
+  Zero "not supported, set to disabled" lines. The indexer IS fused on this serve.
+
+ITEM 2 — DSA dequant-in-gather gates (PARTIAL; two items deferred, one confound logged).
+  Decode curves, same binary (wt-dsa-dequant), same GLM IQ1_S, matched prompt sizes:
+    F16:  53.9 / 44.6 / 35.0 t/s
+    q8_0: 53.2 / 42.5 / 31.4 t/s
+  q8 tracks the F16 arm within ~10% at matched depths — NOT the mask-path profile.
+  ⚠ CORRECTION (Grok #1789, accepted): my depth labels were wrong. Measured prompt sizes are
+  ~573 / ~21K / ~44.5K tokens, NOT 1K/32K/100K (the repetitive filler compresses ~10 chars/token
+  in BPE, not ~4). The q8↔F16 comparison is valid at matched depths, but only reaches 44.5K —
+  "q8 is not the mask-path decay at 100K" is NOT proven here. Deferred: true-100K+200K points,
+  NIAH-32K correctness, q4_0 398K/572K ceiling loads.
+  Gate-4 (F16 bit-identical): CONFOUNDED — stock binary ffee9f47e (fleet-sync) vs dequant
+  42942e19b (off fleet) are different base builds; three runs gave three coherent-but-different
+  phrasings. Needs a same-base control build.
+
+ITEM 3 — sa_spec "+34% acceptance": no --sa_spec flag in either binary's --help
+  (spec-draft-type-k/v only). Claim UNEXERCISABLE as stated; quarantine stands.
+
+ITEM 4 — GLM live eviction at default 8192 MiB cap: **FIRES — witnessed** (my earlier "no
+  eviction" was wrong, owned):
+  /tmp/glm_w3.log:695  "alloc: - making room for prompt cache entry, removing oldest entry
+  (size = 4411.801 MiB)" at log-time 17.03.224.
+  Sequence: A1+B1+A2 completed with A still resident (A2 prompt_n=1 hit); the eviction fired
+  ~3.5 min LATER when B's idle slot saved its state and pushed past the cap, evicting A's
+  4,411.801 MiB state. The event exists and fires on delayed slot-save; the -cram recommendation's
+  core premise (eviction is real at the default cap) is now witnessed on live GLM.
+  Open refinement: exact multi-slot accounting semantics (per-slot saves vs global cap timing).
+
+--- corroborating raw log lines (pulled 2026-08-03 ~19:05) ---
+3.55.945.218 I slot print_timing: id  1 | task 54 |        eval time =     717.38 ms /    32 tokens (   22.42 ms per token,    44.61 tokens per second)
+6.28.227.349 I slot print_timing: id  1 | task 107 | prompt eval time =  151268.48 ms / 44565 tokens (    3.39 ms per token,   294.61 tokens per second)
+6.28.227.352 I slot print_timing: id  1 | task 107 |        eval time =     914.23 ms /    32 tokens (   28.57 ms per token,    35.00 tokens per second)
+17.03.224.061 W srv         alloc:  - making room for prompt cache entry, removing oldest entry (size = 4411.801 MiB)
+/tmp/glm_w3.log:1.46.198.170 I srv  llama_server: listening on http://127.0.0.1:8090
+/tmp/glm_dq_f16.log:1.41.130.327 I srv  llama_server: listening on http://127.0.0.1:8091
+/tmp/glm_dq_q8.log:1.24.326.447 I srv  llama_server: listening on http://127.0.0.1:8091

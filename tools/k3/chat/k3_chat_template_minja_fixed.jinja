@@ -1,0 +1,174 @@
+{#- Kimi K3 chat template (XTML) -- llama.cpp / minja variant.
+
+    Same format as chat_template.jinja, rewritten to the subset minja implements.
+    Use this one for GGUF and llama.cpp; use chat_template.jinja for transformers,
+    vLLM and SGLang.
+
+    Three constructs had to change, and they are why one file cannot serve both
+    engines:
+
+      * `sort(attribute='pos,off')` -- minja has no `sort` filter, so the
+        tool-result reorder selects by matched position with `range` instead.
+      * `tojson(sort_keys=true, separators=(',', ':'))` -- minja's `tojson` takes
+        only `value` and `indent`, so `cjson` below serialises sorted compact JSON
+        directly. It relies on minja's `dictsort` being a plain byte-order sort,
+        which is what `json.dumps(sort_keys=True)` does. transformers' `dictsort`
+        defaults to case-insensitive and minja rejects `case_sensitive=true`, so
+        this macro is correct here and would be subtly wrong under transformers.
+      * `replace` as a filter -- minja only exposes it as a string method.
+
+    Only literal text sits at column 0. Lines holding nothing but a block tag are
+    indented for reading; lstrip_blocks strips that indentation.
+-#}
+{%- macro attr(k, v) %} {{ k }}="{{ (v | string).replace('&', '&amp;').replace('"', '&quot;') }}"{% endmacro %}
+{%- macro cjson(x) %}{% if x is mapping %}{{ '{' }}{% for k, v in x | dictsort %}{% if loop.index0 > 0 %},{% endif %}{{ k | tojson }}:{{ cjson(v) }}{% endfor %}{{ '}' }}{% elif x is string or x is boolean or x is number or x is none %}{{ x | tojson }}{% else %}[{% for item in x %}{% if loop.index0 > 0 %},{% endif %}{{ cjson(item) }}{% endfor %}]{% endif %}{% endmacro %}
+{%- macro body(c) %}{% if c is string %}{{ c }}{% elif c is not none %}{% for part in c %}{% if part.type in ['image', 'image_url'] %}<|kimi_image_placeholder|>{% else %}{{ part.text }}{% endif %}{% endfor %}{% endif %}{% endmacro %}
+{%- macro call_name(tc) %}{{ tc.function.name if 'function' in tc else tc.name }}{% endmacro %}
+{%- macro xtml_type(v) %}{{ 'boolean' if v is boolean else 'null' if v is none else 'number' if v is number else 'string' if v is string else 'object' if v is mapping else 'array' }}{% endmacro %}
+{%- set thinking = thinking if thinking is defined else true -%}
+{%- set thinking_effort = thinking_effort if thinking_effort is defined else 'max' -%}
+{%- if thinking and thinking_effort is not none and thinking_effort not in ['low', 'high', 'max'] -%}
+    {%- set _ = raise_exception('Unsupported thinking_effort=' ~ thinking_effort ~ '; supported values are [\'high\', \'low\', \'max\'].') -%}
+{%- endif -%}
+{#- Pass 1: render order and authoritative tool names. -#}
+{%- set pre = namespace(plan=[], calls=none) -%}
+{%- for m in messages -%}
+    {%- if m.role == 'tool' and not (loop.index0 == 0 or messages[loop.index0 - 1].role != 'tool') -%}
+        {#- already emitted as part of its run -#}
+    {%- elif m.role == 'tool' -%}
+        {%- set run = namespace(entries=[], matched=true) -%}
+        {%- for m2 in messages[loop.index0:] -%}
+            {%- if m2.role != 'tool' -%}{%- break -%}{%- endif -%}
+            {%- set cid = m2.tool_call_id if 'tool_call_id' in m2 else (m2.id if 'id' in m2 else none) -%}
+            {%- set hit = namespace(pos=none, name=none) -%}
+            {%- if cid is not none and pre.calls -%}
+                {%- for tc in pre.calls -%}
+                    {%- if hit.pos is none and 'id' in tc and tc.id is not none and (tc.id | string) == (cid | string) -%}
+                        {%- set hit.pos = loop.index -%}
+                        {%- set nm = call_name(tc) -%}
+                        {%- if nm -%}{%- set hit.name = nm -%}{%- endif -%}
+                    {%- endif -%}
+                {%- endfor -%}
+            {%- endif -%}
+            {%- if hit.pos is none -%}{%- set run.matched = false -%}{%- endif -%}
+            {%- set run.entries = run.entries + [{'m': m2, 'pos': hit.pos, 'tool': hit.name}] -%}
+        {%- endfor -%}
+        {%- if run.matched -%}
+            {#- Selection by position: run.entries is already in arrival order, so
+                picking each position in turn is a stable sort by (pos, offset). -#}
+            {%- for p in range(1, (pre.calls | length) + 1) -%}
+                {%- for it in run.entries -%}
+                    {%- if it.pos == p -%}
+                        {%- set pre.plan = pre.plan + [{'m': it.m, 'tool': it.tool}] -%}
+                    {%- endif -%}
+                {%- endfor -%}
+            {%- endfor -%}
+        {%- else -%}
+            {%- for it in run.entries -%}
+                {%- set pre.plan = pre.plan + [{'m': it.m, 'tool': none}] -%}
+            {%- endfor -%}
+        {%- endif -%}
+    {%- else -%}
+        {%- if m.role == 'assistant' -%}
+            {%- set pre.calls = m.tool_calls if m.tool_calls else none -%}
+        {%- endif -%}
+        {%- set pre.plan = pre.plan + [{'m': m, 'tool': none}] -%}
+    {%- endif -%}
+{%- endfor -%}
+{#- Pass 2: emit. -#}
+{%- set ns = namespace(tool_index=0, tool_calls=none) -%}
+{%- if tools -%}
+<|open|>message{{ attr('role', 'system') }}{{ attr('type', 'tool-declare') }}<|sep|># Tools
+Here are the available tools, described in JSONSchema.
+
+```json
+{{ cjson(tools) }}
+```<|close|>message<|sep|><|end_of_msg|>
+{%- endif -%}
+{%- if thinking and thinking_effort in ['low', 'high', 'max'] -%}
+<|open|>message{{ attr('role', 'system') }}{{ attr('type', 'thinking-effort') }}<|sep|>`thinking_effort` guides on how much to think in your thinking channel (not including the response channel), supported values include `low`, `medium`, `high`, and `max`.
+Now the system is invoked with `thinking_effort={{ thinking_effort }}`.<|close|>message<|sep|><|end_of_msg|>
+{%- endif -%}
+{%- for item in pre.plan -%}
+    {%- set message = item.m -%}
+    {%- if message.role == 'user' -%}
+<|open|>message{{ attr('role', 'user') }}{% if message.name %}{{ attr('name', message.name) }}{% endif %}<|sep|>{{ body(message.content) }}<|close|>message<|sep|><|end_of_msg|>
+    {%- elif message.role == 'system' and message.tools -%}
+<|open|>message{{ attr('role', 'system') }}{{ attr('type', 'tool-declare') }}<|sep|>## New Tools Available
+The system dynamically extends the toolset via lazy-loading.
+You have access to all existing and extended tools.
+Here are the specs for the extended tools.
+
+```json
+{{ cjson(message.tools) }}
+```<|close|>message<|sep|><|end_of_msg|>
+    {%- elif message.role == 'system' -%}
+<|open|>message{{ attr('role', 'system') }}{% if message.name %}{{ attr('name', message.name) }}{% endif %}<|sep|>{{ body(message.content) }}<|close|>message<|sep|><|end_of_msg|>
+    {%- elif message.role == 'tool' -%}
+        {%- set ns.tool_index = ns.tool_index + 1 -%}
+        {%- set found = namespace(name=item.tool) -%}
+        {%- if found.name is none -%}
+            {%- set found.name = message.tool if 'tool' in message else (message.name if 'name' in message else none) -%}
+        {%- endif -%}
+        {%- if found.name is none and ns.tool_calls and ns.tool_index <= ns.tool_calls | length -%}
+            {%- set found.name = call_name(ns.tool_calls[ns.tool_index - 1]) -%}
+        {%- endif -%}
+        {%- if found.name is none -%}
+            {%- set _ = raise_exception('Kimi K3 tool messages need a resolvable tool name: carry `tool`/`name`, or match a preceding assistant tool_call by order.') -%}
+        {%- endif -%}
+<|open|>message{{ attr('role', 'tool') }}{{ attr('tool', found.name) }}{{ attr('index', ns.tool_index) }}<|sep|>{{ body(message.content) }}<|close|>message<|sep|><|end_of_msg|>
+    {%- elif message.role == 'assistant' -%}
+        {%- set ns.tool_calls = message.tool_calls if message.tool_calls else none -%}
+        {%- set ns.tool_index = 0 -%}
+<|open|>message{{ attr('role', 'assistant') }}{% if message.name %}{{ attr('name', message.name) }}{% endif %}<|sep|>
+        {%- if thinking -%}
+            {%- set rc = message.reasoning_content or message.reasoning -%}
+<|open|>think<|sep|>{% if rc is not none and rc | string | trim %}{{ rc }}{% endif %}<|close|>think<|sep|>
+        {%- endif -%}
+<|open|>response<|sep|>{{ body(message.content) }}<|close|>response<|sep|>
+        {%- if message.tool_calls -%}
+<|open|>tools<|sep|>
+            {%- for tc in message.tool_calls -%}
+                {%- set fn = tc.function if 'function' in tc else tc -%}
+<|open|>call{{ attr('tool', fn.name) }}{{ attr('index', loop.index) }}<|sep|>
+                {%- set args = fn.arguments if 'arguments' in fn else {} -%}
+                {%- if args is string and args | trim -%}
+<|open|>json{{ attr('type', 'object') }}<|sep|>{{ args }}<|close|>json<|sep|>
+                {%- elif args is mapping -%}
+                    {%- for key, value in args.items() -%}
+<|open|>argument{{ attr('key', key) }}{{ attr('type', xtml_type(value)) }}<|sep|>{{ value if value is string else (value | tojson) }}<|close|>argument<|sep|>
+                    {%- endfor -%}
+                {%- endif -%}
+<|close|>call<|sep|>
+            {%- endfor -%}
+<|close|>tools<|sep|>
+        {%- endif -%}
+<|close|>message<|sep|><|end_of_msg|>
+    {%- endif -%}
+{%- endfor -%}
+{%- if tool_choice is defined and tool_choice == 'required' -%}
+<|open|>message{{ attr('role', 'system') }}{{ attr('type', 'tool-choice') }}<|sep|>The system is invoked with `tool_choice=required`.
+You MUST call tools in the next message.<|close|>message<|sep|><|end_of_msg|>
+{%- elif tool_choice is defined and tool_choice == 'none' -%}
+<|open|>message{{ attr('role', 'system') }}{{ attr('type', 'tool-choice') }}<|sep|>The system is invoked with `tool_choice=none`.
+You MUST NOT call any tools in the next message.<|close|>message<|sep|><|end_of_msg|>
+{%- endif -%}
+{%- set rf = response_format if response_format is defined else none -%}
+{%- set rf_type = (rf.type if 'type' in rf else rf) if rf is mapping else rf -%}
+{%- if rf_type == 'json_object' -%}
+<|open|>message{{ attr('role', 'system') }}{{ attr('type', 'response-format') }}<|sep|>The system is invoked with `response_format=json_object`.
+Your response must be raw JSON data without markdown code blocks (```json) or any additional formatting.<|close|>message<|sep|><|end_of_msg|>
+{%- elif rf_type == 'json_schema' -%}
+    {%- set js = (rf.json_schema if 'json_schema' in rf else none) if rf is mapping else none -%}
+    {%- set derived = (js.schema if 'schema' in js else (js.json_schema if 'json_schema' in js else js)) if js is mapping else js -%}
+    {%- set schema = response_schema if response_schema is defined and response_schema is not none else derived -%}
+<|open|>message{{ attr('role', 'system') }}{{ attr('type', 'response-format') }}<|sep|>The system is invoked with `response_format=json_schema`.
+Your response must be raw JSON data without markdown code blocks (```json) or any additional formatting.
+The JSON data must match the following schema:
+```json
+{{ cjson(schema) }}
+```<|close|>message<|sep|><|end_of_msg|>
+{%- endif -%}
+{%- if add_generation_prompt -%}
+<|open|>message{{ attr('role', 'assistant') }}<|sep|><|open|>{{ 'think' if thinking else 'response' }}<|sep|>
+{%- endif -%}

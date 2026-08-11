@@ -1,0 +1,65 @@
+
+== RAW P1: The capital city of France is (publisher sampler)
+NO-CHOICES: {"index":0,"content":" Paris. The French Paris consists of the letters of the word s e t r i a l, repeated. In addition to that, there must be some changes in the structural presence of those letters in that they are transposed or modified (‘s e t r i a l’ here), as well as possibly other","tokens":
+
+== RAW P2: 2 + 2 = (publisher sampler)
+NO-CHOICES: {"index":0,"content":" ?\n\nWhen discussing a math problem with Dr. Gloy (|Tan), the following was written:\n\nLet's think about this like a math puzzle. The goal is to find the right numbers that fit into the equation, just like solving for x.\n\nWe want to solve the equation: 2 + 2 = ?","tokens":[
+
+== RAW P3: Water freezes at a temperature of (publisher sampler)
+NO-CHOICES: {"index":0,"content":" 32 degrees Fahrenheit. At that point, it's not cold enough for the water to freeze so you can actually pour water over something and then watch as the water freezes.\nThe thing about this is that the water doesn't really freeze instantly - it takes time for the water in the pu
+
+== TEMP-0 GREEDY PROBE (publisher claims '*' collapse mode)
+NO-CHOICES: {"index":0,"content":" Paris. The French Paris is a beautiful city with rich culture and history. It is the capital city of France and is located in the northern part of the country. The city is known for its beautiful architecture, rich culture, and incredible history. The French Paris is a beautif
+
+== CHAT FRANCE (sampler)
+think=81ch content=31ch finish=stop LOOP=none
+  THINK[:300]: 1 ```  Paris is the capital of France. ``` 1 `` Paris is the capital of France.``
+  CONTENT[:300]: Paris is the capital of France.
+
+== CHAT RJ (sampler)
+think=1470ch content=0ch finish=length LOOP=none
+  THINK[:300]: The user wants a very brief summary of *Romeo and Juliet* — one or two sentences.  Let me craft a tight, accurate summary:  "Romeo and Juliet are two young lovers from feuding families who fall deeply in love but are kept apart by their families' hatred. Through a series of tragic misunderstandings 
+  CONTENT[:300]: 
+
+== CHAT BASH (sampler)
+think=946ch content=0ch finish=length LOOP=none
+  THINK[:300]: 1) **Analyze user request:** User wants a bash one-liner to find files >100MB, modified in the last week.  2) **Construct command:** - Need to find files. - Size > 100MB -> `find -size +100M` (actually `+10000000`? no, `+100M` is not standard, but GNU find has `-size N` where N is bytes/chars. Let's
+  CONTENT[:300]: 
+
+== CHAT SKY (sampler)
+think=1307ch content=0ch finish=length LOOP=none
+  THINK[:300]: 1.  **Analyze the Request:**     *   Question: "Why is the sky blue?"     *   Condition: "Brief explanation."  2.  **Determine the Explanation:**     *   The scientific reason for the sky's color involves Rayleigh scattering (sunlight hits air molecules, and blue light scatters more than other color
+  CONTENT[:300]: 
+
+== CHAT MATH (sampler)
+think=799ch content=0ch finish=length LOOP=none
+  THINK[:300]: The user is asking for the product of 127 and 43. I need to compute this exactly.  Let me do it carefully: $127 \times  43 = ?$  Let's compute by hand:  127 × 40 = (100 + 20 + 7) × 40 = 4000 + 800 + 280 = 4480  So 127 × 40 = 5080. Wait, let me recompute: 127 * 10 = 1270 127 * 10 = 1270 Total: 2540. 
+  CONTENT[:300]: 
+
+== AGENTIC-HELLO (agentic-regime system prompt ~2.5K, user=hello)
+  sys=1672ch think=107ch content=105ch finish=stop LOOP=none
+  THINK[:300]: The user just said "hello". There's no task here yet; I should respond briefly and wait for a real request.
+  CONTENT[:300]: Hello. I'm ready to work when you are — give me a task whenever you'd like. What would you like me to do?
+
+== BATTERY END ==
+
+== FOLLOW-UP (content-starvation check: 300->1024 max_tokens) ==
+
+== CHAT RJ max_tokens=1024:
+think=4971ch content=0ch finish=length
+CONTENT: (empty) -- thinking spirals, never closes. NOT a budget artifact.
+
+== CHAT MATH max_tokens=1024:
+think=961ch content=17ch finish=stop
+CONTENT: 127 × 43 = 5,461"  (correct, stray trailing quote)
+
+== TIMINGS (box /tmp/reap50_serve.log) ==
+prompt eval 123.58 t/s; eval 332 tok in 7655 ms = 43.37 t/s decode (short ctx, q8 KV, full MLA attn — no indexer)
+
+== VERDICT ==
+Runs unpatched on dequant-gather binary (indexer-optional held at runtime). 43.4 t/s.
+Agentic-hello HOLDS. Raw coherence DEGRADED (P2 fails 2+2; P3 self-contradicts).
+Chat: simple turns close; substantive turns (RJ at 300 AND 1024) deliver 0 content —
+thinking never closes. Publisher greedy '* * *' collapse NOT reproduced (temp-0 = bland repetition).
+vs fluent 1.75bpw IQ1_S baseline: RUNS FAST, QUALITY-DEGRADED. Not usable for chat/agentic.
+Keep/delete = the owner's call. Model at <BOX>/bigmodels/glm52-reap50-q2k/ (130G, 4 shards byte-exact vs HF API).

@@ -1,0 +1,60 @@
+INFO:hf-to-gguf:blk.91.attn_q_b.weight,        torch.bfloat16 --> BF16, shape = {1536, 18432}
+INFO:hf-to-gguf:blk.92.exp_probs_b.bias,       torch.float32 --> F32, shape = {179}
+INFO:hf-to-gguf:blk.92.ffn_gate_inp.weight,    torch.bfloat16 --> F32, shape = {7168, 179}
+INFO:hf-to-gguf:blk.92.ffn_routed_down.weight, torch.bfloat16 --> BF16, shape = {7168, 3584}
+INFO:hf-to-gguf:blk.92.ffn_routed_norm.weight, torch.bfloat16 --> F32, shape = {3584}
+INFO:hf-to-gguf:blk.92.ffn_routed_up.weight,   torch.bfloat16 --> BF16, shape = {3584, 7168}
+INFO:hf-to-gguf:blk.92.ffn_down_shexp.weight,  torch.bfloat16 --> BF16, shape = {6144, 7168}
+INFO:hf-to-gguf:blk.92.ffn_gate_shexp.weight,  torch.bfloat16 --> BF16, shape = {7168, 6144}
+INFO:hf-to-gguf:blk.92.ffn_up_shexp.weight,    torch.bfloat16 --> BF16, shape = {7168, 6144}
+INFO:hf-to-gguf:blk.92.attn_norm.weight,       torch.bfloat16 --> F32, shape = {7168}
+INFO:hf-to-gguf:fused mlp_res_norm * mlp_res_proj -> blk.92.ffn_res_score.weight
+INFO:hf-to-gguf:blk.92.ffn_res_score.weight,   torch.bfloat16 --> F32, shape = {7168}
+INFO:hf-to-gguf:blk.92.ffn_norm.weight,        torch.bfloat16 --> F32, shape = {7168}
+INFO:hf-to-gguf:fused self_attention_res_norm * self_attention_res_proj -> blk.92.attn_res_score.weight
+INFO:hf-to-gguf:blk.92.attn_res_score.weight,  torch.bfloat16 --> F32, shape = {7168}
+INFO:hf-to-gguf:blk.92.attn_gate.weight,       torch.bfloat16 --> BF16, shape = {7168, 12288}
+INFO:hf-to-gguf:blk.92.attn_kv_a_norm.weight,  torch.bfloat16 --> F32, shape = {512}
+INFO:hf-to-gguf:blk.92.attn_kv_a_mqa.weight,   torch.bfloat16 --> BF16, shape = {7168, 576}
+INFO:hf-to-gguf:blk.92.attn_k_b.weight,        torch.bfloat16 --> BF16, shape = {128, 512, 96}
+INFO:hf-to-gguf:blk.92.attn_v_b.weight,        torch.bfloat16 --> BF16, shape = {512, 128, 96}
+INFO:hf-to-gguf:blk.92.attn_output.weight,     torch.bfloat16 --> BF16, shape = {12288, 7168}
+INFO:hf-to-gguf:blk.92.attn_q_a_norm.weight,   torch.bfloat16 --> F32, shape = {1536}
+INFO:hf-to-gguf:blk.92.attn_q_a.weight,        torch.bfloat16 --> BF16, shape = {7168, 1536}
+INFO:hf-to-gguf:blk.92.attn_q_b.weight,        torch.bfloat16 --> BF16, shape = {1536, 18432}
+INFO:hf-to-gguf:output_norm.weight,            torch.bfloat16 --> F32, shape = {7168}
+INFO:hf-to-gguf:fused output_attn_res_norm * output_attn_res_proj -> output_res_score.weight
+INFO:hf-to-gguf:output_res_score.weight,       torch.bfloat16 --> F32, shape = {7168}
+INFO:hf-to-gguf:Set meta model
+INFO:hf-to-gguf:Set model parameters
+INFO:hf-to-gguf:gguf: context length = 1048576
+INFO:hf-to-gguf:gguf: embedding length = 7168
+INFO:hf-to-gguf:gguf: feed forward length = 33792
+INFO:hf-to-gguf:gguf: head count = 96
+INFO:hf-to-gguf:gguf: key-value head count = 1
+INFO:hf-to-gguf:gguf: rms norm epsilon = 1e-05
+INFO:hf-to-gguf:gguf: expert count = 179
+INFO:hf-to-gguf:gguf: experts used count = 16
+INFO:hf-to-gguf:gguf: expert groups used count = 1
+INFO:hf-to-gguf:gguf: expert score gating function = sigmoid
+INFO:hf-to-gguf:gguf: file type = 38
+WARNING:gguf.gguf_writer:Duplicated key name 'kimi-k3.attention.head_count_kv', overwriting it with new value [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1] of type ARRAY
+WARNING:gguf.gguf_writer:Duplicated key name 'kimi-k3.expert_gating_func', overwriting it with new value 2 of type UINT32
+INFO:hf-to-gguf:Set model quantization version
+INFO:hf-to-gguf:Set model tokenizer
+The repository <BOX>/bigmodels/kimi-k3-reap80-ours contains custom code which must be executed to correctly load the model. You can inspect the repository content at <BOX>/bigmodels/kimi-k3-reap80-ours .
+ You can inspect the repository content at https://hf.co/<BOX>/bigmodels/kimi-k3-reap80-ours.
+You can avoid this prompt in future by passing the argument `trust_remote_code=True`.
+
+Do you wish to run the custom code? [y/N] INFO:transformers_modules.kimi_hyphen_k3_hyphen_reap80_hyphen_ours.tokenization_kimi:Reloaded tiktoken model from <BOX>/bigmodels/kimi-k3-reap80-ours/tiktoken.model
+INFO:transformers_modules.kimi_hyphen_k3_hyphen_reap80_hyphen_ours.tokenization_kimi:#words: 163840 - BOS ID: 163584 - EOS ID: 163585
+INFO:gguf.vocab:Setting special token type bos to 163584
+INFO:gguf.vocab:Setting special token type eos to 163586
+INFO:gguf.vocab:Setting special token type pad to 163839
+WARNING:gguf.gguf_writer:Duplicated key name 'tokenizer.ggml.eos_token_id', overwriting it with new value 163585 of type UINT32
+INFO:hf-to-gguf:restoring configured eos_token_id 163586 (kimi-linear forces the tokenizer's)
+WARNING:gguf.gguf_writer:Duplicated key name 'tokenizer.ggml.eos_token_id', overwriting it with new value 163586 of type UINT32
+INFO:gguf.gguf_writer:Writing the following files:
+INFO:gguf.gguf_writer:<BOX>/bigmodels/k3-reap80-ours-mxfp4-bf16.gguf: n_tensors = 2573, total_size = 401.8G
+
+INFO:hf-to-gguf:Model successfully exported to <BOX>/bigmodels/k3-reap80-ours-mxfp4-bf16.gguf

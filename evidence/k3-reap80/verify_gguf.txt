@@ -1,0 +1,23 @@
+=== metadata
+  general.architecture = kimi-k3
+  kimi-k3.block_count = 93
+  kimi-k3.expert_count = 179
+  kimi-k3.expert_used_count = 16
+  kimi-k3.embedding_length = 7168
+  kimi-k3.attention.head_count = 96
+  kimi-k3.vocab_size = 163840
+
+=== tensor type histogram
+  BF16       1185
+  F32        1112
+  MXFP4      276
+
+=== byte-exactness vs Moonshot master (2573 tensors total)
+  blk.3.ffn_gate_exps.weight       expert   0 (master   2)    5.85 MB  EXACT=True
+  blk.3.ffn_down_exps.weight       expert   5 (master  22)    5.85 MB  EXACT=True
+  blk.47.ffn_up_exps.weight        expert 100 (master 530)    5.85 MB  EXACT=True
+  blk.92.ffn_gate_exps.weight      expert 178 (master 893)    5.85 MB  EXACT=True
+  blk.60.ffn_down_exps.weight      expert  42 (master 224)    5.85 MB  EXACT=True
+
+PASS - 29.2 MB of expert payload byte-identical to Moonshot's release
+Chain closed: Moonshot weights -> REAP80 subset -> GGUF, bit-exact throughout.

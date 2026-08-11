@@ -1172,6 +1172,11 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
 - **Next suspect, by elimination: the dsv4 state-plan set_rows/get_rows indices —
   in-bounds-but-WRONG indices are invisible to the OOB assert. Instrument: dump the plan's
   state_read/write/persist idx arrays at chunk 2 for ub255 vs ub256 and diff.**
+- CACHECHK replay (4 combos incl. partials): bad_rows=0 — no attend-kernel scribbles in the
+  harness. ⇒ the pool overwriter is a SERVER graph node the harness lacks. Sharpened
+  instrument: env-gated dump in the METAL set_rows handler (dst name + idx min/max + dst ne1
+  per dispatch), run ub255 vs ub256, diff the streams — finds the in-bounds-but-wrong writer
+  wherever it lives, without guessing the subsystem first.
 - CPU reference arm has its own separate signature (20 alternating layers differ from N=256)
   — a CPU-reference quirk, parked; the ship path is Metal.
 
