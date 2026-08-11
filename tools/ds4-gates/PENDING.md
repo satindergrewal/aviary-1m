@@ -994,6 +994,20 @@ loop bound `n_tok` + the tail-zero assumption that leans on causal).
 refusals, output byte-identical to static.** Raw layers (D=512 + sinks + window + Hadamard) live on
 the scalar paged kernel. CSA/HCA still static by design until Tier 2(a).
 
+### ✅ AND THE CAUSAL FIX (`bf1567c62`) — audit row #4 goes from FENCED to FIXED, red-to-green
+
+Two stages, the gate catching the half-fix exactly as built: mask-consults-causal took 18 fails →
+6 with a 7e-02 residual, because **the block walk was still bounded by q_pos — non-causal keys the
+mask admitted were never even STAGED** (exclusion #8's old note named it). Both staging bounds made
+causal-aware (MMA `q_hi`, LPK `n_tok_u`; the per-token `n_tok` feeds its three loops from one line)
+→ **ALL PASSED**, full sweep. Non-causal's upper bound is the WRITTEN length, which also masks the
+garbage tail of a partial last block that causal used to hide for free. Guard relaxed to match;
+9B champion and DSV4 regressions unchanged. **dflash's non-causal attention can now legally take
+the scalar paged path.**
+
+**Tier 2 remaining: ONLY item (a)** — the explicit mask input for CSA/HCA (89% of DSV4). Multi-day;
+starts fresh. Then both bring-up flags flip and DSV4 paged goes default.
+
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
    sinks-in-scalar OR champion-d512 (raw layers), (c) V=K aliasing (optional, halves raw-layer
