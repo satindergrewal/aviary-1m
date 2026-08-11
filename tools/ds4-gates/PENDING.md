@@ -1201,8 +1201,17 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   (GGML INFO markers are swallowed — the known log hole). ⇒ before any further champion
   claims: a stderr presence counter in the champ dispatch path. The partials-emission card
   stays the real unlock regardless.
-- **RECOMMENDATION standing for HIM: DSV4 paged default config = `--kv-block-size 64`**
-  (battery green + free 27-30% over bs16).
+- **RECOMMENDATION standing for HIM: DSV4 paged default config = `--kv-block-size 64`,
+  champion OFF** (battery green + free 27-30% over bs16).
+- ✅ **CHAMPION IN-SERVER: PROVEN AND HONESTLY A LOSS (for now).** The graph-side
+  champ_geometry was the THIRD contract copy still lacking 512 — fixed in lockstep, and the
+  relaxation is now `!partials`-gated after the smem assert correctly aborted the first try
+  (a partials layer at bs=64 has no legal executor). With presence PROVEN (DS4P_CHAMP_COUNT
+  stderr counter + CHAMPREF refusal twin, both landed): champion-hybrid decode = 17.84 t/s vs
+  23.0 uniform-scalar — static fallback on 41 split layers swamps 5 champion layers.
+  **Champion earns nothing for DSV4 until partials emission serves all 43 layers — the card
+  is the whole game now.** Contract-copy count: FOUR sites must move in lockstep (metal hd_ok,
+  vec builder, graph champ_geometry, and the abort predicate) — consolidation candidate.
 
 ## 2026-08-12 ★★★ DEFECT #2 FIXED — the missing leaf check in ggml-alloc (upstream-grade)
 
