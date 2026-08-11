@@ -571,11 +571,28 @@ GPU-cheap to verify once written: send one oversized request, expect the static-
 Evidence preserved: `/tmp/warmslot/20260811-154808/paged-r1.log` — the per-run LOGDIR fix is the
 only reason this log survived its own re-run.
 
-⚠ **OPEN QUESTION the fix does NOT answer (raised with Grok, #9456):** the post-pair 12-token prime
-failed the same way as the pair — the failed request left slot state behind. The admission fix stops
-OVERSIZED requests from reaching that state; whether **any** legitimately-failed paged decode also
-poisons its slot is a separate defect the oversized case merely triggered cheapest. Check when the
-GPU frees: fail a paged decode by another route (e.g. pool exhaustion) and probe the slot after.
+✅ ~~OPEN QUESTION: does any legitimately-failed paged decode poison its slot?~~ — **YES, REPRODUCED,
+FIXED `a3b1cae74` (2026-08-11).** The pool-exhaustion probe (9B, `-ngpub 64`, request fits the slot
+but outgrows the pool): designed termination fired correctly, then a **12-token request against a
+64-block pool re-deadlocked indefinitely** ("2 waiting"). Root cause is a two-ledger hole at the API
+surface: **the server had no way to tell the scheduler a request is dead** — the deadlock branch and
+`SERVER_TASK_TYPE_CANCEL` release the SLOT while the scheduler keeps the request and its block
+claims forever. Fix: `llama_paged_scheduler_abort_request()` (id-reuse-safe via `id_to_group`,
+removes from whichever queue, frees via the existing idempotent `finish()`, deliberately NOT routed
+through `terminated_ids` — that channel is scheduler→server and would double-error the slot),
+called from both the deadlock branch and task-cancel. **Cancel is the path a real workload hits
+first** (client timeouts), and this retroactively explains the 2026-08-10 post-timeout prime
+failures. Verified: termination → next two requests answer correctly, exactly one
+"aborted by the server" line.
+
+⚠ **BOARDED, NOT FIXED — a THIRD user-flag assert in the same family** (found 2026-08-11 while
+smoking the admission fix): `llama-paged-scheduler.cpp:82` fires
+`GGML_ASSERT(n_batch == ctx->n_ubatch() && "kv_paged requires n_batch == n_ubatch")` when the user
+passes `--kv-paged` without `-b == -ub`. Same class as the `074672e33` fix ("a designed refusal is
+strictly better than an assert"): the constraint is legitimate, the delivery is an abort with a
+backtrace where a startup refusal naming both values and the fix (`pass -b N -ub N`) would do.
+~5 lines, same shape as the two refusals already shipped. Declined today only because the gate
+pipeline all passes `-b 512 -ub 512`; recorded so it is not re-found.
 
 ---
 
