@@ -950,6 +950,13 @@ logs `using the dsv4 composite's paged attention pool`, server serves.
    aborts on sinks by design → server aborted. New call-site sinks guard (window-guard shape).
    Re-smoked: 0 aborts, 44 loud refusals, correct output.
 
+⚠ **QUEUED (CPU-only, Grok #9559): contract-vs-kernel argument AUDIT.** Two admission holes in two
+days (`n_seq_max`, sinks) were both found by EXECUTION — the contract keeps learning the kernels'
+real argument sets from aborts. Enumerate every precondition the two kernels actually read (scalar:
+staged-tile budget, no sinks, causal, window, any-n_seq; champion: bs=64, n_seq=1, head_dim set,
+sinks OK, …) against every check `paged_layer_supported` + the call-site guards perform, and close
+the diff by reading. The third hole should never need a smoke.
+
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
    sinks-in-scalar OR champion-d512 (raw layers), (c) V=K aliasing (optional, halves raw-layer
