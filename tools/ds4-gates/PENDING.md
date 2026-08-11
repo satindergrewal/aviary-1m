@@ -1101,6 +1101,23 @@ then a 3-point bisect + `DS4P_SPLIT=off` attribution split it precisely:
 ⇒ **Step 2's acceptance stands at ≤750 tokens and the flag-flip is CORRECTLY BLOCKED by its own
 gates.** The dev flags stay bring-up-only. This is the gates working, recorded as such.
 
+### ★ THE INSTRUMENT RULED (2026-08-12): the merge divergence is a DEFECT, not a tie — and K is exonerated
+
+- `indexer_top_k = 512` at lid-ratio 4 ⇒ top-k activates only past ~2048 tokens: **the mask was
+  trivially all-selected in every test run so far** — K is not the discriminator, and the mask
+  path remains untested at activation (a further gap for the record).
+- Top-2 logprob at L100's first divergence (the qwen3vlmoe rule, applied before naming it):
+  static `</think>` −1.59 over ` Required` −1.81 (gap 0.21); paged ` Required` −1.35 over
+  `</think>` −2.74. **Order swapped, ~1.4+ nats of movement — three orders above f32
+  reassociation. Real defect.**
+- **Working hypothesis (concrete, next read):** a MISSING GRAPH DEPENDENCY. The dense half reads
+  `get_csa()->get_k` in-graph; the compressor COMMITS rows for the current ubatch in the same
+  graph. If the static path's read-after-write ordering rides on expansion order my branch
+  bypasses, the dense half reads STALE rows for the newest ubatch — error grows with ubatch count,
+  exact at ≤2 ubatches, drift at 3, EOS-level by 4. Matches every observation. Next read: where
+  the CSA commit ops are `build_forward_expand`ed relative to the attention call in
+  `build_attention_impl`, and what orders the static concat's read after them.
+
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
    sinks-in-scalar OR champion-d512 (raw layers), (c) V=K aliasing (optional, halves raw-layer
