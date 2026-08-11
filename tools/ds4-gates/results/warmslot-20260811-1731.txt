@@ -1,0 +1,7 @@
+tip: 5b629e6a7 dirty=0  model=DeepSeek-V4-Flash-0731-UD-Q2_K_XL-00001-of-00003.gguf  reps=2  regime=WARM  logdir=/tmp/warmslot/20260811-173138
+static-r1: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 71fa34114, tree at 5b629e6a7.
+static-r1: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.
+paged-r1: ⚠⚠ BINARY/SOURCE MISMATCH -- binary built at 71fa34114, tree at 5b629e6a7.
+paged-r1: VOID -- refusing to attribute this arm to source the binary does not contain.
+      Rebuild, or set MS_ALLOW_STALE_BIN=1 to measure the older binary ON PURPOSE.

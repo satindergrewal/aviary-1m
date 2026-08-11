@@ -1,0 +1,16 @@
+tip: 5b629e6a7 dirty=0  model=DeepSeek-V4-Flash-0731-UD-Q2_K_XL-00001-of-00003.gguf  reps=2  regime=WARM  logdir=/tmp/warmslot/20260811-173227
+  static-r1      np=1  prime=</th post=</th consume=-1     ptok=1676    blocks=104    pairwall=12   s -> POST-PAIR-DIRTY
+      S1  one, two, three, four, five  Count from one to five, in words,
+  paged-r1       np=1  prime=</th post=</th consume=1      ptok=1676    blocks=104    pairwall=15   s -> POST-PAIR-DIRTY
+      S1  <EMPTY http=200 n=1 stop=eos>
+  paged-r2       np=1  prime=</th post=</th consume=1      ptok=1676    blocks=104    pairwall=16   s -> POST-PAIR-DIRTY
+      S1  <EMPTY http=200 n=1 stop=eos>
+  static-r2      np=1  prime=</th post=</th consume=-1     ptok=1676    blocks=104    pairwall=13   s -> POST-PAIR-DIRTY
+      S1  one, two, three, four, five  Count from one to five, in words,
+-----
+static: 0 clean / 2 bad     paged: 0 clean / 2 bad / 0 refused-by-contract / 0 no-response
+verdicts: static:POST-PAIR-DIRTY paged:POST-PAIR-DIRTY paged:POST-PAIR-DIRTY static:POST-PAIR-DIRTY
+pair wall-clock: NOT COMPARABLE -- need >=1 CLEAN arm on each side (static: none; paged: none)
+WARM MULTI-SLOT GATE: **VOID** -- static (no paging) scored 2 bad. The gate is measuring itself, not the code.
+  (a dirty static arm can never indict paging; fix the harness before reading the paged column)
+log: $HOME/Documents/GitHub/ornith-1m/tools/ds4-gates/results/warmslot-20260811-1732.txt

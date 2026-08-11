@@ -1076,6 +1076,31 @@ long-conversation gate.
 Remaining for flag-flip: gates at scale (long-context parity + the warm gate on DSV4) and the
 owner's default call. The champion-d512 and V=K-aliasing items are now PERF work, not coverage.
 
+### ⚠⚠ AND THE GATES-AT-SCALE PASS CAUGHT TWO DEPTH FINDINGS (2026-08-12, boarded with reproducers)
+
+The DSV4 warm gate VOIDed itself correctly (the prime prompts don't fit a base completion model —
+harness mismatch, its own word: "measuring itself") **but exposed a real divergence in passing**,
+then a 3-point bisect + `DS4P_SPLIT=off` attribution split it precisely:
+
+| fill (archival-lines prompt) | static | paged full-split | paged raw-only (`DS4P_SPLIT=off`) |
+|---|---|---|---|
+| L60 (~750 tok) | `1, 2, 3, 4, 5` | **byte-identical** | byte-identical |
+| L100 (~1230 tok) | `1, 2, 3, 4, 5` | **DIVERGES** (fluent ramble) | **byte-identical** |
+| L140 (~1710 tok) | fluent echo | **instant EOS (n=1)** | fluent but DIFFERENT |
+
+1. **THE MERGE owns a depth-dependent divergence starting between ~750 and ~1230 tokens** (numeric
+   at onset, structural EOS by ~1.7k). Raw-only is exact where the merge diverges — the split
+   attribution is unambiguous. Discrete candidates in that span: ubatch count 2→3 (crossing 1024)
+   and n_csa crossing ~256 (a plausible top-k K — below it the mask may be trivially all-selected,
+   making the earlier ≤750-token byte-identical greens PARTIALLY VACUOUS on the mask path). Next
+   instrument: eval-callback tensor bisect on `split_*` cb names vs static, at L100, per layer.
+2. **Raw-only paging drifts at ~1.7k** (fluent-vs-fluent content difference). NOT yet a defect
+   claim: cross-arm byte equality is a weak instrument (the qwen3vlmoe scar) — needs the top-2
+   logprob gap at first divergence before it is called anything.
+
+⇒ **Step 2's acceptance stands at ≤750 tokens and the flag-flip is CORRECTLY BLOCKED by its own
+gates.** The dev flags stay bring-up-only. This is the gates working, recorded as such.
+
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
    sinks-in-scalar OR champion-d512 (raw layers), (c) V=K aliasing (optional, halves raw-layer
