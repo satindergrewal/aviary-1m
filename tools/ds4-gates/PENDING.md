@@ -1005,8 +1005,32 @@ garbage tail of a partial last block that causal used to hide for free. Guard re
 9B champion and DSV4 regressions unchanged. **dflash's non-causal attention can now legally take
 the scalar paged path.**
 
-**Tier 2 remaining: ONLY item (a)** — the explicit mask input for CSA/HCA (89% of DSV4). Multi-day;
+**Tier 2 remaining: ONLY item (a)** — CSA/HCA (89% of DSV4). Multi-day;
 starts fresh. Then both bring-up flags flip and DSV4 paged goes default.
+
+### ★ TIER 2(a) DESIGN READ (2026-08-12, from the CSA site itself) — two candidate architectures
+
+The CSA site's real structure (`build_csa_attention`): `k_all = concat(raw_k, csa_k)` on dim 2,
+`kq_mask = concat(raw_mask, top_k_mask)` on dim 0, ONE `build_attn_mha` over the concat. The raw
+half is the SAME windowed-causal span the raw layers page; only the compressed half carries the
+arbitrary top-k mask. HCA identical with its own mask. So:
+
+**Candidate A — split-softmax (recommended):** paged-attend the raw half (band+causal+sinks — all
+shipped tonight), dense-attend the compressed half with its top-k mask (existing `build_attn_mha`),
+then MERGE the two partial softmaxes (log-sum-exp combine of two (O, M, S) triples). ⚠ The merge
+machinery HALF-EXISTS: the champion vec path already writes per-workgroup partials with S and M and
+combines them via `kernel_flash_attn_ext_vec_reduce` (nwg>1). Work = make both attentions emit
+(O,M,S) + one small combine op. NO new mask plumbing in the paged kernel at all; the compressed
+half stays dense, which is fine because it is ratio-4/ratio-128 REDUCED data living in its own
+small cache — paging it buys nothing.
+
+**Candidate B — mask input on the paged kernel (the board's original):** kernel walks raw blocks
+PLUS a dense compressed tail with a per-(q,k) mask tensor. Two data sources inside one kernel,
+mask indexing across the concat boundary — strictly more kernel surface than A for the same
+result.
+
+⇒ A is the recommendation; the sink join precedent says the (O,M,S) merge math is the same online
+softmax algebra just proven at three sites. Decision + implementation next session (multi-day).
 
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
