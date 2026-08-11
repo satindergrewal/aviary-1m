@@ -1193,12 +1193,18 @@ the log measured nothing); DS4P_CPU_KROW per-row k_new checksums; named set_rows
     non-first chunks.** CPU graph content is proven identical across arms (KROW full-row sums),
     so the CPU-side graph is innocent; Metal fusion/reorder/concurrency are ALL disabled-and-
     still-corrupt, so it is not scheduling.
-  - **NEXT UNIT: read how build_attention_impl constructs the raw K's rope for the coupled
-    layers (nope/pe concat) and what the paged funnel actually receives — the hypothesis space
-    is now one line wide: an inplace-rope/view whose result the funnel's src misses on Metal
-    for non-first chunks at exact-multiple sizes, OR a builder branch that hands the funnel a
-    pre-rope node. Then a one-run confirm: dump the same row with tail halves printed and check
-    it equals rope⁻¹(correct row).**
+  - ✅ build_attention_impl READ: kv_pe = rope_ext(view(kv), inp_pos) → concat(kv_nope, kv_pe) —
+    out-of-place, chunk-unconditional, the standard MLA pattern. The builder is innocent.
+  - ★★ **THE ZERO-POS DEDUCTION (next unit's target):** stale chunk-1 positions would give
+    rope@1 vs rope@11 at tokens 257/267 → different rows; the measured corrupt rows are
+    257==267 BIT-EXACT → only **all-zero positions** (rope@0 ≡ identity for the whole chunk)
+    fit. CPU had correct positions in both arms (KROW identical) ⇒ ubatch.pos/set_input path
+    innocent ⇒ **Metal's inp_pos BUFFER held zeros for chunk-2's graph at ub≡0 mod 256.**
+    Confirm instrument (one run): capture inp_pos post-execution — e.g. a tiny debug op reading
+    the pos leaf into a pool-adjacent scratch, or cb_eval on the first rope node's src[1] via
+    the sched split (ask-phase can claim leafs' consumers). If confirmed, the defect is in the
+    Metal-side input upload/allocation for that graph shape — an upstream backend bug worth a
+    minimal standalone repro before any fix.**
   - ⚠ Instrument caveat filed: ROWDUMP under `-ngl 0` reads kv_gpu_layers → zeros (CPU blocks
     live elsewhere); the CPU rowdump line is VOID, not evidence. Also audit whether KVSUM's layer
   ordering actually matches the dispatch ordering (assumption, never verified).
