@@ -1168,6 +1168,13 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
   (2) **n_seq>1**: per-query-token seq resolution (the write kernels' batch_offsets/lens scan,
       already proven) + block_table[seq]/ctx_lens[seq] indexing + per-seq extra-mask spans.
   Ordering: (1) unlocks DSV4 decode; (2) unlocks multi-slot for both models. Both purely perf.
+- ✅ **dk512 CHAMPION LANDED AND GREEN (same session):** instantiations + hd_ok admit, smem
+  28,672/32,768 exactly as computed, `CHAMP-PAGED ACTIVE D=512 bs=64` live; harness replay
+  PASS on plain / sinks / banded-window+sinks arms (~2e-6 vs CPU, bit-exact schedules).
+  ⚠ Honest bound: partials dispatches EXCLUDE the champion by contract ⇒ at bs=64 only the
+  raw non-partials layers ride it under split=all. **The full DSV4 unlock = champion partials
+  emission (O/M/S out, defer normalize) — next kernel unit. After the 64k gate: bs=64
+  end-to-end correctness battery, then decode-rate A/B (scalar bs16 vs champ bs64).**
 
 ## 2026-08-12 ★★★ DEFECT #2 FIXED — the missing leaf check in ggml-alloc (upstream-grade)
 
