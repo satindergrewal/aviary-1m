@@ -1043,11 +1043,23 @@ inside its own fix). Split offsets → **ALL PASSED**: OMS ≤3.8e-06, norm ≤3
 sweep intact. Contract rows landed with the argument: partials SCALAR-ONLY (champion excluded at
 dispatch) + NO SINKS (the sink joins once, at the merge; CPU asserts).
 
-**Next unit (step 2): the graph-side merge** — plain ggml algebra, no new kernel:
-`m=max(M1,M2); out=(O1·e^{M1−m}+O2·e^{M2−m}+sink-fold)/(S1·e^{M1−m}+S2·e^{M2−m}+e^{sink−m})` —
-then the CSA/HCA callers split raw-half (partials, paged) from compressed-half (dense masked,
-decomposed softmax emitting its own O/M/S via existing ops), acceptance = paged CSA output ==
-static CSA output at the model level.
+**Next unit (step 2): the graph-side merge — RECIPE COMPLETE, all ops verified present on BOTH
+backends (2026-08-12), zero new kernels:**
+
+```
+s2 = scale·mul_mat(k_csa, q) + csa_mask          # -inf on unselected keys → exp→0, mask for free
+m2 = pool_1d(s2, GGML_OP_POOL_MAX, k=n_csa)      # row max — POOL_1D is Metal-implemented (ops.cpp:474)
+m  = m2 + relu(M1 − m2)                          # elementwise max via existing ops
+e1 = exp(M1 − m);   p2 = exp(s2 − m)             # broadcast subs
+S  = S1·e1 + sum_rows(p2) [+ exp(sink − m)]      # sink folds HERE, once — the partials contract
+O  = O1·e1 + mul_mat(p2ᵀ-layout, v_csa)
+out = O / S                                       # broadcast div
+```
+The one inventory gap that shaped this: ggml has NO row-max op — `pool_1d(MAX, k=row)` IS one, and
+Metal implements it. M1/S1/O1 come as views of the paged partials `[D+2,H,N]`.
+Then the CSA/HCA callers split raw-half (partials, paged) from compressed-half (dense via the
+recipe), acceptance = **paged CSA output == static CSA output at the model level**. This unit is
+now mechanical; it starts fresh (graph code + model-level smoke, ~2–3h).
 
 ⇒ **DSV4 paging is now blocked ONLY at the kernel. The Tier 2 kernel pass carries three items:**
    (a) explicit mask input on `ggml_paged_attn_banded` (CSA/HCA, 89% of layers), (b)
