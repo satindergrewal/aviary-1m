@@ -1212,6 +1212,10 @@ leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
 - ★★★ **FINAL RECOMMENDATION for HIM: DSV4 paged config = `--kv-block-size 64` +
   `DS4P_METAL_CHAMP=1`** — genuinely paged everywhere, 12× prefill for 6% decode. The
   champion partials landing (task #14) is what made this config exist.
+- ✅ **FINAL-CONFIG BATTERY COMPLETE with fallback-count provenance** (the impostor lesson
+  applied): ub255/ub256/ub512 + L60/L100 all byte-exact, champion presence-counted (64-128
+  dispatches per run), **static-fallbacks: 0** grep-verified per arm. Every gate his call
+  needs is green and provenance-proof.
 - ✅ **CHAMPION IN-SERVER: PROVEN AND HONESTLY A LOSS (for now).** The graph-side
   champ_geometry was the THIRD contract copy still lacking 512 — fixed in lockstep, and the
   relaxation is now `!partials`-gated after the smem assert correctly aborted the first try
