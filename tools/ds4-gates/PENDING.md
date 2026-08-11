@@ -1138,6 +1138,18 @@ gates.** The dev flags stay bring-up-only. This is the gates working, recorded a
    chunk… which contradicts the byte-exact outputs at ≤750 tokens **unless the tap itself
    perturbs**: cb_eval works by splitting the graph at observed tensors, and the paged op FUSES
    its KV write — split-induced scheduling around a fused-write op is plausible interference.
+## 2026-08-12 ★★★★ PPL PARITY — the DSV4 paged correctness campaign CLOSES at this scale
+
+llama-perplexity taught --kv-paged (flag lists extended, committed). **PPL 3.8875 ± 0.09889 —
+IDENTICAL static vs paged(split=all), ctx 2048, provenance-checked (1509 paged markers in the
+run log).** With defect #1 deleted and the gallocr leaf check landed, the full 46-layer DSV4
+paged path matches static on aggregate likelihood. The L95/L100 text flips are model-side
+knife-edges (0.21-nat static margins), NOT corruption — the pre-fix "merge owns 750–1230"
+narrative is fully retired.
+**Remaining for the flag-flip: gates at SCALE (64k× the serve config, the boarded plan) + HIS
+call. Standing for the owner: (1) gallocr leaf-check upstream PR, (2) flag-flip default, (3)
+the 1M rung (~13h).**
+
 ## 2026-08-12 ★★★ DEFECT #2 FIXED — the missing leaf check in ggml-alloc (upstream-grade)
 
 **Root cause, proven by discriminator:** `ggml_gallocr_needs_realloc` checked every node and
