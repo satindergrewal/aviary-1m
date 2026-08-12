@@ -912,3 +912,35 @@ caught by the gate-shape rule).
 | dflash / eagle3 / gemma4-assistant / laguna / mimo2 / step35 | — | ⏸ | ⏸ | **saver-unsupported — and box swept via ssh 2026-08-12: NO real ggufs exist for these 6 anywhere (box <BOX> + nvme + home, Mac local). They are incoming archs; the ONLY route is model-saver extensions (task #17B, inkling pattern).** |
 
 **Score: 12 verified · 1 checked-negative (minimax-m3 wiring gap) · 6 blocked on fixtures/models.**
+
+
+## 2026-08-12 SECOND PASS — 19-ARCH ACCOUNTING COMPLETE (15 verified / 1 gap / 3 by-design-blocked)
+
+Saver extended (ds4-ports, committed+pushed): un-denylisted mimo2/step35/laguna, SWA
+sliding-window-pattern re-emit extended to mimo2+step35 (inkling precedent), step35 swiglu_clamp
+arrays given the truncate flag. Re-battered on synthetic fixtures:
+
+| # | his name | verdict |
+|---|---|---|
+| 1 | deepseek v4 | ✅ real-model full ladder |
+| 2 | grok | ✅ p16+p64 |
+| 3 | hunyuan-moe | ✅ p16+p64 |
+| 4 | nemotron | ✅ p16+p64 |
+| 5 | qwen3moe | ✅ p16+p64 |
+| 6 | qwen3next | ✅ p16 (DS4P_PAGED_HYBRID) |
+| 7 | qwen3vl | ✅ p16+p64 (text) |
+| 8 | qwen3vlmoe | ✅ p16+p64 (text) |
+| 9 | starcoder | ✅ p16+p64 |
+| 10 | ernie4-5 | ✅ p16+p64 |
+| 11 | ernie4-5-moe | ✅ p16+p64 |
+| 12 | hunyuan-vl | ✅ p16+p64 (text) |
+| 13 | mimo2 | ✅ champion+SWA (sinks arch, champN:4) |
+| 14 | step35 | ✅ paged MATCH (DS4P_PAGED_HYBRID+SWA) |
+| 15 | laguna | ✅ DS4P_PAGED_SWA MATCH (pool active) |
+| 16 | minimax-m3 | 🔴 CHECKED-NEGATIVE — memory type not wired for paging even under hybrid flag; real wiring gap (task #17A) |
+| 17 | dflash | ⛔ speculative DRAFT head — not standalone-servable, paging N/A by design |
+| 18 | eagle3 | ⛔ speculative DRAFT head — same |
+| 19 | gemma4-assistant | ⛔ upstream FIXME (@ngxson) — arch_supported() denylists it; needs the real model or upstream fix |
+
+**15 verified · 1 real gap (minimax-m3 wiring) · 3 by-design/upstream-blocked. The list is fully
+accounted.** Remaining actionable item = minimax-m3 memory-class paging wiring.
