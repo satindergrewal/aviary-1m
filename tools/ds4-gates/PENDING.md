@@ -1873,3 +1873,25 @@ Post-session regression check surfaced it, run to ground with controls:
   already flagged), uninitialized KV contributes. Diagnostic in flight (tailprobe + BLKCLASS=0).
 - ⚠ SCAR: CHAMP-PAGED ACTIVE is server-swallowed; n=1 greedy text is not a determinism check;
   paged-vs-paged across ubatch confounds; the RIGHT control is static-x3 vs paged-x3 at same ubatch.
+
+
+## 2026-08-12 BUG #21 MECHANISM CONFIRMED (poison test) + fix direction
+
+- DS4P_KV_POISON=1 (pool=0xFF=NaN) at ub255+bs64+champ → '========' degenerate, x3 deterministic.
+  ⇒ the champion READS the partial-block tail slots (position >= ctx_lens) INTO its q·K dot product;
+  NaN there survives masking (NaN + -inf = NaN). CONFIRMED.
+- Default pool is zero-init (both paged + dsv4 do buffer_clear(buf,0)), so first-touch tail = 0
+  (finite). The NON-DETERMINISM is finite RESIDUAL: after request 1 writes KV, reused blocks' tail
+  slots hold prior-request KV; request 2+ reads that residual into q·K, and it is NOT effectively
+  masked (a correctly -inf mask would zero it → deterministic; it flips → the tail is NOT masked for
+  the champion at the partial block). BLKCLASS=0 (full per-element mask) STILL flips → the per-element
+  mask path also misses the tail, OR the tail enters mqk before any mask.
+- FIX DIRECTION: the champion must EXCLUDE columns >= n_kv_p (ctx_lens) from the softmax. Two parts:
+  (1) NaN-safe: SELECT not ADD — `mqk[col] = col < n_kv_p ? mqk[col] : -inf` (addition can't kill NaN);
+  (2) ensure the per-column bound is applied in the champion's last-block tile (the 8x8 matmul
+  processes full tiles; the out-of-range lanes of the final tile need explicit -inf SELECT before
+  the online-softmax max/exp). This is the standard flash-attn kv-bound the paged champion is missing
+  for partial trailing blocks. rel_extent/window orthogonal.
+- ⚠⚠ **THIS BLOCKS THE FLAG-FLIP**: paged is NOT deterministically correct until #21 lands. Every
+  prior byte-exact paged claim was n=1; re-verify all with N-run determinism after the fix.
+- Fix is a champion-kernel arc — do it in a FRESH context (long-context-kernel-edit scar), N-run gated.
