@@ -1830,3 +1830,25 @@ the `blk_cur = blk[ic0]` site + host skipping the fill dispatch, gated byte-exac
 test-paged-vs-cpu replay (survives the machine contention that kills long prefill runs).
 Deferred to a fresh context per the long-context-kernel-edit scar (partials revert), NOT
 half-built here. Spec-complete and mechanical.
+
+
+## 2026-08-12 ANALYTIC MASKING — IMPLEMENTED, BYTE-EXACT, and a CLEAN NEGATIVE (reverted)
+
+Executed #20 end-to-end: analytic block-classification + inline class-1 masking in the champion
+kernel (FC-gated DS4P_CHAMP_ANALYTIC, causal+window passed as FC constants since the champion
+rides kargs_flash_attn_ext which lacks them). Gated properly this time (runtime-metal-compile
+check + short harness, the two scars applied): **byte-exact on all replay arms + full default
+sweep ALL PASSED, champion serving confirmed.** Then the payoff measurement, champ-presence-gated
+(DS4P_CHAMP_COUNT, champN=10 both arms — the ONLY reliable marker; CHAMP-PAGED ACTIVE is a
+server-SWALLOWED INFO line, which briefly fooled me into a false "static contamination" panic):
+  8k champion prefill: analytic OFF 165.1 t/s | analytic ON 161.95 t/s — **~2% SLOWER, not faster.**
+⇒ REVERTED (delete-first; correct-but-not-a-win = dead weight). The attribution that promised the
+win was MISREAD: DS4P_CHAMP_SKIP=mask runs fast because it SKIPS masking (invalid output), not
+because the mask is pure overhead. The mask work is IRREDUCIBLE — materialized or inline, it costs
+the same; inline just relocates it into the hot loop and adds per-thread branching (hence slightly
+slower).
+**REFRAMED GAP SOURCE:** champion-paged 165 vs static ~189 @8k = ~1.15x, and it is NOT the mask
+fill. It is the paged block-walk GATHER vs static's CONTIGUOUS K/V read — a fundamental
+paged-memory-access cost, likely irreducible without changing the pool layout (larger contiguous
+runs). #18/#20 CLOSED as measured: DSV4 champion-paged is ~15% behind static on prefill, the cost
+is the paging gather itself, and that ~15% buys the memory elasticity paging exists for.
