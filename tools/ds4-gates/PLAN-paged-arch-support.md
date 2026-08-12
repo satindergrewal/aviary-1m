@@ -909,6 +909,6 @@ caught by the gate-shape rule).
 | ernie4-5 | ernie4_5-moe | ✅ | ✅ champN:4 | saver arch name is ernie4_5 (underscore) |
 | ernie4-5-moe | ernie4_5-moe-moe | ✅ | ✅ champN:4 | |
 | hunyuan-vl | hunyuan_vl-dense | ✅ | ✅ champN:4 | text-only |
-| dflash / eagle3 / gemma4-assistant / laguna / mimo2 / step35 | — | ⏸ | ⏸ | **saver-unsupported** — need real models (8tb unmounted on this Mac) or model-saver extensions |
+| dflash / eagle3 / gemma4-assistant / laguna / mimo2 / step35 | — | ⏸ | ⏸ | **saver-unsupported — and box swept via ssh 2026-08-12: NO real ggufs exist for these 6 anywhere (box <BOX> + nvme + home, Mac local). They are incoming archs; the ONLY route is model-saver extensions (task #17B, inkling pattern).** |
 
 **Score: 12 verified · 1 checked-negative (minimax-m3 wiring gap) · 6 blocked on fixtures/models.**
