@@ -1852,3 +1852,24 @@ fill. It is the paged block-walk GATHER vs static's CONTIGUOUS K/V read — a fu
 paged-memory-access cost, likely irreducible without changing the pool layout (larger contiguous
 runs). #18/#20 CLOSED as measured: DSV4 champion-paged is ~15% behind static on prefill, the cost
 is the paging gather itself, and that ~15% buys the memory elasticity paging exists for.
+
+
+## 2026-08-12 ⚠⚠⚠ REAL BUG FOUND: paged NON-DETERMINISM at ub255+bs64+champion (partial-block tail read)
+
+Post-session regression check surfaced it, run to ground with controls:
+- STATIC ub255 x3: STABLE ('1,2,3' all 3). PAGED ub255+bs64+champ x3: FLIPS (1,2,3 / one / one).
+  Static-stable + paged-varying = PAGED-SPECIFIC non-determinism, NOT shared model-level jitter.
+- The flip crosses a ~1.4-nat top-2 gap (tok1 '1' -0.46 vs ' one' -1.86) ⇒ a real >1.4-nat logit
+  SWING across identical greedy invocations, far above float noise (~0.005 nats).
+- SCOPE localized: ub256+bs64+champ STABLE (256 = exactly 4x64, no partial block); ub255+bs16+scalar
+  STABLE. Only ub255+bs64+CHAMPION flips. ⇒ the trigger is a PARTIAL TRAILING BLOCK (255 tokens in
+  64-slot blocks = 3 full + 63/64 partial) read by the CHAMPION: the unwritten 64th slot's garbage
+  varies per run and leaks into the softmax.
+- ⚠⚠ CONSEQUENCE: **the byte-exact ladder + battery results were SINGLE LUCKY SAMPLES.** The harness
+  (test-paged-vs-cpu) zeroes the pool so it can't reproduce this; the server pool has uninitialized
+  regions. Every "byte-exact" paged claim needs re-verification with N-run determinism, not n=1.
+- ROOT-CAUSE SUSPECT: the champion reads the partial block's tail slots (past ctx_lens) whose mask
+  should be -inf; if the mask marks any tail column visible (the DS4P_MASK_TAILPROBE defect the board
+  already flagged), uninitialized KV contributes. Diagnostic in flight (tailprobe + BLKCLASS=0).
+- ⚠ SCAR: CHAMP-PAGED ACTIVE is server-swallowed; n=1 greedy text is not a determinism check;
+  paged-vs-paged across ubatch confounds; the RIGHT control is static-x3 vs paged-x3 at same ubatch.
