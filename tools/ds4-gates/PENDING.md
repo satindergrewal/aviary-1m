@@ -1796,3 +1796,18 @@ was not a same-config control. RETRACTED. The real prefill picture: **champion-p
 ~20% behind static**, consistent with fixed per-ubatch overhead (mask/extra-mask fill) rather
 than a depth-scaling block-walk defect. ⇒ the parity lever is REDUCING PER-UBATCH OVERHEAD, not
 a fundamental kernel rewrite. 32k confirmation running.
+
+
+## 2026-08-12 PREFILL PARITY — LEVER NAMED via the kernel's own DS4P_CHAMP_SKIP attribution
+
+8k, champion bs64: FULL 156.5 t/s | skip-mask (attn only) 208.1 | skip-attn (mask only) 209.2.
+Both halves alone run ~208 ⇒ **inside the champion op, materializing the mask and doing the
+attention each cost ~the same increment.** Static pays ZERO for this: its causality/window mask
+is analytic in-kernel, not materialized. So the flat ~1.2x (=~20%) prefill gap is the champion's
+per-ubatch mask FILL (n_heads x n_tokens x n_kv F16 entries over the live context).
+**LEVER = ANALYTIC IN-KERNEL BANDED-WINDOW MASKING** (compute causality+window on the fly,
+skip the fill) — converges exactly with the boarded B4 finding #4 (MLX-Steel does causal
+analytically). This is a champion-kernel arc (fresh session, substantial), NOT a quick edit:
+the champion currently relies on its tested mask-fill for correctness; moving to analytic masking
+needs the in-kernel band predicate + the full byte-exact battery. #18 PROFILING PHASE COMPLETE,
+lever identified and quantified (mask fill ~= attention cost); implementation is the next arc.
