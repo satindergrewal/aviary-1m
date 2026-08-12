@@ -884,3 +884,31 @@ false verdicts in ninety minutes.
 verdicts.** The apparatus was wrong twice as often as the code. Any green in this directory should be read
 with that in mind — which is why every gate now asserts its own liveness (`consume > 0`) and voids on a
 dirty control.
+
+
+## 2026-08-12 SYNTHETIC BATTERY — 12/19 VERIFIED on tip (post allocator-fix + champion-partials)
+
+Instrument: `arch_synthetic_battery.sh` — test-llama-archs fixtures (n_ctx_train=128), 100-token
+4-chunk prompt (ub32), grammar-constrained greedy, token-exact 3-arm compare (static / paged-bs16 /
+paged-bs64+champion) with fallback greps + champion presence counts. Vacuous-green guard: empty
+token arrays report VOID, never MATCH (the first run printed 9 fake MATCHes on empty arrays —
+caught by the gate-shape rule).
+
+| his name | fixture | p16 | p64+champ | notes |
+|---|---|---|---|---|
+| deepseek v4 | real model | — | ✅ byte-exact | full ladder, this session |
+| grok | grok-moe | ✅ | ✅ champN:4 | |
+| hunyuan-moe | hunyuan-moe-moe | ✅ | ✅ champN:4 | |
+| minimax-m3 | minimax-m3-moe | 🔴 REFUSED | 🔴 REFUSED | **wiring gap**: memory type not pageable even with DS4P_PAGED_HYBRID=1 — loud refusal (guard correct), fix = paged wiring for its memory class |
+| nemotron | nemotron-dense | ✅ | ✅ champN:4 | |
+| qwen3moe | qwen3moe-moe | ✅ | ✅ champN:4 | |
+| qwen3next | qwen3next-moe | ✅ (DS4P_PAGED_HYBRID=1) | untested | hybrid; bs16 token-exact |
+| qwen3vl | qwen3vl-dense | ✅ | ✅ champN:4 | text-only (image path refuses by design) |
+| qwen3vlmoe | qwen3vlmoe-moe | ✅ | ✅ champN:4 | text-only |
+| starcoder | starcoder-dense | ✅ | ✅ champN:4 | |
+| ernie4-5 | ernie4_5-moe | ✅ | ✅ champN:4 | saver arch name is ernie4_5 (underscore) |
+| ernie4-5-moe | ernie4_5-moe-moe | ✅ | ✅ champN:4 | |
+| hunyuan-vl | hunyuan_vl-dense | ✅ | ✅ champN:4 | text-only |
+| dflash / eagle3 / gemma4-assistant / laguna / mimo2 / step35 | — | ⏸ | ⏸ | **saver-unsupported** — need real models (8tb unmounted on this Mac) or model-saver extensions |
+
+**Score: 12 verified · 1 checked-negative (minimax-m3 wiring gap) · 6 blocked on fixtures/models.**
