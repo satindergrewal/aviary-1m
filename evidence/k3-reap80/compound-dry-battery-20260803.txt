@@ -1,4 +1,4 @@
-COMPOUND+DRY BATTERY — 2026-08-03, Window #2 (batched pause, the owner standing short-window auth)
+COMPOUND+DRY BATTERY — 2026-08-03, Window #2 (batched pause, owner standing short-window auth)
 =================================================================================================
 Model:    <BOX>/bigmodels/k3-reap80-ours-IQ2_S-v2-native.gguf  (166.6 GiB, the COMPOUND champion —
           NOT v3; correction posted in-room #1729 after Grok's schedule named the wrong file)

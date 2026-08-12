@@ -28,11 +28,11 @@
 #   ./kld_battery.sh verify <tagA> <tagB> ...   # probe-match gate + report
 set -uo pipefail
 
-TREE=<BOX>/llama.cpp-k3
+TREE=${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp-k3
 BIN=$TREE/build-cuda/bin
-ZERO=<BOX>/bigmodels/k3-reap80-ours-mxfp4-bf16.gguf
-CORPUS=<BOX>/llama.cpp-kt/wikitext-2-raw/wiki.test.raw
-OUT=<BOX>/k3-kld
+ZERO=${BOX_MNT:?set BOX_MNT to the box storage root}/bigmodels/k3-reap80-ours-mxfp4-bf16.gguf
+CORPUS=${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp-kt/wikitext-2-raw/wiki.test.raw
+OUT=${BOX_MNT:?set BOX_MNT to the box storage root}/k3-kld
 LOGITS=$OUT/base-cellzero.logits
 
 # ---- PATH-MATCHED LAYOUT -------------------------------------------------------

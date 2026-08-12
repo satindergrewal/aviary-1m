@@ -24,19 +24,19 @@ trap 'scrub_abs_paths "${OUT:-}"' EXIT
 # WARM vs COLD is then the restore, and only the restore.
 set -uo pipefail
 
-WT=${WT:-<BOX>/wt-ds4-ports}
+WT=${WT:-${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports}
 B=${B:-$WT/build-cuda/bin/llama-server}
-M=${M:-<BOX>/ktdev/qwen3-4b-dev-IQ4_KT.gguf}
+M=${M:-${BOX_MNT:?set BOX_MNT to the box storage root}/ktdev/qwen3-4b-dev-IQ4_KT.gguf}
 P=${P:-8973}
-BANK=${BANK:-<BOX>/ktdev/kvbank-fair}
+BANK=${BANK:-${BOX_MNT:?set BOX_MNT to the box storage root}/ktdev/kvbank-fair}
 NREP=${NREP:-11000}
 OUT=${OUT:-/tmp/ds4gates/results/p15-fair-ab-$(date +%Y%m%d-%H%M).txt}
 
 # ⚠ PLATFORM PRECONDITION -- REFUSE, DO NOT PRETEND. This is a box gate (CUDA / NVMe paths). Run on
 # a machine without them it produces errors, no verdict, and EXITS 0 -- which a batch runner reading
 # exit codes scores as a pass forever. p15_warm_admit_gate.sh did exactly that on 2026-08-06.
-if [ ! -d "<BOX>/wt-ds4-ports" ] && [ ! -d "$(dirname "<BOX>/wt-ds4-ports")" ]; then
-    echo "PRECONDITION FAIL: '<BOX>/wt-ds4-ports' not present -- this gate runs on the box, not here." >&2
+if [ ! -d "${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports" ] && [ ! -d "$(dirname "${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports")" ]; then
+    echo "PRECONDITION FAIL: '${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports' not present -- this gate runs on the box, not here." >&2
     echo "  Refusing rather than reporting a pass." >&2
     exit 2
 fi

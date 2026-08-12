@@ -3,7 +3,7 @@ export PATH=$HOME/AI/ruler-env/bin:$PATH
 RE=~/AI/ruler-env/bin/python
 RD=~/AI/RULER/scripts
 LS=~/AI/ROCmFPX/build/bin/llama-server
-GGUF=<BOX>/ornith/models/gemma4-12b-uncensored-1M-Q4.gguf
+GGUF=${BOX_MNT:?set BOX_MNT to the box storage root}/ornith/models/gemma4-12b-uncensored-1M-Q4.gguf
 LEN=${1:-131072}; NS=${2:-25}; THINK=${3:-think}; PORT=8044
 OUT=~/AI/ruler_out/run_${LEN}_${THINK}
 mkdir -p $OUT/pred

@@ -19,8 +19,8 @@ set -euo pipefail
 # PUBLISHED commits. That cleaned the backlog; this closes the PRODUCERS. A history scrub with live
 # emitters still in the tree is a fix with a regression path.
 trap 'scrub_abs_paths "${OUT:-}"' EXIT
-WT="${1:-<BOX>/wt-ds4-ports}"
-MODEL="${2:-<BOX>/ktdev/qwen3-4b-dev-IQ4_KT.gguf}"
+WT="${1:-${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports}"
+MODEL="${2:-${BOX_MNT:?set BOX_MNT to the box storage root}/ktdev/qwen3-4b-dev-IQ4_KT.gguf}"
 PORT="${3:-8953}"
 BUILD="$WT/build-cuda"
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -29,8 +29,8 @@ OUT="$DIR/results/p28-cuda-regate-$(date +%Y%m%d-%H%M).txt"
 # ⚠ PLATFORM PRECONDITION -- REFUSE, DO NOT PRETEND. This is a box gate (CUDA / NVMe paths). Run on
 # a machine without them it produces errors, no verdict, and EXITS 0 -- which a batch runner reading
 # exit codes scores as a pass forever. p15_warm_admit_gate.sh did exactly that on 2026-08-06.
-if [ ! -d "<BOX>/wt-ds4-ports" ] && [ ! -d "$(dirname "<BOX>/wt-ds4-ports")" ]; then
-    echo "PRECONDITION FAIL: '<BOX>/wt-ds4-ports' not present -- this gate runs on the box, not here." >&2
+if [ ! -d "${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports" ] && [ ! -d "$(dirname "${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports")" ]; then
+    echo "PRECONDITION FAIL: '${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports' not present -- this gate runs on the box, not here." >&2
     echo "  Refusing rather than reporting a pass." >&2
     exit 2
 fi

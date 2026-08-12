@@ -1146,7 +1146,7 @@ run log).** With defect #1 deleted and the gallocr leaf check landed, the full 4
 paged path matches static on aggregate likelihood. The L95/L100 text flips are model-side
 knife-edges (0.21-nat static margins), NOT corruption — the pre-fix "merge owns 750–1230"
 narrative is fully retired.
-**Remaining for the flag-flip: gates at SCALE + HIS call. Standing for the owner: (1) gallocr
+**Remaining for the flag-flip: gates at SCALE + HIS call. Standing for HIM: (1) gallocr
 leaf-check upstream PR, (2) flag-flip default, (3) the 1M rung (~13h).**
 - ✅ **16k SCALE GATE GREEN (post-fix): paged == static byte-exact at ptok=16016.**
 - ✅ **32k SCALE GATE GREEN: paged == static byte-exact at ptok=32016** ('</think>1, 2, 3'

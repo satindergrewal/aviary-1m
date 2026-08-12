@@ -22,15 +22,15 @@ OUT_ST="$3"
 GGUF_OUT="$4"
 CORPUS="${5:-/tmp/glm_calib.txt}"       # calibration corpus for imatrix; default small
 IQUANTS=(IQ2_KT IQ3_XXS)
-CONVERTER="${CONVERTER:-<BOX>/llama.cpp/build/bin/convert_hf_to_gguf.py}"
-QUANTIZER="${QUANTIZER:-<BOX>/llama.cpp-kt/build/bin/llama-quantize}"
-IMATRIX_BUILDER="${IMATRIX_BUILDER:-<BOX>/llama.cpp/build/bin/llama-imatrix}"
+CONVERTER="${CONVERTER:-${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp/build/bin/convert_hf_to_gguf.py}"
+QUANTIZER="${QUANTIZER:-${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp-kt/build/bin/llama-quantize}"
+IMATRIX_BUILDER="${IMATRIX_BUILDER:-${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp/build/bin/llama-imatrix}"
 SUBSETTER=<BOX>/glm-reap37/reap_subset_glm.py
 
 echo "=== [1/4] subset master -> REAP37 safetensors ==="
 # NOTE: subsetter currently reads a LOCAL master; the master here must be a local
 # safetensors tree (zai-org/GLM-5.2 downloaded). If the source-of-truth is the GGUF
-# on <BOX>/glm52-bf16, convert that to safetensors first or adjust.
+# on ${BOX_MNT:?set BOX_MNT to the box storage root}/glm52-bf16, convert that to safetensors first or adjust.
 python3 "$SUBSETTER" "$MASTER_ST" "$MAP" "$OUT_ST"
 echo "SUBSET_DONE=$(sha256sum "$OUT_ST/config.json" | cut -d' ' -f1)"
 

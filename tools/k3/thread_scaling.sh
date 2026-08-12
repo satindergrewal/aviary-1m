@@ -7,8 +7,8 @@
 #
 # Uses only the cores IQ2_KT is not using (it holds 16 of 32).
 set -u
-BIN=<BOX>/llama.cpp-k3kt/build-cuda/bin/llama-quantize
-SRC=<BOX>/ablit-test/Qwen3-4B-abliterated-Q8_0.gguf
+BIN=${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp-k3kt/build-cuda/bin/llama-quantize
+SRC=${BOX_MNT:?set BOX_MNT to the box storage root}/ablit-test/Qwen3-4B-abliterated-Q8_0.gguf
 SECS=${SECS:-150}
 
 run_arm() {

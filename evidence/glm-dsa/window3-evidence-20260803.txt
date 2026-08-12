@@ -1,4 +1,4 @@
-WINDOW #3 EVIDENCE — 2026-08-03, GLM/DSA queue items (the owner-authorized, regen paused 11,873)
+WINDOW #3 EVIDENCE — 2026-08-03, GLM/DSA queue items (owner-authorized, regen paused 11,873)
 =================================================================================================
 Window: ~52 min, cards verified 15+15 MiB at teardown. Box logs: /tmp/glm_w3.log (stock serve),
 /tmp/glm_dq_f16.log, /tmp/glm_dq_q8.log (dequant arms, wt-dsa-dequant @42942e19b).

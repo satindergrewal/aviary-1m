@@ -7,11 +7,11 @@
 #
 # Now also reports NON-TERMINATION, which the original matrix could not see.
 set -uo pipefail
-cd <BOX>/ktdev
-OUT=<BOX>/ktdev/n3_results
+cd ${BOX_MNT:?set BOX_MNT to the box storage root}/ktdev
+OUT=${BOX_MNT:?set BOX_MNT to the box storage root}/ktdev/n3_results
 mkdir -p "$OUT"
 PORT=8091
-PREFILL=<BOX>/llama.cpp-kt/wikitext-2-raw/wiki.train.raw
+PREFILL=${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp-kt/wikitext-2-raw/wiki.train.raw
 
 for depth in 0 8000 32000; do
   label="Qwen27B-IQ1_KT|1.75|d${depth}"

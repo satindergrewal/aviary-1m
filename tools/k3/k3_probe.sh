@@ -11,7 +11,7 @@ set -uo pipefail
 
 MODEL=${1:?need model path}
 TAG=${2:-$(basename "$MODEL" .gguf)}
-TREE=<BOX>/llama.cpp-k3kt
+TREE=${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp-k3kt
 CLI=$TREE/build-cuda/bin/llama-cli
 OUT=/tmp/k3_probe_$TAG.log
 

@@ -7,8 +7,8 @@ set -euo pipefail
 
 CTX="${1:-65536}"
 NP="${2:-4}"
-MODEL=<BOX>/bigmodels/glm52-ours/GLM-5.2-ours-IQ1_S-prot.gguf
-REPO=<BOX>/llama.cpp-fleet          # branch fleet-sync @ ffee9f47e
+MODEL=${BOX_MNT:?set BOX_MNT to the box storage root}/bigmodels/glm52-ours/GLM-5.2-ours-IQ1_S-prot.gguf
+REPO=${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp-fleet          # branch fleet-sync @ ffee9f47e
 LOG=/tmp/glm_serve.log
 
 [ -f "$MODEL" ] || { echo "missing model: $MODEL" >&2; exit 1; }

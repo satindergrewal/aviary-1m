@@ -16,13 +16,13 @@ set -uo pipefail
 #     llama.cpp-k3kt  KIMI_K3=yes  KT types=yes  <- branch k3-kt, "Merge kt-quants into k3-kt"
 #   I originally pointed this at llama.cpp-k3 and my own preflight PASSED it, because the gate
 #   checked KIMI_K3 and never checked the quant types. Half a requirement is not a gate.
-TREE=<BOX>/llama.cpp-k3kt
+TREE=${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp-k3kt
 BIN=$TREE/build-cuda/bin/llama-server
 # The WORKING artifact: grid family + 52-chunk imatrix, verdict COHERENT on the
 # pre-registered probes (2026-07-31). The IQ2_KT trellis build at 2.15 bpw is kept
 # on disk but is BROKEN (degenerate output) - do not serve it.
-MODEL=<BOX>/bigmodels/k3-reap80-ours-IQ2_XXS-imat.gguf
-TMPL=<BOX>/bigmodels/k3_chat_fixed.jinja
+MODEL=${BOX_MNT:?set BOX_MNT to the box storage root}/bigmodels/k3-reap80-ours-IQ2_XXS-imat.gguf
+TMPL=${BOX_MNT:?set BOX_MNT to the box storage root}/bigmodels/k3_chat_fixed.jinja
 LOG=/tmp/k3_serve.log
 
 CTX=${K3_CTX:-32768}
@@ -47,7 +47,7 @@ grep -q KIMI_K3 "$TREE/src/llama-arch.h" 2>/dev/null \
 TC=$(grep -oE 'GGML_TYPE_COUNT *= *[0-9]+' "$TREE/ggml/include/ggml.h" 2>/dev/null | grep -oE '[0-9]+')
 if [ -z "$TC" ] || [ "$TC" -le 153 ]; then
   echo "FAIL: tree GGML_TYPE_COUNT=${TC:-unknown} cannot represent IQ2_KT (type 153)."
-  echo "      Use <BOX>/llama.cpp-k3kt - it is the only tree with BOTH kimi-k3 and KT types."
+  echo "      Use ${BOX_MNT:?set BOX_MNT to the box storage root}/llama.cpp-k3kt - it is the only tree with BOTH kimi-k3 and KT types."
   exit 1
 fi
 echo "ok   tree can read KT types (GGML_TYPE_COUNT=$TC > 153)"

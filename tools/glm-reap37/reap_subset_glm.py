@@ -190,7 +190,7 @@ def write_aux(master, outdir, kept):
     # num_hidden_layers stays 78.
     tgt["expert_counts"] = {str(il): len(kept[il]) for il in sorted(kept)}
     cfg["_reap_provenance"] = {
-        "source": "satindergrewal local zai-org GLM-5.2 full-precision master",
+        "source": "owner-local zai-org GLM-5.2 full-precision master",
         "recipe": "REAP37 kept-expert map recovered from pipenetwork/GLM-5.2-REAP37-MLX-4bit "
                   "via e_score_correction_bias F32 subsequence match (exact, monotonic); "
                   "Cerebras REAP arXiv:2510.13999 method",

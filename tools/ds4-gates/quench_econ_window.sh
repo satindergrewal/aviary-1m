@@ -19,8 +19,8 @@ trap 'scrub_abs_paths "${OUT:-}"' EXIT
 # cache reuse, saturating prompts pin AR at 1.0 — use mixed-length prompts).
 #
 # Usage (on the box, card slot GRANTED, per room choreography):
-#   MODEL=<BOX>/models/dsv4-flash-UD-Q4_K_XL/...gguf \
-#   DRAFT=<BOX>/models/drafter/DSV4-Flash-DSpark-draft-bf16.gguf \
+#   MODEL=${BOX_MNT:?set BOX_MNT to the box storage root}/models/dsv4-flash-UD-Q4_K_XL/...gguf \
+#   DRAFT=${BOX_MNT:?set BOX_MNT to the box storage root}/models/drafter/DSV4-Flash-DSpark-draft-bf16.gguf \
 #   SPEC_TYPE=draft-dspark ./quench_econ_window.sh
 # Binary tip must be ds4-ports >= ebb85473 (P0-1). Verify: strings "$BIN" | grep -q DS4P_YIELD_QUENCH.
 
@@ -30,14 +30,14 @@ set -euo pipefail
 # without them it errors, prints no verdict, and EXITS 0 -- scored as a pass by any exit-code runner.
 # Placed immediately after `set` on purpose: an earlier attempt used "after the last VAR= line" and
 # landed inside a PROMPTS=( ... ) array literal, breaking the script. bash -n caught it.
-if [ ! -d "<BOX>" ]; then
-    echo "PRECONDITION FAIL: <BOX> not present -- this gate runs on the box, not here." >&2
+if [ ! -d "${BOX_MNT:?set BOX_MNT to the box storage root}" ]; then
+    echo "PRECONDITION FAIL: ${BOX_MNT:?set BOX_MNT to the box storage root} not present -- this gate runs on the box, not here." >&2
     echo "  Refusing rather than reporting a pass." >&2
     exit 2
 fi
 
 
-BIN=${BIN:-<BOX>/wt-ds4-ports/build-cuda/bin/llama-server}
+BIN=${BIN:-${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports/build-cuda/bin/llama-server}
 MODEL=${MODEL:?set MODEL to the V4 gguf path (regen serve config uses dsv4-flash UD-Q4_K_XL)}
 DRAFT=${DRAFT:?set DRAFT to the DSpark drafter gguf path}
 SPEC_TYPE=${SPEC_TYPE:-draft-dspark}
@@ -77,7 +77,7 @@ run_arm() { # $1=env $2=label
 }
 
 date | tee "$OUT"
-echo "binary: $BIN ($(git -C <BOX>/wt-ds4-ports rev-parse --short HEAD 2>/dev/null || echo unknown))" | tee -a "$OUT"
+echo "binary: $BIN ($(git -C ${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports rev-parse --short HEAD 2>/dev/null || echo unknown))" | tee -a "$OUT"
 run_arm "" "A-baseline"
 run_arm "DS4P_YIELD_QUENCH=1" "B-governor"
 echo "=== done; teardown verified by caller (nvidia-smi <= 15 MiB) ===" | tee -a "$OUT"

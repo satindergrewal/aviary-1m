@@ -179,7 +179,7 @@ def write_aux(master, outdir, kept, n_layers=93):
     tgt["num_experts"] = n_keep
     tgt["expert_counts"] = [len(kept.get(i, {})) for i in range(n_layers)]
     cfg["_reap_provenance"] = {
-        "source": "satindergrewal local full-precision K3 master",
+        "source": "owner-local full-precision K3 master",
         "recipe": "REAP80 kept-expert map recovered from pipenetwork/Kimi-K3-REAP80 "
                   "e_score_correction_bias, uniqueness proven by solution-counting "
                   "monotonic search; confirmed independently against dequantised "

@@ -25,11 +25,11 @@ trap 'scrub_abs_paths "${OUT:-}"' EXIT
 #     not measure it ([[prompt-cache-idle-slot-redundant-copies]])
 set -uo pipefail
 
-WT=${WT:-<BOX>/wt-ds4-ports}
+WT=${WT:-${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports}
 B=${B:-$WT/build-cuda/bin/llama-server}
-M=${M:-<BOX>/ktdev/qwen3-4b-dev-IQ4_KT.gguf}
+M=${M:-${BOX_MNT:?set BOX_MNT to the box storage root}/ktdev/qwen3-4b-dev-IQ4_KT.gguf}
 P=${P:-8971}
-BANK=${BANK:-<BOX>/ktdev/kvbank-warmgate}
+BANK=${BANK:-${BOX_MNT:?set BOX_MNT to the box storage root}/ktdev/kvbank-warmgate}
 TAG=${TAG:-2k}
 OUT=${OUT:-/tmp/ds4gates/results/p15-warm-admit-$TAG-$(date +%Y%m%d-%H%M).txt}
 
@@ -38,7 +38,7 @@ OUT=${OUT:-/tmp/ds4gates/results/p15-warm-admit-$TAG-$(date +%Y%m%d-%H%M).txt}
 # directory", "SERVER DEAD", produced NO verdict line, and EXITED 0. A gate that cannot run on this
 # machine must say so and fail, not return success -- a batch runner reading exit codes scores that
 # as a pass forever. Same defect paged_multimodel_gate.sh had (2026-08-06).
-_bank_parent="$(dirname "${BANK:-<BOX>/ktdev/kvbank-warmgate}")"
+_bank_parent="$(dirname "${BANK:-${BOX_MNT:?set BOX_MNT to the box storage root}/ktdev/kvbank-warmgate}")"
 if [ ! -d "$_bank_parent" ]; then
     echo "PRECONDITION FAIL: KV bank parent '$_bank_parent' does not exist." >&2
     echo "  This gate runs on the box (CUDA + NVMe bank), not here. Refusing rather than reporting a pass." >&2
