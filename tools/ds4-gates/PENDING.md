@@ -1811,3 +1811,22 @@ analytically). This is a champion-kernel arc (fresh session, substantial), NOT a
 the champion currently relies on its tested mask-fill for correctness; moving to analytic masking
 needs the in-kernel band predicate + the full byte-exact battery. #18 PROFILING PHASE COMPLETE,
 lever identified and quantified (mask fill ~= attention cost); implementation is the next arc.
+
+
+## 2026-08-12 #20 DE-RISKED to execution-ready (CPU reading, no GPU)
+
+Read the champion mask machinery end-to-end. Findings that change the arc from "risky
+reinvention" to "mechanical transcription":
+- kernel_paged_champ_mask_tiled is ALREADY sparse: it classifies blocks and fills only the
+  ~1-2 class-1 boundary tiles per q-block. The "mask fill ~= attention" cost is the block
+  CLASSIFICATION pass (one thread per (q-block,kv-block,head) tile) that precomputes blk_skip.
+- So the analytic win = FOLD that classification INLINE into the attention block-walk,
+  dropping the separate dispatch + the blk_skip global round-trip. NOT new position math.
+- The band predicate is already written+proven in the fill (causal all_vis/non_vis + window W).
+- Inline feasibility VERIFIED: champion is n_seq==1, so qp_lo = plen[0] - ne01 + iq1 (no
+  batch-offset map needed); k-block = ic0*C. Full derived formula in task #20 metadata.
+Implementation = one FC-gated change (analytic_blk, default off) transcribing the predicate at
+the `blk_cur = blk[ic0]` site + host skipping the fill dispatch, gated byte-exact by the SHORT
+test-paged-vs-cpu replay (survives the machine contention that kills long prefill runs).
+Deferred to a fresh context per the long-context-kernel-edit scar (partials revert), NOT
+half-built here. Spec-complete and mechanical.
