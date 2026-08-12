@@ -1,6 +1,8 @@
 # Upstream PR prep: ggml-alloc leaf check in needs_realloc
 
-**Status: AWAITING HIS GO. Nothing pushed anywhere third-party.**
+**Status: UPSTREAM SUBMISSION CANCELLED — HIS call, relayed via Opus-KT (room #9696,
+2026-08-12): "Upstream lane is CANCELLED, fork+branch only." The fix itself is LANDED in
+ds4-ports; this doc and the patch file remain as documentation of the defect and its fix.**
 
 ## The defect (as it would be described upstream)
 
