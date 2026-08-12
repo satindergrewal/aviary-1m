@@ -1895,3 +1895,28 @@ Post-session regression check surfaced it, run to ground with controls:
 - ⚠⚠ **THIS BLOCKS THE FLAG-FLIP**: paged is NOT deterministically correct until #21 lands. Every
   prior byte-exact paged claim was n=1; re-verify all with N-run determinism after the fix.
 - Fix is a champion-kernel arc — do it in a FRESH context (long-context-kernel-edit scar), N-run gated.
+
+
+## 2026-08-12 BUG #21 ROOT CAUSE PINNED (first fix attempt failed, reverted, tree clean)
+
+CONFIRMED root cause: the paged champion sets has_kvpad=FALSE ("block walk handles the tail"),
+and for a has_mask model (DSV4) there is NO explicit kv-bound in the attention loop -- the tail
+bound `if (ic+i >= ne11)` exists ONLY in the `!has_mask` branch. So the champion has NOTHING
+excluding padded slots past ctx_lens; it relies entirely on the mask, which does not catch them
+(non-determinism proves it). `ic = 0` reset is NOT the issue for the champion (that block is
+gated on has_kvpad which is false).
+FIRST FIX ATTEMPT (reverted): added a kv-bound `if (ic + 2*tiisg >= n_kv_p) s2=-inf` at the
+online softmax. FAILED -- still flips, poison still '========'. Two reasons found:
+  (1) COLUMN INDEX WRONG: the softmax reads ss2[j*SH/2 + tiisg]; columns are laid out through the
+      mqk store `simdgroup_store(mqk, ss + 8*cc, SH)` with cc = ccc*NSG + sgitg. So tiisg does NOT
+      map to k-column as 2*tiisg -- the real column is f(cc, sgitg, tiisg) via the 8*cc tile
+      layout. The bound must use the CORRECT mapping.
+  (2) V-SIDE 0*NaN: poison stays '========' because even a correctly-masked (weight 0) padded slot
+      does 0 * V_NaN = NaN in the output accumulation. The finite-residual REAL bug is K/score-side
+      (mask the score), but poison-robustness also needs the padded V excluded. For production
+      (finite residual) only the score bound is needed.
+FIX (fresh context, N-run + poison gated): add the kv-bound at the softmax with the CORRECT
+ss-buffer column mapping so padded columns (abs k-pos >= n_kv_p) get score -inf via SELECT. The
+mapping derivation is the careful part; guessing it in a deep context already cost one failed
+attempt.
+⚠⚠ **BLOCKS FLAG-FLIP.** Paged is non-deterministic at partial trailing blocks until #21 lands.
