@@ -1778,3 +1778,21 @@ the private remote; public flip = HIS call. (2) The public fork's ds4-ports bran
 23c921add. Every ds4ports SHA cited earlier on this board (5b629e6a7, fa564bf42, c514b245a,
 57c1c112b, etc.) is a DEAD NAME; map by commit SUBJECT, not SHA. Local corrupted clone
 replaced by the clean one (build cache preserved).
+
+
+## 2026-08-12 DSV4 PREFILL PARITY — the "2x gap" was a MEASUREMENT ARTIFACT
+
+Task #18 profile-first: controlled prefill-rate depth sweep, static vs champion-paged (bs64),
+same -c/-b/-ub, generously-sized pools:
+| depth | static t/s | champ-paged t/s | ratio |
+| 4k    | 219.6 | 177.4 | 1.24x |
+| 8k    | 189.3 | 162.7 | 1.16x |
+| 16k   | 140.0 | 118.4 | 1.18x |
+
+**The ratio is FLAT at ~1.2x, and static is NOT flat — both decline with depth together.** The
+earlier "2.18x at 64k" (85.9 vs a claimed static ~187) was a 64k-specific artifact: the champion
+64k arm ran undersized pools (-ngpub 1075 forcing CPU-block spill) AND the "static ~187" baseline
+was not a same-config control. RETRACTED. The real prefill picture: **champion-paged is a flat
+~20% behind static**, consistent with fixed per-ubatch overhead (mask/extra-mask fill) rather
+than a depth-scaling block-walk defect. ⇒ the parity lever is REDUCING PER-UBATCH OVERHEAD, not
+a fundamental kernel rewrite. 32k confirmation running.
