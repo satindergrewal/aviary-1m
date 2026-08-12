@@ -1768,3 +1768,13 @@ after the fact.**
 compiles, no test fixtures, no fan-out. Doc edits and file reads are fine. Load on *some* arms is
 worse than load on all of them, because that is a positional confound and positional confounds are
 the one thing ABBA cannot balance.
+
+
+## 2026-08-12 ⚠⚠ SECOND HISTORY REWRITE — ALL PRIOR ds4ports SHAs ARE DEAD NAMES AGAIN
+His order: full privacy scrub of everything. DONE: (1) aviary-1m: all 705 commits rewritten
+(content+messages+authors → noreply identity), every private class verified 0, force-pushed to
+the private remote; public flip = HIS call. (2) The public fork's ds4-ports branch: scrubbed
+(box paths in 2 test files' history) via fresh full clone + filter, force-pushed — new tip
+23c921add. Every ds4ports SHA cited earlier on this board (5b629e6a7, fa564bf42, c514b245a,
+57c1c112b, etc.) is a DEAD NAME; map by commit SUBJECT, not SHA. Local corrupted clone
+replaced by the clean one (build cache preserved).
