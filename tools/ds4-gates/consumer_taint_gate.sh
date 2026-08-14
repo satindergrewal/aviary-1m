@@ -64,10 +64,19 @@ armed=$(grep -c "DS4P-PAGED-TAINT active" /tmp/tg-PAGED-tainted.log 2>/dev/null)
 pagedop=$(grep -cE "DS4P-(LPK ACTIVE|MMA OFF|CHAMP-PAGED ACTIVE)" /tmp/tg-PAGED-tainted.log 2>/dev/null); pagedop=$(printf %s "${pagedop:-0}" | head -1)
 echo "probe_armed=$armed  paged_op_ran=$pagedop  model=$(basename "$M")" | tee -a "$OUT"
 
+# ⚠⚠ SENTINELS ARE NOT OBSERVABLES (fixed 2026-08-13). run()'s "NEVER READY" line is tee'd to
+# stdout, so `| tail -1` CAPTURES it as the arm's "sha" while the pipe discards run()'s return 1.
+# A dead CLEAN arm + healthy TAINTED arm then hit the a!=b branch and printed
+#     CONSUMED: taint CHANGED logprobs (PAGED-clean NEVER READY -> <sha>)
+# -- a false self-validation with a sentinel sitting where a sha belongs. The old guard was also
+# ASYMMETRIC: it checked $a for NO_LOGPROBS but never $b, so a tainted arm with no logprobs vs a
+# clean sha was another false CONSUMED. Normalize every sentinel to empty; the -z guard consumes it.
+case "$a" in *"NEVER READY"*|NO_LOGPROBS) a="";; esac
+case "$b" in *"NEVER READY"*|NO_LOGPROBS) b="";; esac
 if [ "$armed" = "0" ]; then
     echo "INCONCLUSIVE: the taint probe never armed (no paged KV write dispatched). NOT evidence of anything -- the paged pool was absent or the write path never ran." | tee -a "$OUT"
-elif [ -z "$a" ] || [ -z "$b" ] || [ "$a" = "NO_LOGPROBS" ]; then
-    echo "INCONCLUSIVE: no usable logprob observable." | tee -a "$OUT"
+elif [ -z "$a" ] || [ -z "$b" ]; then
+    echo "INCONCLUSIVE: no usable logprob observable from one or both arms (dead arm or no logprobs -- see the arm lines above)." | tee -a "$OUT"
 elif [ "$a" != "$b" ]; then
     echo "CONSUMED: taint CHANGED logprobs ($a -> $b) => this graph genuinely READS the paged pool" | tee -a "$OUT"
 else

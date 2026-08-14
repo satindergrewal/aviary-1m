@@ -213,9 +213,17 @@ if command -v gate_assert_paged_consumed >/dev/null 2>&1; then
     _last_paged=$(ls -t "$LOGDIR"/paged*.log 2>/dev/null | head -1)
     if [ -n "$_last_paged" ]; then
         gate_assert_paged_consumed "$_last_paged" "paged arms" "$(gate_n_predict 2>/dev/null || echo 512)" | tee -a "$OUT"
-        [ "${PIPESTATUS[0]}" = "1" ] && echo "  ⇒ every paged verdict below is a STATIC verdict. Not a paging result." | tee -a "$OUT"
+        # ⚠⚠ THE rc WAS READ AND THEN DISCARDED (fixed 2026-08-13). This branch printed its note and
+        # incremented NOTHING, so a paged arm that silently fell back to static produced correct
+        # (static) output -> paged:CLEAN -> "PASS both paths clean" -> exit 0. A FALSE PASS from the
+        # exact 4.5-hour lesson this check was added to prevent. The sibling long_context_gate.sh
+        # handles the identical rc with fails+1 -- mirror it. Correct-producer-no-consumer.
+        [ "${PIPESTATUS[0]}" = "1" ] && { echo "  ⇒ every paged verdict below is a STATIC verdict. Not a paging result." | tee -a "$OUT"; fails=$((fails+1)); }
     else
+        # ⚠ Same disarmed net: consumption UNVERIFIED must not be able to end in "PASS ... clean".
+        # No paged log after the rep loop is a harness anomaly, not a neutral condition.
         echo "  ⚠ no paged log found to check -- consumption UNVERIFIED, treat paged verdicts as unproven" | tee -a "$OUT"
+        fails=$((fails+1))
     fi
 fi
 
@@ -239,8 +247,12 @@ elif [ "$s_bad" -eq 0 ] && [ "$p_bad" -gt 0 ]; then
 elif [ "$s_bad" -gt 0 ] && [ "$p_bad" -eq 0 ]; then
     echo "RESULT: static corrupts and paged does not -- unexpected; treat the harness as suspect before anything else." | tee -a "$OUT"
     fails=$((fails+1))
-else
+elif [ "$fails" -eq 0 ]; then
     echo "MULTI-SLOT GATE: PASS both paths clean across $REPS reps" | tee -a "$OUT"
+else
+    # ⚠ Text was clean but an earlier check (consumption VOID / unverified / dead arm) already
+    # counted a failure. The LAST line is the one a reader quotes -- it must not say PASS.
+    echo "MULTI-SLOT GATE: VOID -- text clean but $fails earlier check(s) failed (see above); NOT a clean pass" | tee -a "$OUT"
 fi
 echo "log: $OUT"
 exit $fails

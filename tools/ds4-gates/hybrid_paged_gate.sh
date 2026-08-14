@@ -34,7 +34,10 @@
 # the gate's own `exit` jumped straight over it -- and a `grep -l scrub_abs_paths` still listed the
 # gate as a caller, because a grep counts TEXT, not control flow. Verified end-to-end afterwards:
 # the result file still carried the absolute path. On EXIT it runs whatever path the gate takes.
-trap 'scrub_abs_paths "${OUT:-}"' EXIT   # ${OUT:-} : the trap fires on EARLY exits too, before OUT is assigned; set -u would abort there
+# ⚠ TWO EXIT DUTIES, ONE TRAP. The second `trap EXIT` assignment used to REPLACE the first,
+# so the privacy scrubber never ran (correct-producer-no-consumer on the scrub itself --
+# grep -l still listed this file as a caller). Combine them.
+trap 'scrub_abs_paths "${OUT:-}"; pkill -f "inkling-moe.gguf.*--port ${PORT:-}" 2>/dev/null || true' EXIT
 
 set -euo pipefail
 
@@ -46,7 +49,6 @@ OUT="$DIR/results/hybrid-paged-decode-raw-$DATE.txt"
 RAWLOG="$DIR/results/hybrid-paged-decode-raw-$DATE.log"
 WORK="$(mktemp -d)"
 N_PREDICT=8
-trap 'pkill -f "inkling-moe.gguf.*--port $PORT" 2>/dev/null || true' EXIT
 mkdir -p "$DIR/results"
 
 echo "== fixture =="
@@ -55,8 +57,14 @@ FIX="$WORK/inkling-moe.gguf"
 [ -f "$FIX" ] || { echo "FAIL: fixture not written"; exit 1; }
 
 echo "== serve =="
+# ⚠ -np 1, not 2 (fixed 2026-08-13). This gate's bar is OP-LEVEL (PAGED_ATTN in a serve-time
+# graph) plus sequential token-parity against static. The four prompts are sent one at a time
+# on purpose. -np 2 was a false multi-slot CLAIM that let this file count as coverage for the
+# 2026-08-06 -np>1 defect -- the exact hole lint_claimed_vs_entered exists to catch. Multi-slot
+# belongs to multislot_gate / batch_offset_invariant_gate, which actually put two requests in
+# flight. Dropping the flag matches the behaviour.
 ( DS4P_PAGED_HYBRID=1 GGML_SCHED_DEBUG=2 "$BUILD/bin/llama-server" -m "$FIX" \
-    -c 2048 -np 2 -b 512 -ub 512 --kv-paged --n-gpu-blocks 64 --n-cpu-blocks 16 \
+    -c 2048 -np 1 -b 512 -ub 512 --kv-paged --n-gpu-blocks 64 --n-cpu-blocks 16 \
     --port "$PORT" --no-warmup -lv 5 > "$RAWLOG" 2>&1 & )
 for _ in $(seq 1 90); do
     curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 1
@@ -80,7 +88,7 @@ sleep 1
 
 echo "== static arm (classic serve, no --kv-paged) =="
 ( "$BUILD/bin/llama-server" -m "$FIX" \
-    -c 2048 -np 2 -b 512 -ub 512 \
+    -c 2048 -np 1 -b 512 -ub 512 \
     --port "$PORT" --no-warmup > "$WORK/static.log" 2>&1 & )
 for _ in $(seq 1 90); do
     curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 1

@@ -469,8 +469,9 @@ PYW
             echo "  ⚠ warm-up ($a) never came up -- continuing COLD, treat the first arm accordingly" | tee -a "$OUT"
             [ -n "$PID" ] && kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; continue
         fi
-        curl -s --max-time 900 -X POST "http://127.0.0.1:$PORT/completion" \
-            -H 'Content-Type: application/json' --data-binary "@$D/warm.json" > /dev/null 2>&1
+        local wresp="$D/warm-$a.resp.json" wcode
+        wcode=$(curl -s --max-time 900 -o "$wresp" -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/completion" \
+            -H 'Content-Type: application/json' --data-binary "@$D/warm.json" 2>/dev/null)
         t1=$(python3 -c 'import time;print(time.time())')
         kill $PID 2>/dev/null; wait $PID 2>/dev/null; PID=""; sleep 3
         # ⚠⚠ A WARM-UP THAT FAILED STILL PRINTED A DURATION AND THE RUN CONTINUED. The only check
@@ -489,7 +490,19 @@ PYW
             echo "     accept the cold first arm EXPLICITLY." | tee -a "$OUT"
             return 1
         fi
-        printf '  warm-up %-6s discarded  (%.0fs)\n' "$a" "$(python3 -c "print($t1-$t0)")" | tee -a "$OUT"
+        # ⚠ THE OTHER HALF (2026-08-13): the log can be clean while the COMPLETION itself returned a
+        # non-200 or an empty body -- the server came up, the endpoint errored, and the decode that was
+        # supposed to warm the pipelines never produced tokens. That is the SAME cold-arm confound the
+        # log-grep above guards against, arriving through the response instead of the log. Read it.
+        local wlen
+        wlen=$(python3 -c "import json;print(len(json.load(open('$wresp')).get('content','')))" 2>/dev/null || echo 0)
+        if [ "$wcode" != 200 ] || [ "${wlen:-0}" -lt 1 ]; then
+            echo "  ⚠⚠ VOID: warm-up ($a) completion returned HTTP ${wcode:-none}, content len ${wlen:-0} -- the" | tee -a "$OUT"
+            echo "     prelude decode produced nothing, so the NEXT measured arm inherits a cold-arm confound." | tee -a "$OUT"
+            echo "     Fix the prelude or run with PP_WARM=0 and accept the cold first arm EXPLICITLY." | tee -a "$OUT"
+            return 1
+        fi
+        printf '  warm-up %-6s discarded  (%.0fs, http %s, %s tok-chars)\n' "$a" "$(python3 -c "print($t1-$t0)")" "$wcode" "$wlen" | tee -a "$OUT"
     done
 }
 
@@ -505,7 +518,13 @@ PYW
 #   position 1 vs 4 (static twice) bounds the drift; 2 vs 3 (paged twice) bounds it again; and the
 #   arm comparison is made WITHIN a position, not across one.
 probe_geometry
-warmup
+# ⚠⚠ HONOR warmup's REFUSAL (2026-08-13). warmup() returns 1 ONLY on a VOID (a prelude that loaded
+# but logged a load/paged failure, or a completion that returned non-200/empty) -- cases where the
+# NEXT measured arm would inherit a cold-arm confound this gate would then report as an EFFECT. The
+# "never came up" path deliberately `continue`s and returns 0 (optional prelude, warn-and-run-cold).
+# Under `set -uo pipefail` (no -e) a bare `warmup` DISCARDS that return, so the refusal printed but
+# the gate measured anyway -- correct-producer-no-consumer. Consume it here.
+warmup || { echo "  ABORT: warm-up VOID (above) -- refusing to produce a bar number off a cold-arm confound." | tee -a "$OUT"; exit 1; }
 case "$ORDER" in
   # ⚠⚠ THE .res FILES WERE PER-POSITION AND THE .log FILES WERE NOT, SO pos4 DESTROYED pos1's LOG.
   # Found on 2026-08-10 by trying to use them: `prefill_curve.py` differences the per-`-b` progress

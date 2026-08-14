@@ -899,7 +899,7 @@ caught by the gate-shape rule).
 | deepseek v4 | real model | — | ✅ byte-exact | full ladder, this session |
 | grok | grok-moe | ✅ | ✅ champN:4 | |
 | hunyuan-moe | hunyuan-moe-moe | ✅ | ✅ champN:4 | |
-| minimax-m3 | minimax-m3-moe | 🔴 REFUSED | 🔴 REFUSED | **wiring gap**: memory type not pageable even with DS4P_PAGED_HYBRID=1 — loud refusal (guard correct), fix = paged wiring for its memory class |
+| minimax-m3 | minimax-m3-moe | 🟡 WIRED | 🟡 WIRED | **UPDATE 2026-08-13: gap CLOSED at machinery level** — store+gather bit-exact CPU+Metal under DS4P_PAGED_MSA=1 (test-paged-msa-roundtrip). Battery still can't grade it (e2e blind to MSA attn ~1e-8); real-model verify pending. See UPDATE below. |
 | nemotron | nemotron-dense | ✅ | ✅ champN:4 | |
 | qwen3moe | qwen3moe-moe | ✅ | ✅ champN:4 | |
 | qwen3next | qwen3next-moe | ✅ (DS4P_PAGED_HYBRID=1) | untested | hybrid; bs16 token-exact |
@@ -911,7 +911,7 @@ caught by the gate-shape rule).
 | hunyuan-vl | hunyuan_vl-dense | ✅ | ✅ champN:4 | text-only |
 | dflash / eagle3 / gemma4-assistant / laguna / mimo2 / step35 | — | ⏸ | ⏸ | **saver-unsupported — and box swept via ssh 2026-08-12: NO real ggufs exist for these 6 anywhere (box <BOX> + nvme + home, Mac local). They are incoming archs; the ONLY route is model-saver extensions (task #17B, inkling pattern).** |
 
-**Score: 12 verified · 1 checked-negative (minimax-m3 wiring gap) · 6 blocked on fixtures/models.**
+**Score: 12 verified · minimax-m3 store+gather now VERIFIED op-level (2026-08-13, was checked-negative) · 6 blocked on fixtures/models.**
 
 
 ## 2026-08-12 SECOND PASS — 19-ARCH ACCOUNTING COMPLETE (15 verified / 1 gap / 3 by-design-blocked)
@@ -937,10 +937,23 @@ arrays given the truncate flag. Re-battered on synthetic fixtures:
 | 13 | mimo2 | ✅ champion+SWA (sinks arch, champN:4) |
 | 14 | step35 | ✅ paged MATCH (DS4P_PAGED_HYBRID+SWA) |
 | 15 | laguna | ✅ DS4P_PAGED_SWA MATCH (pool active) |
-| 16 | minimax-m3 | 🔴 CHECKED-NEGATIVE — memory type not wired for paging even under hybrid flag; real wiring gap (task #17A) |
+| 16 | minimax-m3 | 🟡 WIRED (dev-gated DS4P_PAGED_MSA), store+gather bit-exact CPU+Metal — see UPDATE 2026-08-13 below |
 | 17 | dflash | ⛔ speculative DRAFT head — not standalone-servable, paging N/A by design |
 | 18 | eagle3 | ⛔ speculative DRAFT head — same |
 | 19 | gemma4-assistant | ⛔ upstream FIXME (@ngxson) — arch_supported() denylists it; needs the real model or upstream fix |
 
-**15 verified · 1 real gap (minimax-m3 wiring) · 3 by-design/upstream-blocked. The list is fully
-accounted.** Remaining actionable item = minimax-m3 memory-class paging wiring.
+**15 verified · minimax-m3 store+gather now VERIFIED (op-level) · 3 by-design/upstream-blocked.**
+
+### ★ UPDATE 2026-08-13 — minimax-m3 MSA paging: synth-verifiable scope CLOSED
+The "memory type not wired" gap is CLOSED at the machinery level. The MSA path now stores K/V into
+the paged pool via `ggml_paged_kv_store` (I64 write_slots, CPU + Metal kernels) and gathers them back
+with the model's in-graph row arithmetic, all under `DS4P_PAGED_MSA=1`. Commits on origin/ds4-ports
+(pushed 2026-08-13): `4e8b555c5` (op + wiring) + `cab3f36d8` (permanent test) + `ac9594ad4`.
+- **VERIFIED bit-exact (max_err=0):** store+gather on CPU **and Metal(MTL0)**, ALL K + ALL V heads,
+  model's own in-graph rows — `tests/test-paged-msa-roundtrip.cpp` (a registered ctest, both PASS).
+- **Why the synthetic battery still shows REFUSED/negative for it:** the model-level e2e/battery gate
+  is STRUCTURALLY BLIND to the MSA gather (attention output ~1e-8). Garbaging or emptying the pool
+  leaves the token gate PASSING even with graph-reuse OFF and the POOL confirmed active. The battery
+  cannot express this feature; the round-trip is the only sensitive instrument, and it is green.
+- **Remaining (needs a real unsloth/MiniMax-M3 GGUF — owner's provisioning call):** only the
+  pos_slot/mask interaction inside a real forward pass. The store+gather machinery itself is done.

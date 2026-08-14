@@ -18,7 +18,9 @@ set -euo pipefail
 # ⚠ ADDED 2026-08-09 after a full-history rewrite + force-push removed /Users/<username> from 11
 # PUBLISHED commits. That cleaned the backlog; this closes the PRODUCERS. A history scrub with live
 # emitters still in the tree is a fix with a regression path.
-trap 'scrub_abs_paths "${OUT:-}"' EXIT
+# ⚠ TWO EXIT DUTIES, ONE TRAP (fixed 2026-08-13). The later `trap pkill EXIT` used to
+# REPLACE this one, so the privacy scrubber never ran (same class as hybrid_paged_gate).
+trap 'scrub_abs_paths "${OUT:-}"; pkill -f "por[t] ${PORT:-}" 2>/dev/null || true' EXIT
 WT="${1:-${BOX_MNT:?set BOX_MNT to the box storage root}/wt-ds4-ports}"
 MODEL="${2:-${BOX_MNT:?set BOX_MNT to the box storage root}/ktdev/qwen3-4b-dev-IQ4_KT.gguf}"
 PORT="${3:-8953}"
@@ -37,7 +39,6 @@ fi
 
 mkdir -p "$DIR/results"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-trap 'pkill -f "por[t] $PORT" 2>/dev/null || true' EXIT
 
 echo "== sync + build ==" | tee "$OUT"
 git -C "$WT" fetch fork ds4-ports >/dev/null 2>&1

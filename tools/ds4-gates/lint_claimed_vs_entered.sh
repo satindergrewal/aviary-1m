@@ -36,13 +36,31 @@ printf "%-28s %-9s %-6s %s\n" "----" "------" "------" "-------"
 for f in *.sh; do
     case "$f" in _no_abs_paths.sh|lint_claimed_vs_entered.sh) continue;; esac
 
-    np=$(grep -oE "\-np [0-9]+" "$f" 2>/dev/null | grep -oE "[0-9]+" | sort -rn | head -1)
+    # ⚠ STRIP COMMENTS FIRST (fixed 2026-08-13). After hybrid_paged_gate dropped -np 2, this lint
+    # still flagged it because the explanatory comment contained the string "-np 2". A claim is
+    # what the SCRIPT PASSES TO THE SERVER, not what a comment mentions.
+    # ⚠ ALSO READ `${VAR:-N}` DEFAULTS (found by Grok, #9808). `-np ${BI_NP:-2}` is how the
+    # best-guarded multi-slot gate (batch_offset_invariant_gate) claims 2; the old regex only
+    # matched `-np [0-9]+`, so that gate was INVISIBLE -- twin of the comment-as-claim hole.
+    # Same shape: warm_multislot_gate `-np ${MS_NP:-2}`.
+    body=$(grep -vE '^[[:space:]]*#' "$f" 2>/dev/null)
+    np=$( { echo "$body" | grep -oE '\-np [0-9]+' | grep -oE '[0-9]+'
+            echo "$body" | grep -oE '\-np \$\{[A-Za-z_][A-Za-z0-9_]*:-[0-9]+\}' | grep -oE ':-[0-9]+' | grep -oE '[0-9]+'
+          } | sort -rn | head -1 )
     [ -z "${np:-}" ] && continue
     [ "$np" -lt 2 ] && continue
 
     # The ONLY way to get two sequences into one batch is to have two requests in flight at once,
     # which in shell means a backgrounded completion call (or a helper that backgrounds them).
-    conc=$(grep -cE 'curl[^|]*(completion|/v1/)[^|]*&[[:space:]]*$|^[[:space:]]*ask .*&|fire_both' "$f" 2>/dev/null)
+    # ⚠ JOIN CONTINUATION LINES FIRST (fixed 2026-08-13). grep is line-based; a curl written as
+    #     curl ... /completion ... \
+    #       -d '{...}' >/dev/null &
+    # has `completion` and the trailing `&` on DIFFERENT lines, so the one-line regex scored it 0
+    # and this lint accused the suite's best-guarded gate (batch_offset_invariant_gate, concurrent
+    # curls AND a runtime n_seq>=2 presence check) of sending sequentially -- 3 of its 4 flags were
+    # this false positive. A lint that mis-scores the best-guarded gate erodes trust in its real
+    # finding (hybrid_paged_gate, which genuinely IS sequential). The sed joins `\`-continued lines.
+    conc=$(sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$f" 2>/dev/null | grep -cE 'curl[^|]*(completion|/v1/)[^|]*&[[:space:]]*$|^[[:space:]]*ask .*&|fire_both')
     conc=${conc:-0}
 
     if [ "$conc" -gt 0 ]; then

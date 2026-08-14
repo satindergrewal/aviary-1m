@@ -30,7 +30,7 @@ run() { # $1 label  $2 server args  $3 env
     for _ in $(seq 1 180); do
         [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] && break; sleep 1
     done
-    [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] || { echo "$1 NEVER READY"|tee -a "$OUT"; echo "READYFAIL"; return; }
+    [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$P/health 2>/dev/null)" = "200" ] || { echo "$1 NEVER READY"|tee -a "$OUT"; echo "READYFAIL"; return 1; }
     curl -s -X POST http://127.0.0.1:$P/completion -H 'Content-Type: application/json' \
       -d '{"prompt":"Count from one to ten in English words, separated by commas:","n_predict":40,"temperature":0,"seed":1,"cache_prompt":false}' \
       | python3 -c 'import json,sys; print(json.load(sys.stdin)["content"].replace(chr(10)," ")[:150])'
@@ -51,15 +51,40 @@ c=$(run PAGEDTAINT "--kv-paged --kv-block-size 32" "DS4P_PAGED_HYBRID=1 DS4P_PAG
 echo "$c" | tee -a "$OUT"
 
 echo "---" | tee -a "$OUT"
+# ⚠⚠ SENTINELS AND EMPTY BODIES ARE NOT OBSERVABLES (fixed 2026-08-13).
+# run() tees "LABEL NEVER READY" and echoes READYFAIL; a=$(run ...) therefore captures BOTH
+# lines. Dead STATIC vs dead PAGED then have different labels so a!=b and the gate printed
+# DECODE GATE FAIL -- a false FAIL. Empty/error JSON from both healthy servers gives a==b==""
+# and printed DECODE GATE PASS -- a tautological PASS. And the script never exited nonzero
+# (exit-zero-did-nothing). Normalize every unusable arm to empty, VOID instead of PASS/FAIL,
+# and exit 2 on VOID / 1 on FAIL / 0 on PASS.
+normalize() {
+    case "$1" in
+        *NEVER\ READY*|*READYFAIL*) echo "";;
+        *) echo "$1";;
+    esac
+}
+a=$(normalize "$a"); b=$(normalize "$b"); c=$(normalize "$c")
+if [ -z "$a" ] || [ -z "$b" ] || [ -z "$c" ]; then
+    echo "DECODE GATE VOID: one or more arms produced no usable content (dead server or empty/error body -- see the arm lines above)." | tee -a "$OUT"
+    echo "OUT=$OUT"
+    exit 2
+fi
 if [ "$b" = "$c" ]; then
     echo "TAUTOLOGY WARNING: taint did NOT change paged decode output => decode is NOT consuming the pool; the PASS below is meaningless" | tee -a "$OUT"
+    echo "DECODE GATE VOID: tautology -- paged==tainted, so MATCH-vs-static is not a paging result." | tee -a "$OUT"
+    echo "OUT=$OUT"
+    exit 2
 else
     echo "DISCRIMINATOR OK: taint changed paged output => the pool IS driving this generation" | tee -a "$OUT"
 fi
 
 if [ "$a" = "$b" ]; then
     echo "DECODE GATE PASS: paged output MATCHES static across 40 decode tokens" | tee -a "$OUT"
+    echo "OUT=$OUT"
+    exit 0
 else
     echo "DECODE GATE FAIL: paged DIVERGES from static -- decode is incorrect (expected: self-drive resets n_past=0 per call)" | tee -a "$OUT"
+    echo "OUT=$OUT"
+    exit 1
 fi
-echo "OUT=$OUT"
