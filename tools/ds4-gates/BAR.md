@@ -42,9 +42,9 @@ Still missing for MET:
 
 - HEAD `6911a61ac`, no new code.
 - `--kv-paged -np 1 -c 256`, 8 gpu + 4 cpu blocks.
-- Master stayed.
+- Session stayed; shared prefix stayed; master's unique suffix was evicted (112 → 64).
 - 3 children `/fork` waited then 200, `cache_n=64`.
-- after_fork same master 200.
+- after_fork inherited 64 of 112 (same session 200). Queue+preempt-tail, not full master survived.
 - Logs: waiting=3, evict unique-suffix from held prefix, no 500.
 - Does NOT stamp MET. 256-token ctx is not 256k. Bar still NOT MET.
 
