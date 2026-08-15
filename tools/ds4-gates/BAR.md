@@ -38,6 +38,16 @@ Still missing for MET:
 
 ## Dated notes
 
+### 2026-08-16 — HTTP pool-full proven on stories15M
+
+- HEAD `6911a61ac`, no new code.
+- `--kv-paged -np 1 -c 256`, 8 gpu + 4 cpu blocks.
+- Master stayed.
+- 3 children `/fork` waited then 200, `cache_n=64`.
+- after_fork same master 200.
+- Logs: waiting=3, evict unique-suffix from held prefix, no 500.
+- Does NOT stamp MET. 256-token ctx is not 256k. Bar still NOT MET.
+
 ### 2026-08-16 — 256 bookkeeping is seq_id / bitset width, not a leftover -np slot wall
 
 - `DS4P_PAGED_MAX_BOOKKEEPING = LLAMA_MAX_SEQ` is seq_id / bitset width, not a leftover `-np` slot wall.
