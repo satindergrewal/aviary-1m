@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 00:29 GST.
+**NOT MET.** 2026-08-16 00:36 GST.
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -29,6 +29,7 @@ Landed on `ds4-ports` (not pushed to fleet):
 - `471672ff0` named session survives prefix shorter than one block
 - `9f12eb160` kv_paged refuses n_gpu_blocks==0 instead of GGML_ASSERT abort
 - `d11c037f3` child named /fork reports inherited tokens as HTTP cache_n (was always 0 on paged)
+- `6911a61ac` paged named /fork does not bill inherited tokens as prompt_n
 
 Still missing for MET:
 - DSV4 Flash 0731 8k: parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
@@ -36,6 +37,13 @@ Still missing for MET:
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — cut 6911a61ac: paged named /fork prompt_n
+
+- Landed `6911a61ac` on llama.cpp-ds4ports `ds4-ports`.
+- Paged named /fork does not bill inherited tokens as `prompt_n`.
+- stories15M child JSON: `cache_n=32`, `prompt_n=7`, `tokens_evaluated=39`. Parent cold `cache_n=0`.
+- Does NOT stamp MET. Bar still NOT MET.
 
 ### 2026-08-16 — cut d11c037f3: named /fork HTTP cache_n
 
