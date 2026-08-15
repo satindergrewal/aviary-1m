@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 00:36 GST.
+**NOT MET.** 2026-08-16 01:06 GST.
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -30,6 +30,7 @@ Landed on `ds4-ports` (not pushed to fleet):
 - `9f12eb160` kv_paged refuses n_gpu_blocks==0 instead of GGML_ASSERT abort
 - `d11c037f3` child named /fork reports inherited tokens as HTTP cache_n (was always 0 on paged)
 - `6911a61ac` paged named /fork does not bill inherited tokens as prompt_n
+- `257458bdd` named/held master prefix is not an eviction victim
 
 Still missing for MET:
 - DSV4 Flash 0731 8k: parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
@@ -37,6 +38,15 @@ Still missing for MET:
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — cut 257458bdd: named/held master prefix is not an eviction victim
+
+- Landed `257458bdd` on llama.cpp-ds4ports `ds4-ports`.
+- Named/held master prefix is not an eviction victim.
+- `evict_held_prefix` skips session holds; child queues if that is the only reclaim.
+- `test_named_master_not_eviction_victim`: hold stayed 4 blocks, child inherited 64 not 32.
+- `test-paged-kv` ALL PASSED.
+- Does NOT stamp MET. Bar still NOT MET.
 
 ### 2026-08-16 — HTTP pool-full proven on stories15M
 
