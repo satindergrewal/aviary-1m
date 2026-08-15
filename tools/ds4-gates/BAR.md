@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 01:06 GST.
+**NOT MET.** 2026-08-16 01:14 GST.
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -31,6 +31,7 @@ Landed on `ds4-ports` (not pushed to fleet):
 - `d11c037f3` child named /fork reports inherited tokens as HTTP cache_n (was always 0 on paged)
 - `6911a61ac` paged named /fork does not bill inherited tokens as prompt_n
 - `257458bdd` named/held master prefix is not an eviction victim
+- `a7359a75f` named master filling GPU: children WAIT (not CPU swap, not 500) until /close_session
 
 Still missing for MET:
 - DSV4 Flash 0731 8k: parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
@@ -38,6 +39,15 @@ Still missing for MET:
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — cut a7359a75f: named master filling GPU, children WAIT not CPU swap
+
+- Landed `a7359a75f` on llama.cpp-ds4ports `ds4-ports`.
+- Named master filling GPU: children WAIT (not CPU swap, not 500) until `/close_session`.
+- `allocate()` is GPU-only.
+- Shared-prefix child cannot whole-table swap.
+- `test_named_master_full_gpu_children_wait_not_cpu_swap` passed.
+- Does NOT stamp MET. Bar still NOT MET.
 
 ### 2026-08-16 — cut 257458bdd: named/held master prefix is not an eviction victim
 
