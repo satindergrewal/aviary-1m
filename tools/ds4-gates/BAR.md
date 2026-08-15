@@ -38,6 +38,14 @@ Still missing for MET:
 
 ## Dated notes
 
+### 2026-08-16 — 256 bookkeeping is seq_id / bitset width, not a leftover -np slot wall
+
+- `DS4P_PAGED_MAX_BOOKKEEPING = LLAMA_MAX_SEQ` is seq_id / bitset width, not a leftover `-np` slot wall.
+- Sequential named sessions recycle idle slots.
+- 257th concurrent in-flight defers (queue), not refuse/crash/drop.
+- Did not lift the cap. Did not add a loud refuse (that would create a wall).
+- HEAD still `6911a61ac`. Bar still NOT MET.
+
 ### 2026-08-16 — cut 6911a61ac: paged named /fork prompt_n
 
 - Landed `6911a61ac` on llama.cpp-ds4ports `ds4-ports`.
