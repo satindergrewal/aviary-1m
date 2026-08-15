@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 00:19 GST.
+**NOT MET.** 2026-08-16 00:22 GST.
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -27,6 +27,7 @@ Landed on `ds4-ports` (not pushed to fleet):
 - `54996eea2` session_id / POST /fork / POST /close_session
 - `5cb7a0a69` unknown session_id fails loud
 - `471672ff0` named session survives prefix shorter than one block
+- `9f12eb160` kv_paged refuses n_gpu_blocks==0 instead of GGML_ASSERT abort
 
 Still missing for MET:
 - DSV4 Flash 0731 8k: parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
@@ -34,6 +35,13 @@ Still missing for MET:
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — cut 9f12eb160: n_gpu_blocks==0 refuse (not abort)
+
+- Landed `9f12eb160` on llama.cpp-ds4ports `ds4-ports`.
+- `kv_paged` refuses `n_gpu_blocks==0` instead of GGML_ASSERT abort. `llama_context` ctor throws; server exits 1.
+- `test-paged-kv` ALL PASSED including `test_init_zero_gpu_blocks_throws`.
+- Does NOT stamp MET. 32k DSV4 still FAIL. Bar still NOT MET.
 
 ### 2026-08-16 — 32k DSV4 named /fork FAIL
 
