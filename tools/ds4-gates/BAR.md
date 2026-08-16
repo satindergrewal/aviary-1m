@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 09:41 GST
+**NOT MET.** 2026-08-16 09:49 GST
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -40,6 +40,7 @@ Still missing for MET:
 - Qwen3.8 27B 8k: named /fork HTTP proven on HEAD a7359a75f (child cache_n=128 prompt_n=12 tokens_evaluated=140; child2 128/16/144; unknown 400; DS4P_PAGED_HYBRID=1, n_gpu_blocks=768, all attention layers paged path). Hybrid still builds attn_kv_size=n_ctx_seq first (not slab-gone). Decode gate pending. Default-on for Qwen35/QWEN35MOE as of 06fba44e2 (8k /fork env unset: cache_n=128 prompt_n=12 tokens_evaluated=140). Other hybrids still opt-in (silent-static risk). Not 256k.
 - Qwen3.8 27B `-c 32768`: named /fork HTTP started on HEAD a7359a75f (child cache_n=32 prompt_n=6 tokens_evaluated=38; unknown 400; n_gpu_blocks=3072 no overcommit; RSS ~22 GiB). HONEST: 32-token prompt is not a 32k-context proof. Not 256k.
 - Qwen3.8 27B two children named /fork from one 16k master: both cache_n=16384; overlap crash fixed 2474fd5fb (defer second hybrid child past n_seq_max); master still forkable after; unknown 400. JSON in llama.cpp-ds4ports/.scratch-two-child-16k/. HONEST: serial/defer at -np 1, not a concurrent usable serve. Not 256k.
+- Hybrid RS widen STOPPED. Not DSV4 bookkeeping-only. Qwen RS cell is 150 MiB; 256 cells ~37 GiB. Sharing one cell breaks SSM rewind. HEAD 06fba44e2. 2474fd5fb defer remains the Qwen two-child path at -np 1. Not 256k.
 - Qwen3.8 27B `-c 32768` 28k-prefix named /fork: master 28672 tokens / 306.4s; child cache_n=28672 prompt_n=9 tokens_evaluated=28681 in 1.66s; 1792 blocks by reference; unknown 400. JSON in llama.cpp-ds4ports/.scratch-28k-named-fork/. HONEST: 28k is not a 32k fill, not 256k.
 - Qwen3.8 27B `-c 32768` 24k-prefix named /fork: master 24576 tokens / 241.6s; child cache_n=24576 prompt_n=9 tokens_evaluated=24585 in 1.25s; 1536 blocks by reference; unknown 400. JSON in llama.cpp-ds4ports/.scratch-24k-named-fork/. HONEST: 24k is not a 32k fill, not 256k.
 - Qwen3.8 27B `-c 32768` 16k-prefix named /fork: master 16384 tokens / 135.2s; child cache_n=16384 prompt_n=9 tokens_evaluated=16393 in 1.04s; 1024 blocks by reference; unknown 400. JSON in llama.cpp-ds4ports/.scratch-16k-named-fork/. HONEST: 16k is not a 32k fill, not 256k.
@@ -47,6 +48,16 @@ Still missing for MET:
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — hybrid RS widen STOPPED
+
+- Hybrid RS widen STOPPED.
+- Not DSV4 bookkeeping-only.
+- Qwen RS cell is 150 MiB; 256 cells ~37 GiB.
+- Sharing one cell breaks SSM rewind.
+- HEAD `06fba44e2`.
+- `2474fd5fb` defer remains the Qwen two-child path at `-np 1`.
+- Does NOT stamp MET. Bar still NOT MET.
 
 ### 2026-08-16 — cut 06fba44e2: --kv-paged default-on for Qwen35/QWEN35MOE only
 
