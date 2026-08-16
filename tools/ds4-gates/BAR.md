@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 08:28 GST.
+**NOT MET.** 2026-08-16 08:38 GST.
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -35,10 +35,21 @@ Landed on `ds4-ports` (not pushed to fleet):
 
 Still missing for MET:
 - DSV4 Flash 0731 8k: named /fork HTTP proven on new binary HEAD a7359a75f (child cache_n=64 prompt_n=22 tokens_evaluated=86; unknown 400; n_gpu_blocks=192 no overcommit). Parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
-- Qwen3.8 27B: DS4P_PAGED_HYBRID=1 bring-up only. Pool 768 blocks + /fork inherit 128/140. Hybrid still builds attn_kv_size=n_ctx_seq first (not slab-gone). Decode gate pending. Not default-on.
+- Qwen3.8 27B 8k: named /fork HTTP proven on HEAD a7359a75f (child cache_n=128 prompt_n=12 tokens_evaluated=140; child2 128/16/144; unknown 400; DS4P_PAGED_HYBRID=1, n_gpu_blocks=768, all attention layers paged path). Hybrid still builds attn_kv_size=n_ctx_seq first (not slab-gone). Decode gate pending. Not default-on. Not 256k.
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — Qwen3.8 27B 8k named /fork HTTP proven
+
+- HEAD `a7359a75f`.
+- Qwen3.8 27B 8k named /fork HTTP proven.
+- Child `cache_n=128` `prompt_n=12` `tokens_evaluated=140`.
+- Child2 `cache_n=128` `prompt_n=16` `tokens_evaluated=144`.
+- Unknown 400.
+- `DS4P_PAGED_HYBRID=1`, `n_gpu_blocks=768`, all attention layers paged path.
+- JSON in `llama.cpp-ds4ports/.fork-proof-scratch/`.
+- Does NOT stamp MET. 8k is not 256k. Bar still NOT MET.
 
 ### 2026-08-16 — DSV4 Flash 0731 8k named /fork HTTP proven
 
@@ -157,7 +168,7 @@ Never:
 ## Daily models (these outrank the 19)
 
 - DeepSeek V4 Flash 0731 (Mac first)
-- Qwen3.8 27B (box when free; not proven on ds4-ports yet)
+- Qwen3.8 27B (8k named /fork HTTP proven on Mac hybrid; box when free for 256k)
 - GLM 5.2 (box, later)
 
 Aug 7 19-list stays parked-to-last except where it overlaps.
