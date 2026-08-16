@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 01:14 GST.
+**NOT MET.** 2026-08-16 08:28 GST.
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -34,11 +34,20 @@ Landed on `ds4-ports` (not pushed to fleet):
 - `a7359a75f` named master filling GPU: children WAIT (not CPU swap, not 500) until /close_session
 
 Still missing for MET:
-- DSV4 Flash 0731 8k: parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
+- DSV4 Flash 0731 8k: named /fork HTTP proven on new binary HEAD a7359a75f (child cache_n=64 prompt_n=22 tokens_evaluated=86; unknown 400; n_gpu_blocks=192 no overcommit). Parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
 - Qwen3.8 27B: DS4P_PAGED_HYBRID=1 bring-up only. Pool 768 blocks + /fork inherit 128/140. Hybrid still builds attn_kv_size=n_ctx_seq first (not slab-gone). Decode gate pending. Not default-on.
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — DSV4 Flash 0731 8k named /fork HTTP proven
+
+- HEAD `a7359a75f`, new binary.
+- DSV4 Flash 0731 8k named /fork HTTP proven.
+- Child `cache_n=64` `prompt_n=22` `tokens_evaluated=86`.
+- Unknown 400.
+- `n_gpu_blocks=192` no overcommit.
+- Does NOT stamp MET. 8k is not 256k. Bar still NOT MET.
 
 ### 2026-08-16 — NEW pool-full HTTP proven on stories15M
 
