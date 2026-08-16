@@ -40,6 +40,15 @@ Still missing for MET:
 
 ## Dated notes
 
+### 2026-08-16 — NEW pool-full HTTP proven on stories15M
+
+- HEAD `a7359a75f`, no new code.
+- Children waited; named hold not shortened (`after_fork` `cache_n=112`).
+- `/close_session` then children 200.
+- evicted unique-suffix from named hold: 0.
+- Old 8+4 200s (master tail evicted) are dead.
+- Does NOT stamp MET. 256-token ctx is not 256k. Bar still NOT MET.
+
 ### 2026-08-16 — cut a7359a75f: named master filling GPU, children WAIT not CPU swap
 
 - Landed `a7359a75f` on llama.cpp-ds4ports `ds4-ports`.
