@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 09:31 GST
+**NOT MET.** 2026-08-16 09:41 GST
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -33,10 +33,11 @@ Landed on `ds4-ports` (not pushed to fleet):
 - `257458bdd` named/held master prefix is not an eviction victim
 - `a7359a75f` named master filling GPU: children WAIT (not CPU swap, not 500) until /close_session
 - `2474fd5fb` overlap crash: defer second hybrid child past n_seq_max
+- `06fba44e2` --kv-paged default-on for Qwen35/QWEN35MOE only
 
 Still missing for MET:
 - DSV4 Flash 0731 8k: named /fork HTTP proven on new binary HEAD a7359a75f (child cache_n=64 prompt_n=22 tokens_evaluated=86; unknown 400; n_gpu_blocks=192 no overcommit). Parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
-- Qwen3.8 27B 8k: named /fork HTTP proven on HEAD a7359a75f (child cache_n=128 prompt_n=12 tokens_evaluated=140; child2 128/16/144; unknown 400; DS4P_PAGED_HYBRID=1, n_gpu_blocks=768, all attention layers paged path). Hybrid still builds attn_kv_size=n_ctx_seq first (not slab-gone). Decode gate pending. Not default-on. Not 256k.
+- Qwen3.8 27B 8k: named /fork HTTP proven on HEAD a7359a75f (child cache_n=128 prompt_n=12 tokens_evaluated=140; child2 128/16/144; unknown 400; DS4P_PAGED_HYBRID=1, n_gpu_blocks=768, all attention layers paged path). Hybrid still builds attn_kv_size=n_ctx_seq first (not slab-gone). Decode gate pending. Default-on for Qwen35/QWEN35MOE as of 06fba44e2 (8k /fork env unset: cache_n=128 prompt_n=12 tokens_evaluated=140). Other hybrids still opt-in (silent-static risk). Not 256k.
 - Qwen3.8 27B `-c 32768`: named /fork HTTP started on HEAD a7359a75f (child cache_n=32 prompt_n=6 tokens_evaluated=38; unknown 400; n_gpu_blocks=3072 no overcommit; RSS ~22 GiB). HONEST: 32-token prompt is not a 32k-context proof. Not 256k.
 - Qwen3.8 27B two children named /fork from one 16k master: both cache_n=16384; overlap crash fixed 2474fd5fb (defer second hybrid child past n_seq_max); master still forkable after; unknown 400. JSON in llama.cpp-ds4ports/.scratch-two-child-16k/. HONEST: serial/defer at -np 1, not a concurrent usable serve. Not 256k.
 - Qwen3.8 27B `-c 32768` 28k-prefix named /fork: master 28672 tokens / 306.4s; child cache_n=28672 prompt_n=9 tokens_evaluated=28681 in 1.66s; 1792 blocks by reference; unknown 400. JSON in llama.cpp-ds4ports/.scratch-28k-named-fork/. HONEST: 28k is not a 32k fill, not 256k.
@@ -46,6 +47,13 @@ Still missing for MET:
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — cut 06fba44e2: --kv-paged default-on for Qwen35/QWEN35MOE only
+
+- Landed `06fba44e2` `--kv-paged` default-on for Qwen35/QWEN35MOE only.
+- 8k /fork env unset: `cache_n=128` `prompt_n=12` `tokens_evaluated=140`.
+- Other hybrids still opt-in (silent-static risk).
+- Does NOT stamp MET. Bar still NOT MET.
 
 ### 2026-08-16 — two children named /fork from one 16k Qwen3.8 master
 
