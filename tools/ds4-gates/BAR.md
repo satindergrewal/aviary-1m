@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 08:38 GST.
+**NOT MET.** 2026-08-16 08:42 GST.
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -36,9 +36,22 @@ Landed on `ds4-ports` (not pushed to fleet):
 Still missing for MET:
 - DSV4 Flash 0731 8k: named /fork HTTP proven on new binary HEAD a7359a75f (child cache_n=64 prompt_n=22 tokens_evaluated=86; unknown 400; n_gpu_blocks=192 no overcommit). Parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
 - Qwen3.8 27B 8k: named /fork HTTP proven on HEAD a7359a75f (child cache_n=128 prompt_n=12 tokens_evaluated=140; child2 128/16/144; unknown 400; DS4P_PAGED_HYBRID=1, n_gpu_blocks=768, all attention layers paged path). Hybrid still builds attn_kv_size=n_ctx_seq first (not slab-gone). Decode gate pending. Not default-on. Not 256k.
+- Qwen3.8 27B `-c 32768`: named /fork HTTP started on HEAD a7359a75f (child cache_n=32 prompt_n=6 tokens_evaluated=38; unknown 400; n_gpu_blocks=3072 no overcommit; RSS ~22 GiB). HONEST: 32-token prompt is not a 32k-context proof. Not 256k.
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — Qwen3.8 27B -c 32768 named /fork HTTP started
+
+- HEAD `a7359a75f`.
+- Qwen3.8 27B `-c 32768` named /fork HTTP started.
+- `n_gpu_blocks=3072`, no overcommit.
+- Child `cache_n=32` `prompt_n=6` `tokens_evaluated=38`.
+- Unknown 400.
+- RSS ~22 GiB.
+- JSON in `/tmp/qwen38-fork-32k-18091/`.
+- HONEST: 32-token prompt is not a 32k-context proof.
+- Does NOT stamp MET. Bar still NOT MET.
 
 ### 2026-08-16 — Qwen3.8 27B 8k named /fork HTTP proven
 
