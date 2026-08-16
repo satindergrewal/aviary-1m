@@ -17,7 +17,7 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-16 09:49 GST
+**NOT MET.** 2026-08-16 09:57 GST
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -37,6 +37,7 @@ Landed on `ds4-ports` (not pushed to fleet):
 
 Still missing for MET:
 - DSV4 Flash 0731 8k: named /fork HTTP proven on new binary HEAD a7359a75f (child cache_n=64 prompt_n=22 tokens_evaluated=86; unknown 400; n_gpu_blocks=192 no overcommit). Parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
+- DSV4 Flash 0731 8k two-child named /fork: both cache_n=128; overlap deferred at n_seq_max=1, no crash; master still forkable; unknown 400. JSON in llama.cpp-ds4ports/.scratch-dsv4-8k-two-child/. HONEST: queue-then-serial, not concurrent usable serve. Sink layers still static. 8k is not 256k.
 - Qwen3.8 27B 8k: named /fork HTTP proven on HEAD a7359a75f (child cache_n=128 prompt_n=12 tokens_evaluated=140; child2 128/16/144; unknown 400; DS4P_PAGED_HYBRID=1, n_gpu_blocks=768, all attention layers paged path). Hybrid still builds attn_kv_size=n_ctx_seq first (not slab-gone). Decode gate pending. Default-on for Qwen35/QWEN35MOE as of 06fba44e2 (8k /fork env unset: cache_n=128 prompt_n=12 tokens_evaluated=140). Other hybrids still opt-in (silent-static risk). Not 256k.
 - Qwen3.8 27B `-c 32768`: named /fork HTTP started on HEAD a7359a75f (child cache_n=32 prompt_n=6 tokens_evaluated=38; unknown 400; n_gpu_blocks=3072 no overcommit; RSS ~22 GiB). HONEST: 32-token prompt is not a 32k-context proof. Not 256k.
 - Qwen3.8 27B two children named /fork from one 16k master: both cache_n=16384; overlap crash fixed 2474fd5fb (defer second hybrid child past n_seq_max); master still forkable after; unknown 400. JSON in llama.cpp-ds4ports/.scratch-two-child-16k/. HONEST: serial/defer at -np 1, not a concurrent usable serve. Not 256k.
@@ -48,6 +49,19 @@ Still missing for MET:
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-16 — DSV4 Flash 0731 8k two-child named /fork
+
+- DSV4 Flash 0731 8k two-child named /fork.
+- Both `cache_n=128`.
+- Overlap deferred at `n_seq_max=1`, no crash.
+- Master still forkable.
+- Unknown 400.
+- JSON in `llama.cpp-ds4ports/.scratch-dsv4-8k-two-child/`.
+- HONEST: queue-then-serial, not concurrent usable serve.
+- Sink layers still static.
+- 8k is not 256k.
+- Does NOT stamp MET. Bar still NOT MET.
 
 ### 2026-08-16 — hybrid RS widen STOPPED
 
