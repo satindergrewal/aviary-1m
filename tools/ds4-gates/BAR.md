@@ -964,8 +964,8 @@ Never:
 
 1. Finish Qwen3.8 27B 1M named fill on 20448 (`qwen38-1m-master`).
 2. `/fork` 20, then 50, then 100. Inherit the 1M prefix. Master stays. No MET until that lands.
-3. Then Metal batched decode (multi-seq one graph). Not `-np`. Not CUDA. Not on this fill.
-4. Radix auto-share later, same pool.
+3. Then Metal batched decode (multi-seq one graph). Not `-np`. Not CUDA. Not on this fill. Days if existing Metal FA packs; 1–3 weeks if new paged kernels.
+4. Radix auto-share later, same pool. Days (scheduler/CPU). Less than the Metal kernel. `/fork` stays explicit.
 
 ## Daily models (these outrank the 19)
 
