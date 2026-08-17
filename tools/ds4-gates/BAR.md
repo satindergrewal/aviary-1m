@@ -17,7 +17,15 @@ Decode may be single-width. Speed ≥ static is a later gate, not this one.
 
 ## Current verdict
 
-**NOT MET.** 2026-08-17 09:03 GST
+**NOT MET.** 2026-08-17 13:09 GST
+
+Qwen3.8 27B only until Satinder says otherwise. DSV4 parked. Official item 1 is still a 256k–1M resident master.
+
+Live (not MET):
+- HEAD `440817162` PID 20448 port 18140. Q4_K_M, `-ctk q8_0 -ctv q8_0`, `-c 1048576` YaRN, `--kv-block-size 32`, `--kv-paged`, `-np 1`, `--fit off`. RSS ~66.8 GiB.
+- Pool 34502 blocks (n_ctx/bs + watermark + ubatch). Hello 200. 1M named fill `qwen38-1m-master` in progress (~18% / ~187k of 1048320 at last check). Then 20/50/100 `/fork`.
+- Scratch `.scratch-qwen-1m-q4-q8kv-bs32/`.
+
 
 Landed on `ds4-ports` (not pushed to fleet):
 - `4af52cc4c` Cut 1: `-np` is batch width; bookkeeping grows
@@ -52,9 +60,17 @@ Landed on `ds4-ports` (not pushed to fleet):
 - `3f6a54c01` revert too-strict named-grow unit assert
 - `afded1229` eviction-victim hold N includes unique suffix
 - `f733080a6` sweep remaining named-hold N==Ku to include unique suffix
+- `68a0c213c` accept paged `-b 512 -ub 256`; bill KV-holding layers; drop 1.50 pool headroom
+- `d4ef6e27d` bind hybrid full-attn layers to paged mctx (stop silent STATIC 1M child)
+- `ccdf090fa` init_full dummy host block_table/write_slots (bs<=32 set_input SIGSEGV)
+- `440817162` size paged pool so watermark + decode still leave one n_ctx master
+
 
 Still missing for MET:
-- DSV4 Flash 0731 8k: named /fork HTTP proven on new binary HEAD a7359a75f (child cache_n=64 prompt_n=22 tokens_evaluated=86; unknown 400; n_gpu_blocks=192 no overcommit). Parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Not 256k.
+- Qwen3.8 27B 1M resident master + 20/50/100 `/fork` inherit (fill in progress on 20448; agents not run). That is the HTTP shared-pool certification for this model. Fill alone is not the bar.
+- Metal batched decode (several sequences in one graph). Not `-np`. Not CUDA. Parked until the 1M `/fork` proof. Mac GPU only.
+- Radix auto-share (SGLang-style) later, on this same pool. `/fork` of a named master is the explicit share for now.
+- DSV4 Flash 0731 8k: named /fork HTTP proven on new binary HEAD a7359a75f (child cache_n=64 prompt_n=22 tokens_evaluated=86; unknown 400; n_gpu_blocks=192 no overcommit). Parallel /fork PASS on ab2507c5e (both inherit 128/139). Decode still single-width. Parked. Not 256k.
 - DSV4 Flash 0731 8k two-child named /fork: both cache_n=128; overlap deferred at n_seq_max=1, no crash; master still forkable; unknown 400. JSON in llama.cpp-ds4ports/.scratch-dsv4-8k-two-child/. HONEST: queue-then-serial, not concurrent usable serve. Sink layers still static. 8k is not 256k.
 - Qwen3.8 27B 8k: named /fork HTTP proven on HEAD a7359a75f (child cache_n=128 prompt_n=12 tokens_evaluated=140; child2 128/16/144; unknown 400; DS4P_PAGED_HYBRID=1, n_gpu_blocks=768, all attention layers paged path). Hybrid still builds attn_kv_size=n_ctx_seq first (not slab-gone). Decode gate pending. Default-on for Qwen35/QWEN35MOE as of 06fba44e2 (8k /fork env unset: cache_n=128 prompt_n=12 tokens_evaluated=140). Other hybrids still opt-in (silent-static risk). Not 256k.
 - Qwen3.8 27B `-c 32768`: named /fork HTTP started on HEAD a7359a75f (child cache_n=32 prompt_n=6 tokens_evaluated=38; unknown 400; n_gpu_blocks=3072 no overcommit; RSS ~22 GiB). HONEST: 32-token prompt is not a 32k-context proof. Not 256k.
@@ -68,6 +84,37 @@ Still missing for MET:
 - concurrent agents on a daily model as a usable serve (not a one-shot e2e)
 
 ## Dated notes
+
+### 2026-08-17 — Qwen-only 1M shared-pool plan (Satinder)
+
+- Model: Qwen3.8 27B only. DSV4 parked.
+- Shape: match `ornith-models/Qwen3.8-27B-GGUF/run.sh` (Q4 or Q8 weights, **q8 KV**, `-c 1048576` YaRN + override-kv, `-b 512 -ub 256`, `-fa on --fit off`). Paged. Do not claim 1M cannot fit. Static already does.
+- Now: fill named 1M master, then `/fork` 20/50/100. Inherit + leave-master-up = HTTP shared-pool setup for this model. Decode still one-wide. Not speed-vs-static. Not Spock-wired. No MET until those forks land.
+- After that: Metal paged decode that batches several sequences in one graph. Box/CUDA is not that kernel. Do not raise `-np`.
+- Later: radix auto-share on this pool (SGLang-style). `/fork` stays the explicit path.
+- Not NIAH. Not 8k/16k theater as done.
+- Earlier 262k/1M "doesn't fit" / Metal OOM was our miss: f16 KV, 1.50 headroom, full-attn STATIC double-bill, then watermark 0.05 making usable ~996k. Not the Mac.
+- Live PID 20448 HEAD `440817162` pool 34502. Fill running. No MET.
+
+### 2026-08-17 — Qwen 1M Hello 200, fill 500 capability contract
+
+- HEAD `d4ef6e27d` PID 84028. `.scratch-qwen-1m-q8w-f16kv-paged-attn/`
+- Hello 200. Full-attn bind landed. Fill 1048320 HTTP 500. `bs=64 × head_dim 256 > 8192` without champion. Layers still static-path.
+- Did not flip DS4P_METAL_CHAMP. Next: --kv-block-size 16 (16×256=4096). Same 1M. No MET.
+
+### 2026-08-17 — Qwen 1M Q4 f16 paged Metal OOM
+
+- HEAD `68a0c213c` PID 65225. `.scratch-qwen-1m-q8w-f16kv/`
+- 512/256 accepted. Fitter 16384 blocks 1.0×. n_ctx=1048576 health 200.
+- Smoke Hello 500. Metal OOM. Full-attn layers 3,7,…,63 `took the STATIC path -- no paged context`.
+- Double KV: paged pool + static 1M on those layers. Agents not run. No MET.
+
+### 2026-08-17 — Qwen3.8 27B native 262k FAIL at fill
+
+- HEAD `f733080a6`. `.scratch-qwen-262k-agents/`
+- Auto-fit: 262144 needs 6144 KV blocks / 96.0 GiB; budget 4847 / 75.7 GiB. Largest n_ctx ~206784.
+- Retry `--n-gpu-blocks 4096` fill HTTP 500 deadlock (prefix 261450). Agents not run.
+- HONEST: that 96 GiB bill was f16 KV + 1.50 headroom, not "Mac cannot hold 262k". Static 1M q8 KV already fits. No MET.
 
 ### 2026-08-17 — DSV4 8k leftover-short QUEUE inherit yes overflow no
 
@@ -900,8 +947,8 @@ Allowed now (Mac in use):
 
 Parked until Satinder says the Mac is free:
 - NIAH
-- 256k / 512k / 1M ABBA ladders
-- Long Metal soaks, decode-curve rungs, hours-long GPU jobs
+- 256k / 512k / 1M ABBA ladders (the live 1M **fill + /fork** is the product gate he unparked, not NIAH)
+- Decode-curve rungs / Metal champion kernels (after the 1M `/fork` proof)
 
 Parked until the 2×96GB box is this seat's:
 - CUDA parity, hd512 champion, hybrid CUDA witness
@@ -915,16 +962,15 @@ Never:
 
 ## Next slice
 
-1. ~~Land Cut 1.~~ `4af52cc4c`
-2. ~~Fitter = one master, not `n_ctx × n_parallel`.~~ `9e0d9f165`
-3. ~~Queue / swap / resume.~~ `fc940c2e7`
-4. ~~Prefix identity that outlives the parent.~~ `564245b6d`
-5. ~~Session/child API.~~ `54996eea2` (engine + routes; HTTP e2e parked)
+1. Finish Qwen3.8 27B 1M named fill on 20448 (`qwen38-1m-master`).
+2. `/fork` 20, then 50, then 100. Inherit the 1M prefix. Master stays. No MET until that lands.
+3. Then Metal batched decode (multi-seq one graph). Not `-np`. Not CUDA. Not on this fill.
+4. Radix auto-share later, same pool.
 
 ## Daily models (these outrank the 19)
 
-- DeepSeek V4 Flash 0731 (Mac first)
-- Qwen3.8 27B (8k named /fork HTTP proven on Mac hybrid; box when free for 256k)
+- Qwen3.8 27B only (1M paged fill + 20/50/100 `/fork` is the live gate)
+- DeepSeek V4 Flash 0731 (parked 2026-08-17)
 - GLM 5.2 (box, later)
 
 Aug 7 19-list stays parked-to-last except where it overlaps.
