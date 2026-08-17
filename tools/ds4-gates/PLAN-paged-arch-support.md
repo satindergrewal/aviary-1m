@@ -512,15 +512,15 @@ silently wrong at long context.
 | phase | status | what is NOT verifiably closed |
 |---|---|---|
 | 3b hybrid paging | **PARTIAL** — 15 of 19 wired, **4 serve-verified** (`ernie4-5`, `qwen3vl`, `nemotron`, `qwen3moe`), 22 archs total | none is serve-verified; no local GGUFs; `gemma4-assistant` blocked on read-only; 3 specials need their own cache work |
-| B4 arcs 2-3 (q8 banded) | **CLOSED** — `test-paged-vs-cpu` ALL PASSED, q8_0 at the f16 error scale, champion marker asserted | q8_0 end-to-end on a real model; anything about speed |
+| B4 arcs 2-3 (q8 banded) | **CLOSED at op + e2e-correctness** — `test-paged-vs-cpu` ALL PASSED; `quant_kv_e2e_gate.sh` PASS 2026-08-05 on tip `438f1c56` (Ornith-9B IQ2_M; B==C==D " Paris. A. True…"; presence marker 2; q4_0 still refused). `LLAMA_BANDED_QUANT_KV` is GONE (`llama-graph.cpp`). | Speed / 256k–1M q8-vs-q8 bar is NOT closed. The 2026-08-05 vehicle (`…-IQ2_M.gguf`) is gone from disk; Q4_K_M is present. Do not re-run while the 90G DSV4 serve holds unified memory. |
 | paged op: attention sinks | **CLOSED on the champion**, verified | scalar-kernel sinks (ABORT-guarded); no end-to-end model run |
 | paged op: non-causal mode | **CLOSED**, verified with a differs-from-causal control | no end-to-end model run |
 | paged op: read-only attention | **GUARDED, not implemented** | K/V shapes are still read for geometry; `gemma4-assistant` stays unwired |
 | P1-6 prefix sharing | gate passes | not re-verified since the ~50k defect was found |
-| P1-5 disk KV banks | **NOT REOPENED** | the "measured wash" verdict was rejected and not replaced |
-| P2-8 continuous batching | **NOT STARTED** | `evict()` is a 13-line body; unscoped |
-| Metal parity | **NOT DONE** | bar is ≤1.0× at **256k–1M**; best clean measurement is 32k |
-| CUDA parity | **NOT DONE** | stale; no NVIDIA GPU on this Mac |
+| P1-5 disk KV banks | **SHIPS, economics-gated** (`server-kv-bank.cpp`, `--kv-bank`). Fair A/B wash on 4B is the honest number, not a rejected verdict. | Big-model / 256k–1M value not measured (box). Do not re-run the 4B wash on this Mac. |
+| P2-8 continuous batching | **PARTIAL** — `update_slots_paged` exists and drives the paged scheduler. Admission is still `-np` slots. Prefill is serialized (4.86× pair-wall @50k, scalar). `evict()` is a 13-line pop-back. | Not vLLM-class: one shared pool, no lanes, queue-until-blocks, concurrent same-prefix. Champion is `n_seq_max==1`. |
+| Metal parity | **256k + 512k CLEAR the bar** (Ornith-35B; decode 1.3471 @262k, 1.9662 @512k). 1M Mac ABBA skipped (owner). PLAN/screenshot "best clean is 32k" is stale. | 1M not measured |
+| CUDA parity | **NOT DONE.** Same bar: every row ≤1.0× at 256k–1M, then past it. | decode kernel is runtime `head_dim` + `acc_i[4]` behind a 64/128 guard; DSV4 hd 512 takes the named scalar fallback. Source work is Mac-doable; the ladder is box work. |
 
 ---
 
@@ -634,10 +634,10 @@ nominal half.
 ⇒ **1M is reachable on this box at q8_0 banded paged KV**, with ~3 GiB to spare even at 1.25× headroom.
 It is **not** reachable at f16 at any headroom, and lowering headroom cannot fix that.
 
-⚠ **q8_0 paged is not plain `-ctk q8_0`.** The kernel rejects it unless banded:
-`"paged KV cache type not supported by the kernel (f16/bf16/f32, or q8_0 with LLAMA_BANDED_QUANT_KV)"`.
-The plan is **paged + q8_0 + `LLAMA_BANDED_QUANT_KV`**, and the unearned piece is exactly what the B4
-closure flagged: the kernel arcs passed, **end-to-end on a real model did not run**.
+⚠ **`LLAMA_BANDED_QUANT_KV` is gone.** `llama-graph.cpp` retired it when `quant_kv_e2e_gate.sh`
+PASSed (2026-08-05, tip `438f1c56`, artifact `results/quant-kv-e2e-20260805-2252.txt`). Plain
+`-ctk q8_0 -ctv q8_0` is the paged path now. Other quants (q4_0, …) still refuse. The unearned
+piece is no longer e2e-correctness; it is **speed / the 256k–1M q8-vs-q8 bar**.
 
 ⚠ **The static arm hits the same wall.** Same 8 layers, same head dim ⇒ static 1M at f16 is also 128 GiB,
 without even a headroom multiplier to blame. **So the top rung is q8-vs-q8**, and the bar (paged ≤ 1.0×

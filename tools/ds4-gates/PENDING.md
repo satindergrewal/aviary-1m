@@ -1,5 +1,77 @@
 # PENDING — what is left, and which of it needs the GPU
 
+> ## 2026-08-15 PLAN SCORE vs THE VISION (PLAN-DS4-PORTS.md, 2026-08-02)
+>
+> **Bar:** SGLang/vLLM on the same cards, same storage, multi-agent on one
+> shared pool. llama.cpp still cannot. Slot-vs-static is not the comparison.
+> Raising `-np` is not elimination of slots. P2-8 marked CLOSED on a
+> `-np 16` gate was a false close.
+>
+> **Verdict: the hanging item is P2-8.** Two weeks of substrate (pool,
+> champion, prefix-share toy, gates) did not deliver the serving
+> architecture the plan named. That is the failure.
+>
+> Original plan = 11 numbered items + parked extras. Score:
+>
+> | item | promised | status vs the bar |
+> |---|---|---|
+> | 3c FORK-DELTA | Phase 0, hours | DONE (doc exists) |
+> | P0-4 methodology | Phase 1 | DONE (DS4P_* + standing gates) |
+> | P0-2 re-validate | Phase 1 | DONE (`4bea1cdc`) |
+> | P0-3 dead-client abort | Phase 1 | DONE (existing httplib cancel; ZERO-CODE close) |
+> | P0-1 yield-quench | Phase 2 | SHIPPED, not the bar (DSpark/MTP governor) |
+> | 3b hybrid paged | Phase 2 | PARTIAL. Qwen35 never reaches `--kv-paged`. Do not family-flip. |
+> | P1-5 disk banks | Phase 3 | SHIPS on static. Paged `prompt.tokens` historically empty; bank dark under `--kv-paged`. |
+> | P1-6 fork / share | Phase 3 | Engine COW + stories15M share. Never a real model. Not vLLM radix. |
+> | P1-7 prefill interleave | Phase 3 | Audit only. Paged prefill still serializes (pair-wall 4.86x). |
+> | P2-9 compressed KV | Phase 4 | PARKED (not the slot-shatter) |
+> | **P2-8 continuous batch** | **Phase 5, THE PARITY ITEM** | **NOT DONE. False-closed 2026-08-04.** Cut 1 gated 2026-08-15 (stories15M, `-np 1`, 3 overlapping HTTP 200, grew bookkeeping 1→3, zero slot-exhaustion rejects). Decode is still serial at `n_seq_max==1`. That is not vLLM-class. Do not mark CLOSED. |
+>
+> Count: 4 done as promised (3c, P0-4, P0-2, P0-3). 5 partial / not the
+> product (P0-1, 3b, P1-5, P1-6, P1-7). 1 parked (P2-9). **1 false-closed
+> (P2-8).** Parked extras (D2R GEMM, weight server, DSML, their quant)
+> were never the 2-week delivery.
+>
+> Remaining work that actually hits the bar (two cuts, not a slot table):
+>
+> | cut | what | done when |
+> |---|---|---|
+> | **Cut 1** | Paged admission queues on the block pool. Slots are bookkeeping. `-np` is not the concurrency ceiling. Do not "fix" this by setting `-np 128` (kills champion, slices `n_ctx`). | **GATED 2026-08-15 15:22 +04.** `p28_np1_admit_gate.sh` PASS. Result `tools/ds4-gates/results/p28-np1-admit-20260815-1522.txt`. Uncommitted on `ds4-ports` (6 files). Toy model only. |
+> | **Cut 2** | Champion multi-seq, or a fast multi-seq Metal path. Live `ubatch.n_seq`, not conservative `n_seq_max`. | Concurrent agents decode on the fast path. Cut 1 without this is still serial on this Mac. **THIS IS THE NEXT CUT.** |
+> | P1-6 real | Prefix-share on DSV4 / daily model, quality holds | Independent agents inherit a live shared prefix |
+> | P1-7 | Live decode not starved by a long prefill | <10% degradation (plan number) |
+> | P1-5 paged | Mirror `prompt.tokens` so the bank can spill | Bank works under `--kv-paged` |
+> | 3b / Qwen35 | Separate. SSM rewind unsolved. | Do not flip HYBRID/SWA/MSA to fake it |
+>
+> Cut 1 is gated on stories15M. Cut 1 alone is **not** vLLM-class. Do
+> not mark P2-8 CLOSED. Next is Cut 2. Do not start a daily serve. Do
+> not push. Do not flip family gates.
+>
+> Tip still `99d3acf56` + uncommitted Cut 1, 0 behind upstream, 109
+> ahead origin, not pushed. First gate run 15:19 was a harness lie
+> (`$(post)` killed the curls). Real PASS is 15:22.
+
+> ## ✅ 2026-08-14 night — PREFIX-SHARE DELIVERY FIXED (`824ad9fe5`) + UPSTREAM CURRENT (`99d3acf56`)
+>
+> Independent-share path now restores full `logical_seq` / `n_prompt` after
+> `fork_blocks` (same contract as `queue_forked_request`) and skips the share
+> scan when the group already holds blocks (P1-6 fork child must not
+> `fork_blocks` again). `fork_blocks` itself unchanged.
+>
+> Re-smoke stories15M :9106, binary `build-metal-static-99d3` build 21116:
+> `admitted SHARED: 64 of 82 ... 18 left to prefill` (was `64 of 64, 0 left`).
+> Both HTTP bodies non-empty. No assert. Server cleaned up. n=1, 4-block,
+> not a 256k proof. Unit: `test-paged-kv` ALL PASSED (new share + fork cases).
+> n_batch refuse still designed throw rc=1 on `llama-server`.
+>
+> Upstream: 0 behind `upstream/master` (ggml 0.20.0 bump, 2 files). Local 109
+> ahead of `origin/ds4-ports`, not pushed. Mac DSV4-0731 taste-test pid 31896
+> killed 21:22 +04; :8082 dark; do not relaunch. No HYBRID/SWA/MSA flip.
+> Result: `tools/ds4-gates/results/prefix-share-20260814-2154.txt`.
+>
+> Multi-slot stories15M (own-prompt identity): static and paged both CLEAN
+> (`ownA=1 ownB=1 cross=0 distinct=1 swaps=0`). n=1 smoke.
+
 > ## ✅ 2026-08-12 — BUG #21 RESOLVED (paged decode non-determinism)
 > **It was a Metal SCHEDULING RACE, not the finite-mask tail leak this doc's earlier
 > trail claimed.** The champion decode's mask scratch is carved past the paged_attn op's

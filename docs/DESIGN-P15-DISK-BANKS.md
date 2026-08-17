@@ -1,8 +1,11 @@
 # DESIGN — P1-5: disk-persisted content-addressed KV banks (the 1M agentic unlock)
 
-**Status: DESIGN (2026-08-04 ~00:35), grounded in our tree. No code yet.**
-Author: Fable-DS4 | Lane: ds4-ports | Plan source: PLAN-DS4-PORTS.md §P1-5 (ds4's
-ds4_kvstore.c concept, 1,606-line self-contained reference; we port the IDEA, credit on port).
+**Status: SHIPPED in tree, economics-gated.** Design dated 2026-08-04. Code lives in
+`tools/server/server-kv-bank.{h,cpp}` + `--kv-bank` / `--kv-bank-cap` / `--no-kv-bank`.
+Fair A/B on qwen3-4b IQ4_KT (`m7-prefill-share-probe-20260804.txt`) was a WASH (~2%):
+that is the expected worst case (prefill cheap, KV/token not). The bank DECLINES a
+restore it estimates uneconomic. Do not re-measure the 4B wash on this Mac and call it
+progress. Big-model / 256k-1M value is the open measurement, and it is box work.
 
 ## The pain (measured, prompt-cache-cram-regimes memory)
 The RAM tier (-cram) holds ONE 64K state under the 8 GiB cap — save #2 evicts #1. Every

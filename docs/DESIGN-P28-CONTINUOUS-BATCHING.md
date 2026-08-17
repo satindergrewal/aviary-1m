@@ -1,10 +1,24 @@
 # DESIGN — P2-8 continuous batching (THE parity item): server ↔ paged-scheduler map
 
-**Status: DESIGN/MAP (2026-08-04 ~03:00). This is the 4d server-integration blueprint —
-free to design now; only the FLAG TOPOLOGY choice waits on the owner's #1831 word.**
+**Status: PARTIAL (re-read 2026-08-15).** `update_slots_paged` landed; the
+server drives the paged scheduler. DESIGN/MAP below is 2026-08-04 and is
+stale where it says the server has ZERO paged handling.
+
+**Cut 1 gated 2026-08-15 15:22 +04.** Paged admission grows bookkeeping
+under `-np 1`. Kill gate `tools/ds4-gates/p28_np1_admit_gate.sh` PASS
+(stories15M, 3 overlapping HTTP 200, grew 1 to 3, zero slot-exhaustion
+rejects). Result `tools/ds4-gates/results/p28-np1-admit-20260815-1522.txt`.
+`-np` is batch width, not the concurrency ceiling. Raising `-np` still
+kills the champion and slices `n_ctx`. Do not do that.
+
+**Still open vs the product:** Cut 2 (champion multi-seq / live
+`ubatch.n_seq`). Prefill is still serialized. `evict()` is still a
+13-line pop-back. Champion still requires `cparams.n_seq_max==1`. Cut 1
+alone is serial decode on this Mac. That is not one shared pool matching
+SGLang/vLLM. **Do not mark P2-8 CLOSED.**
 Author: Fable-DS4 | Plan: PLAN-DS4-PORTS.md §P2-8 (16-agent throughput gate). Prior art in
 this dossier set: DESIGN-3B §Part-4d map (the engine = 4 public API calls, only
-examples/paged drives it; server has ZERO paged handling — witnessed crash).
+examples/paged drives it; server has ZERO paged handling; witnessed crash).
 
 ## The two loops, side by side
 **Server today (static -np)**: update_slots (server-context.cpp:2864) assembles one
